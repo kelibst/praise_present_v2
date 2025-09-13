@@ -32,7 +32,7 @@ export enum ShapeType {
   PATH = 'path'
 }
 
-export interface TextStyle {
+export interface TextStyle extends ShapeStyle {
   fontFamily?: string;
   fontSize?: number;
   fontWeight?: 'normal' | 'bold' | 'lighter' | 'bolder' | number;

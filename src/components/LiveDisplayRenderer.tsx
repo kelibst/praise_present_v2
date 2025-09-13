@@ -23,6 +23,15 @@ interface LiveContent {
   title?: string;
   slideData?: any; // For template-generated content
   templateId?: string; // For template-generated content
+  slide?: {
+    id: string;
+    shapes: any[];
+    background?: {
+      type: string;
+      value: any;
+      angle?: number;
+    };
+  }; // For template-slide content
 }
 
 export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
@@ -143,7 +152,7 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
       }
     };
 
-    const handleThemeUpdate = (event: any, theme: any) => {
+    const handleThemeUpdate = (_event: any, theme: any) => {
       console.log('Live display theme updated:', theme);
       // Theme updates can be handled here if needed
     };
@@ -152,11 +161,11 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     if (window.electronAPI) {
       const cleanupFunctions: Array<() => void> = [];
 
-      cleanupFunctions.push(window.electronAPI.onLiveContentUpdate(handleContentUpdate));
-      cleanupFunctions.push(window.electronAPI.onLiveContentClear(handleContentClear));
-      cleanupFunctions.push(window.electronAPI.onLiveShowBlack(handleShowBlack));
-      cleanupFunctions.push(window.electronAPI.onLiveShowLogo(handleShowLogo));
-      cleanupFunctions.push(window.electronAPI.onLiveThemeUpdate(handleThemeUpdate));
+      cleanupFunctions.push(window.electronAPI.onLiveContentUpdate?.(handleContentUpdate) || (() => {}));
+      cleanupFunctions.push(window.electronAPI.onLiveContentClear?.(handleContentClear) || (() => {}));
+      cleanupFunctions.push(window.electronAPI.onLiveShowBlack?.(handleShowBlack) || (() => {}));
+      cleanupFunctions.push(window.electronAPI.onLiveShowLogo?.(handleShowLogo) || (() => {}));
+      cleanupFunctions.push(window.electronAPI.onLiveThemeUpdate?.((theme: any) => handleThemeUpdate(null, theme)) || (() => {}));
 
       return () => {
         // Cleanup listeners
@@ -186,29 +195,37 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     );
     engine.addShape(background);
 
-    // Welcome text
+    // Welcome text with better visibility
     const welcomeText = new TextShape(
       { position: { x: width * 0.1, y: height * 0.4 }, size: { width: width * 0.8, height: height * 0.1 } },
       {
-        fontSize: Math.floor(height * 0.06),
+        fontSize: Math.floor(height * 0.08),
         fontWeight: 'bold',
         color: createColor(255, 255, 255),
         textAlign: 'center',
-        verticalAlign: 'middle'
+        verticalAlign: 'middle',
+        shadowColor: createColor(0, 0, 0, 0.8),
+        shadowBlur: 8,
+        shadowOffsetX: 2,
+        shadowOffsetY: 2
       }
     );
     welcomeText.setText('PraisePresent Live Display');
     welcomeText.setZIndex(1);
     engine.addShape(welcomeText);
 
-    // Status text
+    // Status text with better visibility
     const statusText = new TextShape(
       { position: { x: width * 0.1, y: height * 0.55 }, size: { width: width * 0.8, height: height * 0.05 } },
       {
-        fontSize: Math.floor(height * 0.025),
-        color: createColor(200, 200, 200),
+        fontSize: Math.floor(height * 0.035),
+        color: createColor(220, 220, 220),
         textAlign: 'center',
-        verticalAlign: 'middle'
+        verticalAlign: 'middle',
+        shadowColor: createColor(0, 0, 0, 0.6),
+        shadowBlur: 4,
+        shadowOffsetX: 1,
+        shadowOffsetY: 1
       }
     );
     statusText.setText('Ready for presentation content');
@@ -322,9 +339,8 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
         size: { width: width - 200, height: height - 200 }
       },
       {
-        fillColor: createColor(255, 255, 255, 0.95),
-        strokeWidth: 2,
-        strokeColor: createColor(200, 200, 200),
+        fill: createColor(255, 255, 255, 0.95),
+        stroke: { width: 2, color: createColor(200, 200, 200), style: 'solid' },
         borderRadius: 15,
         shadowColor: createColor(0, 0, 0, 0.3),
         shadowBlur: 20,
@@ -335,7 +351,7 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     contentArea.setZIndex(1);
     engine.addShape(contentArea);
 
-    // Scripture reference title
+    // Scripture reference title with better visibility
     const referenceTitle = new TextShape(
       {
         position: { x: 150, y: 140 },
@@ -343,17 +359,21 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
       },
       {
         fontFamily: 'Georgia, serif',
-        fontSize: 36,
+        fontSize: Math.max(42, width * 0.025),
         fontWeight: 'bold',
         color: createColor(60, 80, 120),
-        textAlign: 'center'
+        textAlign: 'center',
+        shadowColor: createColor(255, 255, 255, 0.8),
+        shadowBlur: 2,
+        shadowOffsetX: 1,
+        shadowOffsetY: 1
       }
     );
     referenceTitle.setText(content.title || 'Scripture');
     referenceTitle.setZIndex(2);
     engine.addShape(referenceTitle);
 
-    // Scripture text
+    // Scripture text with improved readability
     const scriptureText = new TextShape(
       {
         position: { x: 150, y: 250 },
@@ -361,10 +381,14 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
       },
       {
         fontFamily: 'Georgia, serif',
-        fontSize: 28,
-        lineHeight: 1.6,
+        fontSize: Math.max(32, width * 0.02),
+        lineHeight: 1.8,
         color: createColor(40, 40, 40),
-        textAlign: 'center'
+        textAlign: 'center',
+        shadowColor: createColor(255, 255, 255, 0.5),
+        shadowBlur: 1,
+        shadowOffsetX: 1,
+        shadowOffsetY: 1
       }
     );
 
@@ -373,7 +397,7 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     scriptureText.setZIndex(2);
     engine.addShape(scriptureText);
 
-    // Translation info
+    // Translation info with better visibility
     if (content.content?.translation) {
       const translation = new TextShape(
         {
@@ -382,10 +406,14 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
         },
         {
           fontFamily: 'Arial, sans-serif',
-          fontSize: 18,
-          color: createColor(100, 100, 100),
+          fontSize: Math.max(22, width * 0.015),
+          color: createColor(120, 120, 120),
           textAlign: 'right',
-          fontStyle: 'italic'
+          fontStyle: 'italic',
+          shadowColor: createColor(255, 255, 255, 0.3),
+          shadowBlur: 1,
+          shadowOffsetX: 1,
+          shadowOffsetY: 1
         }
       );
       translation.setText(`- ${content.content.translation}`);
@@ -458,15 +486,19 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     );
     engine.addShape(background);
 
-    // Title
+    // Title with improved visibility
     const title = new TextShape(
       { position: { x: width * 0.05, y: height * 0.05 }, size: { width: width * 0.9, height: height * 0.1 } },
       {
-        fontSize: Math.floor(height * 0.05),
+        fontSize: Math.floor(height * 0.06),
         fontWeight: 'bold',
         color: createColor(255, 255, 255),
         textAlign: 'center',
-        verticalAlign: 'middle'
+        verticalAlign: 'middle',
+        shadowColor: createColor(0, 0, 0, 0.8),
+        shadowBlur: 6,
+        shadowOffsetX: 2,
+        shadowOffsetY: 2
       }
     );
     title.setText(content.title || 'Rendering Engine Live Test');
@@ -499,14 +531,18 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
       engine.addShape(rect);
     }
 
-    // Performance info
+    // Performance info with better visibility
     const perfText = new TextShape(
       { position: { x: width * 0.02, y: height * 0.9 }, size: { width: width * 0.3, height: height * 0.05 } },
       {
-        fontSize: Math.floor(height * 0.02),
+        fontSize: Math.floor(height * 0.025),
         color: createColor(200, 255, 200),
         textAlign: 'left',
-        verticalAlign: 'middle'
+        verticalAlign: 'middle',
+        shadowColor: createColor(0, 0, 0, 0.8),
+        shadowBlur: 4,
+        shadowOffsetX: 1,
+        shadowOffsetY: 1
       }
     );
     perfText.setText(`Live Display • ${shapeCount} shapes • ${fps} FPS`);
@@ -527,16 +563,20 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     );
     engine.addShape(background);
 
-    // Main content
+    // Main content with enhanced visibility
     if (content.content?.mainText) {
       const mainText = new TextShape(
         { position: { x: width * 0.1, y: height * 0.35 }, size: { width: width * 0.8, height: height * 0.15 } },
         {
-          fontSize: Math.floor(height * 0.08),
+          fontSize: Math.floor(height * 0.09),
           fontWeight: 'bold',
           color: createColor(255, 255, 255),
           textAlign: 'center',
-          verticalAlign: 'middle'
+          verticalAlign: 'middle',
+          shadowColor: createColor(0, 0, 0, 0.8),
+          shadowBlur: 8,
+          shadowOffsetX: 3,
+          shadowOffsetY: 3
         }
       );
       mainText.setText(content.content.mainText);
@@ -548,10 +588,14 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
       const subText = new TextShape(
         { position: { x: width * 0.1, y: height * 0.55 }, size: { width: width * 0.8, height: height * 0.08 } },
         {
-          fontSize: Math.floor(height * 0.03),
-          color: createColor(200, 200, 200),
+          fontSize: Math.floor(height * 0.035),
+          color: createColor(220, 220, 220),
           textAlign: 'center',
-          verticalAlign: 'middle'
+          verticalAlign: 'middle',
+          shadowColor: createColor(0, 0, 0, 0.6),
+          shadowBlur: 4,
+          shadowOffsetX: 2,
+          shadowOffsetY: 2
         }
       );
       subText.setText(content.content.subText);
@@ -643,9 +687,12 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
                 visible: shapeData.visible
               },
               {
-                fillColor: shapeData.fillColor,
-                strokeColor: shapeData.strokeColor,
-                strokeWidth: shapeData.strokeWidth,
+                fill: shapeData.fillColor || shapeData.fill,
+                stroke: shapeData.strokeColor || shapeData.stroke ? {
+                  color: shapeData.strokeColor || shapeData.stroke?.color,
+                  width: shapeData.strokeWidth || shapeData.stroke?.width || 1,
+                  style: 'solid'
+                } : undefined,
                 borderRadius: shapeData.borderRadius
               }
             );
@@ -715,7 +762,7 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     return createColor(26, 26, 26); // Dark background
   };
 
-  // Navigation functions
+  // Navigation functions (internal use)
   const navigateToSlide = (slideIndex: number) => {
     if (!allSlides || slideIndex < 0 || slideIndex >= allSlides.length) return;
 
@@ -734,20 +781,8 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     }
   };
 
-  const nextSlide = () => {
-    if (currentSlideIndex < totalSlides - 1) {
-      navigateToSlide(currentSlideIndex + 1);
-    }
-  };
-
-  const previousSlide = () => {
-    if (currentSlideIndex > 0) {
-      navigateToSlide(currentSlideIndex - 1);
-    }
-  };
-
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-black">
+    <div className="w-full h-full flex items-center justify-center bg-black overflow-hidden">
       {/* Connection status indicator */}
       <div className="absolute top-4 right-4 z-10 bg-black bg-opacity-50 text-white text-sm px-3 py-1 rounded">
         {connectionStatus} {isInitialized && `• ${fps} FPS`}
@@ -759,12 +794,12 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
         width={width}
         height={height}
         style={{
-          maxWidth: '100vw',
-          maxHeight: '100vh',
-          objectFit: 'contain',
-          backgroundColor: '#000'
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: '#000',
+          display: 'block'
         }}
-        className="block"
+        className="w-full h-full"
       />
 
       {/* Content info overlay (only show in development) */}
