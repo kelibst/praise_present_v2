@@ -2,6 +2,9 @@
 const electron = require("electron");
 electron.contextBridge.exposeInMainWorld("electronAPI", {
   invoke: (channel, ...args) => electron.ipcRenderer.invoke(channel, ...args),
+  // Live display management
+  createLiveDisplay: () => electron.ipcRenderer.invoke("create-live-display"),
+  presentContent: (content) => electron.ipcRenderer.invoke("present-content", content),
   // Live display event listeners
   onLiveContentUpdate: (callback) => {
     const listener = (event, content) => callback(content);

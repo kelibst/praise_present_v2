@@ -8,6 +8,8 @@ import {
 } from '../rendering';
 import { createColor } from '../rendering/types/geometry';
 import { RenderQuality } from '../rendering/types/rendering';
+import { templateManager } from '../rendering/templates/TemplateManager';
+import { slideGenerator } from '../rendering/SlideGenerator';
 
 interface LiveDisplayRendererProps {
   width?: number;
@@ -15,10 +17,12 @@ interface LiveDisplayRendererProps {
 }
 
 interface LiveContent {
-  type: 'rendering-test' | 'rendering-demo' | 'placeholder' | 'black' | 'logo';
+  type: 'rendering-test' | 'rendering-demo' | 'placeholder' | 'black' | 'logo' | 'template-demo' | 'simple-rendering-test' | 'scripture' | 'song' | 'announcement' | 'template-generated' | 'template-slide';
   scenario?: string;
   content?: any;
   title?: string;
+  slideData?: any; // For template-generated content
+  templateId?: string; // For template-generated content
 }
 
 export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
@@ -31,6 +35,11 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
   const [currentContent, setCurrentContent] = useState<LiveContent | null>(null);
   const [fps, setFps] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState('Connecting...');
+
+  // Slide navigation state
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [totalSlides, setTotalSlides] = useState(0);
+  const [allSlides, setAllSlides] = useState<any[]>([]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -51,6 +60,10 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
       });
 
       engineRef.current = engine;
+
+      // Initialize template system for live display
+      // Template manager is already initialized via constructor
+      slideGenerator.setRenderingEngine(engine);
 
       // Set up performance monitoring
       engine.setRenderCallback(() => {
@@ -81,6 +94,26 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
   useEffect(() => {
     const handleContentUpdate = (event: any, content: LiveContent) => {
       console.log('Live display received content update:', content);
+
+      // Guard against undefined/null content
+      if (!content) {
+        console.warn('Live display received undefined content, ignoring update');
+        return;
+      }
+
+      // Additional validation for content structure
+      if (typeof content !== 'object' || Array.isArray(content)) {
+        console.warn('Live display received invalid content type:', typeof content, content);
+        return;
+      }
+
+      // Validate that content has required properties
+      if (!content.type) {
+        console.warn('Live display received content without type property:', content);
+        return;
+      }
+
+      console.log('Valid content received, updating display');
       setCurrentContent(content);
       if (engineRef.current) {
         renderContent(engineRef.current, content);
@@ -118,14 +151,23 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
 
     // Check if we're in Electron environment
     if (window.electronAPI) {
-      window.electronAPI.onLiveContentUpdate(handleContentUpdate);
-      window.electronAPI.onLiveContentClear(handleContentClear);
-      window.electronAPI.onLiveShowBlack(handleShowBlack);
-      window.electronAPI.onLiveShowLogo(handleShowLogo);
-      window.electronAPI.onLiveThemeUpdate(handleThemeUpdate);
+      const cleanupFunctions: Array<() => void> = [];
+
+      cleanupFunctions.push(window.electronAPI.onLiveContentUpdate(handleContentUpdate));
+      cleanupFunctions.push(window.electronAPI.onLiveContentClear(handleContentClear));
+      cleanupFunctions.push(window.electronAPI.onLiveShowBlack(handleShowBlack));
+      cleanupFunctions.push(window.electronAPI.onLiveShowLogo(handleShowLogo));
+      cleanupFunctions.push(window.electronAPI.onLiveThemeUpdate(handleThemeUpdate));
 
       return () => {
-        // Cleanup listeners if needed
+        // Cleanup listeners
+        cleanupFunctions.forEach(cleanup => {
+          try {
+            cleanup();
+          } catch (error) {
+            console.warn('Error cleaning up listener:', error);
+          }
+        });
       };
     }
   }, []);
@@ -219,12 +261,32 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
   };
 
   const renderContent = (engine: RenderingEngine, content: LiveContent) => {
+    // Safety check for content
+    if (!content || typeof content !== 'object') {
+      console.warn('Invalid content provided to renderContent, showing default content');
+      showDefaultContent(engine);
+      return;
+    }
+
     engine.clearShapes();
 
     switch (content.type) {
       case 'rendering-test':
       case 'rendering-demo':
+      case 'template-demo':
+      case 'simple-rendering-test':
         renderTestContent(engine, content);
+        break;
+      case 'scripture':
+        renderScriptureContent(engine, content);
+        break;
+      case 'song':
+      case 'announcement':
+      case 'template-generated':
+        renderTemplateGeneratedContent(engine, content);
+        break;
+      case 'template-slide':
+        renderTemplateSlideContent(engine, content);
         break;
       case 'placeholder':
         renderPlaceholderContent(engine, content);
@@ -236,7 +298,149 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
         showLogoScreen(engine);
         break;
       default:
+        console.warn(`Unknown content type: ${content.type}, showing default content`);
         showDefaultContent(engine);
+    }
+  };
+
+  const renderScriptureContent = (engine: RenderingEngine, content: LiveContent) => {
+    // Background for scripture content
+    const background = BackgroundShape.createLinearGradient(
+      [
+        { offset: 0, color: createColor(25, 35, 55) },
+        { offset: 1, color: createColor(45, 55, 75) }
+      ],
+      90,
+      width,
+      height
+    );
+    engine.addShape(background);
+
+    // Main content area
+    const contentArea = new RectangleShape(
+      {
+        position: { x: 100, y: 100 },
+        size: { width: width - 200, height: height - 200 }
+      },
+      {
+        fillColor: createColor(255, 255, 255, 0.95),
+        strokeWidth: 2,
+        strokeColor: createColor(200, 200, 200),
+        borderRadius: 15,
+        shadowColor: createColor(0, 0, 0, 0.3),
+        shadowBlur: 20,
+        shadowOffsetX: 0,
+        shadowOffsetY: 10
+      }
+    );
+    contentArea.setZIndex(1);
+    engine.addShape(contentArea);
+
+    // Scripture reference title
+    const referenceTitle = new TextShape(
+      {
+        position: { x: 150, y: 140 },
+        size: { width: width - 300, height: 80 }
+      },
+      {
+        fontFamily: 'Georgia, serif',
+        fontSize: 36,
+        fontWeight: 'bold',
+        color: createColor(60, 80, 120),
+        textAlign: 'center'
+      }
+    );
+    referenceTitle.setText(content.title || 'Scripture');
+    referenceTitle.setZIndex(2);
+    engine.addShape(referenceTitle);
+
+    // Scripture text
+    const scriptureText = new TextShape(
+      {
+        position: { x: 150, y: 250 },
+        size: { width: width - 300, height: height - 400 }
+      },
+      {
+        fontFamily: 'Georgia, serif',
+        fontSize: 28,
+        lineHeight: 1.6,
+        color: createColor(40, 40, 40),
+        textAlign: 'center'
+      }
+    );
+
+    const text = content.content?.text || 'Scripture text not available';
+    scriptureText.setText(`"${text}"`);
+    scriptureText.setZIndex(2);
+    engine.addShape(scriptureText);
+
+    // Translation info
+    if (content.content?.translation) {
+      const translation = new TextShape(
+        {
+          position: { x: 150, y: height - 140 },
+          size: { width: width - 300, height: 40 }
+        },
+        {
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 18,
+          color: createColor(100, 100, 100),
+          textAlign: 'right',
+          fontStyle: 'italic'
+        }
+      );
+      translation.setText(`- ${content.content.translation}`);
+      translation.setZIndex(2);
+      engine.addShape(translation);
+    }
+  };
+
+  const renderTemplateGeneratedContent = async (engine: RenderingEngine, content: LiveContent) => {
+    try {
+      // If we have pre-generated slide shapes, use them directly
+      if (content.slideData && content.slideData.shapes) {
+        console.log('Rendering pre-generated slide shapes:', content.slideData.shapes.length);
+
+        engine.clearShapes();
+        for (const shape of content.slideData.shapes) {
+          engine.addShape(shape);
+        }
+        return;
+      }
+
+      // Generate slide using template system
+      if (content.content && content.templateId) {
+        console.log('Generating slide using template:', content.templateId);
+
+        const slideContent = {
+          id: `live-${Date.now()}`,
+          type: content.type as 'song' | 'scripture' | 'announcement',
+          title: content.title || 'Live Content',
+          data: content.content
+        };
+
+        const slides = await slideGenerator.generateSlidesFromContent(slideContent, {
+          slideSize: { width, height }
+        });
+
+        if (slides && slides.length > 0) {
+          const slide = slides[0]; // Use first slide
+          engine.clearShapes();
+          for (const shape of slide.shapes) {
+            engine.addShape(shape);
+          }
+          console.log(`Template-generated slide rendered with ${slide.shapes.length} shapes`);
+        } else {
+          console.warn('No slides generated from template');
+          showDefaultContent(engine);
+        }
+      } else {
+        console.warn('Template-generated content missing required data');
+        showDefaultContent(engine);
+      }
+    } catch (error) {
+      console.error('Error rendering template-generated content:', error);
+      showDefaultContent(engine);
     }
   };
 
@@ -367,6 +571,81 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
       setConnectionStatus('Live Display Mode');
     }
   }, []);
+
+  // Render template slide content from ContentViewer
+  const renderTemplateSlideContent = (engine: RenderingEngine, content: LiveContent) => {
+    try {
+      console.log('Rendering template slide:', content);
+
+      if (!content.content?.slides || !Array.isArray(content.content.slides)) {
+        console.warn('Template slide content missing slides array');
+        showDefaultContent(engine);
+        return;
+      }
+
+      const slides = content.content.slides;
+      const slideIndex = content.content.currentSlide ? content.content.currentSlide - 1 : 0;
+
+      // Update navigation state
+      setAllSlides(slides);
+      setTotalSlides(slides.length);
+      setCurrentSlideIndex(slideIndex);
+
+      if (!slides[slideIndex]) {
+        console.warn(`No slide found at index ${slideIndex}`);
+        showDefaultContent(engine);
+        return;
+      }
+
+      const currentSlide = slides[slideIndex];
+      engine.clearShapes();
+
+      // Render all shapes from the current slide
+      if (currentSlide.shapes && Array.isArray(currentSlide.shapes)) {
+        for (const shape of currentSlide.shapes) {
+          engine.addShape(shape);
+        }
+        console.log(`Rendered slide ${slideIndex + 1}/${slides.length} with ${currentSlide.shapes.length} shapes`);
+      } else {
+        console.warn('Current slide missing shapes data');
+        showDefaultContent(engine);
+      }
+    } catch (error) {
+      console.error('Error rendering template slide:', error);
+      showDefaultContent(engine);
+    }
+  };
+
+  // Navigation functions
+  const navigateToSlide = (slideIndex: number) => {
+    if (!allSlides || slideIndex < 0 || slideIndex >= allSlides.length) return;
+
+    setCurrentSlideIndex(slideIndex);
+
+    if (engineRef.current && allSlides[slideIndex]) {
+      engineRef.current.clearShapes();
+      const slide = allSlides[slideIndex];
+
+      if (slide.shapes && Array.isArray(slide.shapes)) {
+        for (const shape of slide.shapes) {
+          engineRef.current.addShape(shape);
+        }
+        console.log(`Navigated to slide ${slideIndex + 1}/${allSlides.length}`);
+      }
+    }
+  };
+
+  const nextSlide = () => {
+    if (currentSlideIndex < totalSlides - 1) {
+      navigateToSlide(currentSlideIndex + 1);
+    }
+  };
+
+  const previousSlide = () => {
+    if (currentSlideIndex > 0) {
+      navigateToSlide(currentSlideIndex - 1);
+    }
+  };
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-black">

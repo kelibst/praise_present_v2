@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   invoke: (channel: string, ...args: any[]) =>
     ipcRenderer.invoke(channel, ...args),
 
+  // Live display management
+  createLiveDisplay: () => ipcRenderer.invoke("create-live-display"),
+  presentContent: (content: any) => ipcRenderer.invoke("present-content", content),
+
   // Live display event listeners
   onLiveContentUpdate: (callback: (content: any) => void) => {
     const listener = (event: any, content: any) => callback(content);

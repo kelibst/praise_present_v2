@@ -49,15 +49,24 @@ export class RenderingEngine {
   }
 
   private createViewportInfo(canvas: HTMLCanvasElement): ViewportInfo {
+    let width = canvas.clientWidth;
+    let height = canvas.clientHeight;
+
+    // Fallback to canvas attributes if clientWidth/clientHeight are 0
+    if (width === 0 || height === 0) {
+      width = canvas.width || 800;
+      height = canvas.height || 600;
+    }
+
     return {
-      width: canvas.clientWidth,
-      height: canvas.clientHeight,
+      width: width,
+      height: height,
       pixelRatio: window.devicePixelRatio || 1,
       visibleArea: {
         x: 0,
         y: 0,
-        width: canvas.clientWidth,
-        height: canvas.clientHeight
+        width: width,
+        height: height
       },
       scrollOffset: { x: 0, y: 0 }
     };
@@ -138,11 +147,15 @@ export class RenderingEngine {
   }
 
   public resize(width: number, height: number): void {
-    this.renderer.resize(width, height);
-    this.viewport.width = width;
-    this.viewport.height = height;
-    this.viewport.visibleArea.width = width;
-    this.viewport.visibleArea.height = height;
+    // Ensure minimum dimensions
+    const minWidth = Math.max(width, 1);
+    const minHeight = Math.max(height, 1);
+
+    this.renderer.resize(minWidth, minHeight);
+    this.viewport.width = minWidth;
+    this.viewport.height = minHeight;
+    this.viewport.visibleArea.width = minWidth;
+    this.viewport.visibleArea.height = minHeight;
     this.requestRender();
   }
 

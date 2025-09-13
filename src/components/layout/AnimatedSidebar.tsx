@@ -16,8 +16,6 @@ import {
 /* @ts-ignore */
 import logoLight from "../../assets/logo-white.png";
 import { useTheme } from "@/lib/theme";
-import VersionSelector from "../bible/VersionSelector";
-import ScriptureList from "../bible/ScriptureList";
 import { Badge } from "../ui/badge";
 import { useDispatch } from "react-redux";
 import { AppDispatch } from "@/lib/store";
@@ -26,17 +24,17 @@ import { useSelector } from "react-redux";
 import AsideThemeToggler from "../settings/AsideThemeToggler";
 
 const menu = [
-  {
-    label: "PraisePresent",
-    icon: (
-      <img
-        src={logoLight}
-        alt="Church Logo"
-        className="w-20 h-15 rounded-full my-10"
-      />
-    ),
-    path: "/",
-  },
+  // {
+  //   label: "PraisePresent",
+  //   icon: (
+  //     <img
+  //       src={logoLight}
+  //       alt="Church Logo"
+  //       className="w-20 h-15 rounded-full my-10"
+  //     />
+  //   ),
+  //   path: "/",
+  // },
   { label: "Scripture", icon: <FiBook />, path: "/scripture" },
   { label: 'Songs', icon: <FiMusic />, path: '/Songs' },
   // { label: 'Media', icon: <FiImage />, path: '/media' },

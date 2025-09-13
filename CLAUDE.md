@@ -145,5 +145,121 @@ The Prisma schema includes comprehensive models for:
 - Setup file: `src/setupTests.ts`
 - Test environment: jsdom for React components
 
+### Live Display Integration Pattern
+
+**Working Implementation Reference**: `src/components/RenderingTestSuite.tsx` has a fully functional live display system that should be used as the standard pattern for all test components and content management interfaces.
+
+**State Management Pattern:**
+```typescript
+const [liveDisplayActive, setLiveDisplayActive] = useState(false);
+const [liveDisplayStatus, setLiveDisplayStatus] = useState('Disconnected');
+```
+
+**Core Functions for Live Display Control:**
+```typescript
+// Create live display window
+const createLiveDisplay = async () => {
+  const result = await window.electronAPI?.invoke('live-display:create', {});
+  if (result?.success) {
+    setLiveDisplayActive(true);
+    setLiveDisplayStatus('Active');
+  }
+};
+
+// Close live display window
+const closeLiveDisplay = async () => {
+  await window.electronAPI?.invoke('live-display:close');
+  setLiveDisplayActive(false);
+  setLiveDisplayStatus('Disconnected');
+};
+
+// Send content to live display
+const sendContentToLive = async (content) => {
+  if (!liveDisplayActive) return;
+  await window.electronAPI?.invoke('live-display:sendContent', content);
+};
+
+// Clear live display content
+const clearLiveDisplay = async () => {
+  if (!liveDisplayActive) return;
+  await window.electronAPI?.invoke('live-display:clearContent');
+};
+
+// Show black screen
+const showBlackScreen = async () => {
+  if (!liveDisplayActive) return;
+  await window.electronAPI?.invoke('live-display:showBlack');
+};
+
+// Check status on mount
+useEffect(() => {
+  const checkStatus = async () => {
+    const status = await window.electronAPI?.invoke('live-display:getStatus');
+    if (status?.hasWindow && status?.isVisible) {
+      setLiveDisplayActive(true);
+      setLiveDisplayStatus('Active');
+    }
+  };
+  if (window.electronAPI) checkStatus();
+}, []);
+```
+
+**Standard UI Pattern:**
+```tsx
+{window.electronAPI && (
+  <div className="mb-4 p-3 bg-gray-800 rounded-lg">
+    <div className="flex flex-wrap gap-2 items-center justify-center">
+      <div className="text-sm text-gray-400 mr-4">
+        Live Display: <span className={
+          liveDisplayStatus === 'Active' ? 'text-green-400' :
+          liveDisplayStatus === 'Error' ? 'text-red-400' : 'text-yellow-400'
+        }>{liveDisplayStatus}</span>
+      </div>
+      <div className="flex gap-2">
+        {!liveDisplayActive ? (
+          <button onClick={createLiveDisplay} className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
+            Create Live Display
+          </button>
+        ) : (
+          <>
+            <button onClick={sendContentToLive} className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700">Send to Live</button>
+            <button onClick={clearLiveDisplay} className="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700">Clear Live</button>
+            <button onClick={showBlackScreen} className="px-3 py-1 bg-gray-700 text-white rounded text-sm hover:bg-gray-600">Black Screen</button>
+            <button onClick={closeLiveDisplay} className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700">Close Live</button>
+          </>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+```
+
+**Content Structure for Live Display:**
+The content sent to live display should follow this pattern:
+```typescript
+const content = {
+  type: 'content-type', // e.g., 'rendering-test', 'song', 'scripture', 'announcement'
+  title: 'Display Title',
+  content: {
+    // Specific content based on type
+  }
+};
+```
+
+**Implementation Requirements:**
+1. Always check for `window.electronAPI` availability before showing live display controls
+2. Implement status checking on component mount to detect existing live displays
+3. Handle all async operations with proper error handling
+4. Use consistent UI styling and state management patterns
+5. Provide clear status feedback to users (Active/Disconnected/Error)
+
+**IPC Commands Available:**
+- `live-display:create` - Create new live display window
+- `live-display:close` - Close live display window
+- `live-display:sendContent` - Send content to display
+- `live-display:clearContent` - Clear current content
+- `live-display:showBlack` - Show black screen
+- `live-display:getStatus` - Get current display status
+
 ### Memory
-Add ACTIVITIES.md file if does not exist already. if it is not already there but if it is then add the changes you have made after every major change. add time and date as well.
+Add ACTIVITIES.md file if does not exist already. if it is not already there but if it is then add the changes you have made after every major change. add time and date as well. also before you make major implementation take a look at @ACTIVITIES.md to see what has been recently done on it. 

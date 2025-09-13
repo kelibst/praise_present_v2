@@ -61,8 +61,14 @@ export class CanvasRenderer {
 
   private setupCanvas(): void {
     const pixelRatio = this.getPixelRatio();
-    const displayWidth = this.canvas.clientWidth;
-    const displayHeight = this.canvas.clientHeight;
+    let displayWidth = this.canvas.clientWidth;
+    let displayHeight = this.canvas.clientHeight;
+
+    // Fallback to canvas attributes if clientWidth/clientHeight are 0
+    if (displayWidth === 0 || displayHeight === 0) {
+      displayWidth = this.canvas.width || 800;
+      displayHeight = this.canvas.height || 600;
+    }
 
     // Set actual canvas size accounting for device pixel ratio
     this.canvas.width = displayWidth * pixelRatio;
@@ -74,6 +80,18 @@ export class CanvasRenderer {
   }
 
   private createRenderingContext(): void {
+    if (this.settings.debugMode) {
+      console.log('Creating rendering context, renderMode:', this.renderMode);
+      console.log('Canvas dimensions at context creation:', {
+        clientWidth: this.canvas.clientWidth,
+        clientHeight: this.canvas.clientHeight,
+        width: this.canvas.width,
+        height: this.canvas.height,
+        offsetWidth: this.canvas.offsetWidth,
+        offsetHeight: this.canvas.offsetHeight
+      });
+    }
+
     if (this.renderMode === '2d') {
       const options: CanvasRenderingContext2DSettings = {
         alpha: true,
@@ -83,6 +101,10 @@ export class CanvasRenderer {
       };
 
       this.ctx = this.canvas.getContext('2d', options);
+
+      if (this.settings.debugMode) {
+        console.log('Context created:', !!this.ctx);
+      }
 
       if (!this.ctx) {
         throw new Error('Failed to create 2D rendering context');
@@ -126,14 +148,33 @@ export class CanvasRenderer {
 
   public createRenderContext(): RenderContext {
     if (!this.ctx) {
+      console.warn('Rendering context lost, attempting to recreate...');
+      try {
+        this.createRenderingContext();
+      } catch (error) {
+        console.error('Failed to recreate rendering context:', error);
+        throw new Error('Rendering context not initialized and failed to recreate');
+      }
+    }
+
+    if (!this.ctx) {
       throw new Error('Rendering context not initialized');
+    }
+
+    let width = this.canvas.clientWidth;
+    let height = this.canvas.clientHeight;
+
+    // Fallback to canvas attributes if clientWidth/clientHeight are 0
+    if (width === 0 || height === 0) {
+      width = this.canvas.width || 800;
+      height = this.canvas.height || 600;
     }
 
     return {
       canvas: this.canvas,
       context: this.ctx,
-      width: this.canvas.clientWidth,
-      height: this.canvas.clientHeight,
+      width: width,
+      height: height,
       pixelRatio: this.getPixelRatio(),
       transformation: [1, 0, 0, 1, 0, 0]
     };
@@ -212,15 +253,16 @@ export class CanvasRenderer {
   }
 
   public resize(width: number, height: number): void {
-    this.canvas.style.width = width + 'px';
-    this.canvas.style.height = height + 'px';
+    // Ensure minimum dimensions
+    const minWidth = Math.max(width, 1);
+    const minHeight = Math.max(height, 1);
+
+    this.canvas.style.width = minWidth + 'px';
+    this.canvas.style.height = minHeight + 'px';
     this.setupCanvas();
 
-    if (this.ctx) {
-      const pixelRatio = this.getPixelRatio();
-      this.ctx.scale(pixelRatio, pixelRatio);
-      this.setupRenderingSettings();
-    }
+    // Always recreate the context after canvas size change
+    this.createRenderingContext();
   }
 
   public getStats(): RenderStats {
