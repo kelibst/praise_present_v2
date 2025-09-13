@@ -3,3 +3,6 @@ node_modules
 .env
 
 /generated/prisma
+
+./.claude/
+./prisma/dev.db
