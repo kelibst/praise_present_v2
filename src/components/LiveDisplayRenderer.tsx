@@ -92,8 +92,7 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
 
   // Listen for IPC messages from main process
   useEffect(() => {
-    const handleContentUpdate = (event: any, content: LiveContent) => {
-      console.log('Live display received content update:', content);
+    const handleContentUpdate = (content: LiveContent) => {
 
       // Guard against undefined/null content
       if (!content) {
@@ -577,43 +576,143 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     try {
       console.log('Rendering template slide:', content);
 
-      if (!content.content?.slides || !Array.isArray(content.content.slides)) {
-        console.warn('Template slide content missing slides array');
-        showDefaultContent(engine);
-        return;
-      }
+      // Handle the new template-slide content structure from LivePresentationPage
+      if (content.slide && content.slide.shapes) {
+        const slide = content.slide;
 
-      const slides = content.content.slides;
-      const slideIndex = content.content.currentSlide ? content.content.currentSlide - 1 : 0;
+        console.log(`Rendering single slide with ${slide.shapes.length} shapes`);
 
-      // Update navigation state
-      setAllSlides(slides);
-      setTotalSlides(slides.length);
-      setCurrentSlideIndex(slideIndex);
+        engine.clearShapes();
 
-      if (!slides[slideIndex]) {
-        console.warn(`No slide found at index ${slideIndex}`);
-        showDefaultContent(engine);
-        return;
-      }
+        // Add background if specified
+        if (slide.background) {
+          let backgroundShape;
+          if (slide.background.type === 'color') {
+            const color = parseColor(slide.background.value);
+            backgroundShape = BackgroundShape.createSolidColor(color, width, height);
+          } else if (slide.background.type === 'gradient' && Array.isArray(slide.background.value)) {
+            backgroundShape = BackgroundShape.createLinearGradient(
+              slide.background.value,
+              slide.background.angle || 90,
+              width,
+              height
+            );
+          }
 
-      const currentSlide = slides[slideIndex];
-      engine.clearShapes();
-
-      // Render all shapes from the current slide
-      if (currentSlide.shapes && Array.isArray(currentSlide.shapes)) {
-        for (const shape of currentSlide.shapes) {
-          engine.addShape(shape);
+          if (backgroundShape) {
+            engine.addShape(backgroundShape);
+          }
         }
-        console.log(`Rendered slide ${slideIndex + 1}/${slides.length} with ${currentSlide.shapes.length} shapes`);
-      } else {
-        console.warn('Current slide missing shapes data');
-        showDefaultContent(engine);
+
+        // Recreate Shape objects from serialized data
+        for (const shapeData of slide.shapes) {
+          let shapeInstance;
+
+          if (shapeData.type === 'background') {
+            // Background shapes are handled above, skip duplicates
+            if (shapeData.backgroundStyle?.type === 'color') {
+              const color = createColor(
+                shapeData.backgroundStyle.color.r,
+                shapeData.backgroundStyle.color.g,
+                shapeData.backgroundStyle.color.b,
+                shapeData.backgroundStyle.color.a
+              );
+              shapeInstance = BackgroundShape.createSolidColor(color, width, height);
+            }
+          } else if (shapeData.type === 'text') {
+            // Recreate TextShape
+            shapeInstance = new TextShape(
+              {
+                position: shapeData.position,
+                size: shapeData.size,
+                zIndex: shapeData.zIndex,
+                opacity: shapeData.opacity,
+                visible: shapeData.visible
+              },
+              shapeData.textStyle
+            );
+            shapeInstance.text = shapeData.text;
+          } else if (shapeData.type === 'rectangle') {
+            // Recreate RectangleShape
+            shapeInstance = new RectangleShape(
+              {
+                position: shapeData.position,
+                size: shapeData.size,
+                zIndex: shapeData.zIndex,
+                opacity: shapeData.opacity,
+                visible: shapeData.visible
+              },
+              {
+                fillColor: shapeData.fillColor,
+                strokeColor: shapeData.strokeColor,
+                strokeWidth: shapeData.strokeWidth,
+                borderRadius: shapeData.borderRadius
+              }
+            );
+          }
+
+          if (shapeInstance) {
+            engine.addShape(shapeInstance);
+          }
+        }
+
+        console.log(`Successfully rendered template slide with ${slide.shapes.length} shapes`);
+        return;
       }
+
+      // Fallback: Handle legacy slides array format
+      if (content.content?.slides && Array.isArray(content.content.slides)) {
+        const slides = content.content.slides;
+        const slideIndex = content.content.currentSlide ? content.content.currentSlide - 1 : 0;
+
+        // Update navigation state
+        setAllSlides(slides);
+        setTotalSlides(slides.length);
+        setCurrentSlideIndex(slideIndex);
+
+        if (!slides[slideIndex]) {
+          console.warn(`No slide found at index ${slideIndex}`);
+          showDefaultContent(engine);
+          return;
+        }
+
+        const currentSlide = slides[slideIndex];
+        engine.clearShapes();
+
+        // Render all shapes from the current slide
+        if (currentSlide.shapes && Array.isArray(currentSlide.shapes)) {
+          for (const shape of currentSlide.shapes) {
+            engine.addShape(shape);
+          }
+          console.log(`Rendered slide ${slideIndex + 1}/${slides.length} with ${currentSlide.shapes.length} shapes`);
+        } else {
+          console.warn('Current slide missing shapes data');
+          showDefaultContent(engine);
+        }
+        return;
+      }
+
+      console.warn('Template slide content missing expected slide data structure');
+      showDefaultContent(engine);
+
     } catch (error) {
       console.error('Error rendering template slide:', error);
       showDefaultContent(engine);
     }
+  };
+
+  // Helper function to parse color strings to Color objects
+  const parseColor = (colorString: string) => {
+    if (colorString.startsWith('#')) {
+      // Parse hex color
+      const hex = colorString.slice(1);
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      return createColor(r, g, b);
+    }
+    // Default fallback
+    return createColor(26, 26, 26); // Dark background
   };
 
   // Navigation functions

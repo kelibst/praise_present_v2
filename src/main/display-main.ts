@@ -359,7 +359,6 @@ export function initializeDisplayMain(): void {
   // Handler to send content to live display
   ipcMain.handle("live-display:sendContent", async (event, content: any) => {
     try {
-      console.log("IPC: Sending content to live display:", content);
       liveDisplayWindow.sendContentToLive(content);
       return { success: true };
     } catch (error) {

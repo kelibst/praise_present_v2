@@ -2698,12 +2698,12 @@ class LiveDisplayWindow {
       if (config.fullscreen ?? true) {
         this.liveWindow.setFullScreen(true);
       }
-      if ("http://localhost:5174") {
+      if ("http://localhost:5173") {
         await this.liveWindow.loadURL(
-          `${"http://localhost:5174"}?mode=live-display`
+          `${"http://localhost:5173"}?mode=live-display`
         );
       }
-      if ("http://localhost:5174") {
+      if ("http://localhost:5173") {
         this.liveWindow.webContents.openDevTools();
       }
       this.setupWindowEvents();
@@ -2820,7 +2820,6 @@ class LiveDisplayWindow {
   sendContentToLive(content) {
     if (this.liveWindow && !this.liveWindow.isDestroyed()) {
       this.liveWindow.webContents.send("live-content-update", content);
-      console.log("Content sent to live window:", content);
     } else {
       console.warn("No active live window to send content to");
     }
@@ -3198,7 +3197,6 @@ function initializeDisplayMain() {
   });
   electron.ipcMain.handle("live-display:sendContent", async (event, content) => {
     try {
-      console.log("IPC: Sending content to live display:", content);
       liveDisplayWindow.sendContentToLive(content);
       return { success: true };
     } catch (error) {
@@ -3533,7 +3531,7 @@ const createWindow = () => {
     `).catch(console.error);
   });
   {
-    mainWindow.loadURL("http://localhost:5174");
+    mainWindow.loadURL("http://localhost:5173");
   }
 };
 electron.app.on("ready", async () => {

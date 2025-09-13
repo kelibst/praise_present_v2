@@ -285,7 +285,6 @@ export class LiveDisplayWindow {
   public sendContentToLive(content: any): void {
     if (this.liveWindow && !this.liveWindow.isDestroyed()) {
       this.liveWindow.webContents.send("live-content-update", content);
-      console.log("Content sent to live window:", content);
     } else {
       console.warn("No active live window to send content to");
     }
