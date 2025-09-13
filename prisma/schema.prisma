@@ -1,0 +1,326 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Bible and Scripture Models
+model Translation {
+  id          String @id @default(cuid())
+  name        String @unique // e.g., "English", "French", "Spanish"
+  code        String @unique // e.g., "en", "fr", "es"
+  description String?
+  isDefault   Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  versions    Version[]
+  
+  @@map("translations")
+}
+
+model Version {
+  id            String @id @default(cuid())
+  name          String // e.g., "KJV", "NIV", "ESV"
+  fullName      String // e.g., "King James Version"
+  translationId String
+  description   String?
+  isDefault     Boolean @default(false)
+  year          Int? // Publication year
+  publisher     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  translation   Translation @relation(fields: [translationId], references: [id])
+  verses        Verse[]
+  
+  @@unique([name, translationId])
+  @@map("versions")
+}
+
+model Book {
+  id          Int    @id // Book number (1-66)
+  name        String // e.g., "Genesis", "Matthew"
+  shortName   String // e.g., "Gen", "Matt"
+  testament   String // "OT" or "NT"
+  category    String // "Law", "History", "Poetry", "Prophecy", "Gospel", "Epistle", "Apocalyptic"
+  chapters    Int    // Number of chapters in the book
+  order       Int    // Order in the Bible
+  
+  verses      Verse[]
+  
+  @@map("books")
+}
+
+model Verse {
+  id            String @id @default(cuid())
+  bookId        Int
+  chapter       Int
+  verse         Int
+  text          String
+  versionId     String
+  
+  book          Book @relation(fields: [bookId], references: [id])
+  version       Version @relation(fields: [versionId], references: [id])
+  
+  topicVerses   TopicVerse[]
+  
+  @@unique([bookId, chapter, verse, versionId])
+  @@index([bookId, chapter, verse])
+  @@index([versionId])
+  @@map("verses")
+}
+
+model Topic {
+  id          String @id @default(cuid())
+  name        String @unique
+  description String?
+  parentId    String?
+  
+  parent      Topic? @relation("TopicHierarchy", fields: [parentId], references: [id])
+  children    Topic[] @relation("TopicHierarchy")
+  topicVerses TopicVerse[]
+  
+  @@map("topics")
+}
+
+model TopicVerse {
+  id      String @id @default(cuid())
+  topicId String
+  verseId String
+  
+  topic   Topic @relation(fields: [topicId], references: [id])
+  verse   Verse @relation(fields: [verseId], references: [id])
+  
+  @@unique([topicId, verseId])
+  @@map("topic_verses")
+}
+
+// Song Management Models
+model Song {
+  id          String @id @default(cuid())
+  title       String
+  artist      String?
+  author      String?
+  lyrics      String
+  chords      String?
+  ccliNumber  String?
+  key         String?
+  tempo       String?
+  tags        String? // JSON array of tags
+  category    String?
+  copyright   String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastUsed    DateTime?
+  usageCount  Int @default(0)
+  
+  serviceItems ServiceItem[]
+  
+  @@index([title])
+  @@index([artist])
+  @@index([ccliNumber])
+  @@map("songs")
+}
+
+// Media Management Models
+model MediaItem {
+  id          String @id @default(cuid())
+  filename    String
+  originalName String
+  path        String
+  type        String // "image", "video", "audio"
+  mimeType    String
+  size        Int
+  duration    Int? // For video/audio in seconds
+  width       Int? // For images/videos
+  height      Int? // For images/videos
+  tags        String? // JSON array of tags
+  category    String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastUsed    DateTime?
+  
+  slides      Slide[]
+  backgrounds Background[]
+  
+  @@index([type])
+  @@index([category])
+  @@map("media_items")
+}
+
+// Presentation Models
+model Presentation {
+  id          String @id @default(cuid())
+  title       String
+  description String?
+  templateId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastUsed    DateTime?
+  
+  template    Template? @relation(fields: [templateId], references: [id])
+  slides      Slide[]
+  serviceItems ServiceItem[]
+  
+  @@index([title])
+  @@map("presentations")
+}
+
+model Template {
+  id          String @id @default(cuid())
+  name        String
+  description String?
+  category    String?
+  isDefault   Boolean @default(false)
+  settings    String // JSON settings for fonts, colors, layouts
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  presentations Presentation[]
+  slides        Slide[]
+  
+  @@map("templates")
+}
+
+model Slide {
+  id             String @id @default(cuid())
+  presentationId String?
+  templateId     String?
+  title          String?
+  content        String // JSON content structure
+  backgroundId   String?
+  order          Int
+  duration       Int? // Auto-advance duration in seconds
+  transition     String? // Transition type
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  presentation   Presentation? @relation(fields: [presentationId], references: [id])
+  template       Template? @relation(fields: [templateId], references: [id])
+  background     Background? @relation(fields: [backgroundId], references: [id])
+  mediaItems     MediaItem[]
+  
+  @@index([presentationId, order])
+  @@map("slides")
+}
+
+model Background {
+  id          String @id @default(cuid())
+  name        String
+  type        String // "color", "gradient", "image", "video"
+  settings    String // JSON settings (color, gradient stops, media path, etc.)
+  category    String?
+  isDefault   Boolean @default(false)
+  mediaItemId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  mediaItem   MediaItem? @relation(fields: [mediaItemId], references: [id])
+  slides      Slide[]
+  
+  @@map("backgrounds")
+}
+
+// Service Planning Models
+model Service {
+  id          String @id @default(cuid())
+  name        String
+  date        DateTime
+  type        String? // "Sunday Morning", "Evening", "Special Event"
+  description String?
+  notes       String?
+  duration    Int? // Estimated duration in minutes
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  serviceItems ServiceItem[]
+  
+  @@index([date])
+  @@map("services")
+}
+
+model ServiceItem {
+  id             String @id @default(cuid())
+  serviceId      String
+  type           String // "song", "scripture", "presentation", "announcement", "media"
+  title          String
+  order          Int
+  duration       Int? // Estimated duration in minutes
+  notes          String?
+  settings       String? // JSON settings specific to the item type
+  
+  // Relationships to content
+  songId         String?
+  presentationId String?
+  
+  service        Service @relation(fields: [serviceId], references: [id])
+  song           Song? @relation(fields: [songId], references: [id])
+  presentation   Presentation? @relation(fields: [presentationId], references: [id])
+  
+  @@index([serviceId, order])
+  @@map("service_items")
+}
+
+// User and Settings Models
+model User {
+  id          String @id @default(cuid())
+  username    String @unique
+  email       String? @unique
+  fullName    String?
+  role        String @default("operator") // "admin", "operator", "viewer"
+  preferences String? // JSON user preferences
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastLogin   DateTime?
+  
+  @@map("users")
+}
+
+model Setting {
+  id          String @id @default(cuid())
+  key         String @unique
+  value       String
+  type        String // "string", "number", "boolean", "json"
+  category    String? // "display", "audio", "backup", "general"
+  description String?
+  updatedAt   DateTime @updatedAt
+  
+  @@map("settings")
+}
+
+// Backup and Import/Export Models
+model Backup {
+  id          String @id @default(cuid())
+  filename    String
+  path        String
+  size        Int
+  type        String // "full", "partial", "settings"
+  description String?
+  createdAt   DateTime @default(now())
+  
+  @@map("backups")
+}
+
+model ImportLog {
+  id          String @id @default(cuid())
+  type        String // "songs", "presentations", "media", "services"
+  source      String // Source file or system
+  status      String // "success", "partial", "failed"
+  itemsTotal  Int
+  itemsSuccess Int
+  itemsFailed Int
+  errors      String? // JSON array of error messages
+  createdAt   DateTime @default(now())
+  
+  @@map("import_logs")
+} 

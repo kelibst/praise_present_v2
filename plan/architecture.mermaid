@@ -1,0 +1,169 @@
+graph TB
+    %% Main Application Architecture
+    subgraph "Electron Application"
+        MainProcess[Main Process<br/>Window Management<br/>IPC Coordination]
+
+        subgraph "Operator Window"
+            OperatorUI[Operator Interface<br/>Controls & Preview]
+            OperatorRenderer[Operator Renderer<br/>Preview & Management]
+        end
+
+        subgraph "Live Display Window"
+            LiveRenderer[Live Display Renderer<br/>Full-Screen Output]
+            EmergencyControls[Emergency Controls<br/>Blackout/Logo]
+        end
+    end
+
+    %% Core Rendering Engine
+    subgraph "Rendering Engine (src/rendering/)"
+        subgraph "Core Components"
+            RenderingEngine[Rendering Engine<br/>Main Pipeline]
+            CanvasRenderer[Canvas Renderer<br/>Hardware Acceleration]
+            ShapeSystem[Shape System<br/>Base Abstractions]
+        end
+
+        subgraph "Shape Library"
+            TextShape[Text Shape<br/>Typography & Layout]
+            ImageShape[Image Shape<br/>Media Rendering]
+            RectangleShape[Rectangle Shape<br/>Backgrounds & Borders]
+            BackgroundShape[Background Shape<br/>Slide Backgrounds]
+        end
+
+        subgraph "Template System"
+            TemplateManager[Template Manager<br/>Template Registry]
+            SongTemplate[Song Template<br/>Worship Content]
+            ScriptureTemplate[Scripture Template<br/>Bible Verses]
+            AnnouncementTemplate[Announcement Template<br/>Church Communications]
+            ThemeManager[Theme Manager<br/>Visual Theming]
+        end
+
+        subgraph "Performance & Effects"
+            PreRenderEngine[Pre-Rendering Engine<br/>Background Preparation]
+            TransitionEngine[Transition Engine<br/>Slide Animations]
+            CacheManager[Cache Manager<br/>Multi-Level Caching]
+            PerformanceMonitor[Performance Monitor<br/>Metrics & Optimization]
+        end
+    end
+
+    %% Content Management Layer
+    subgraph "Content Management (src/rendering/content/)"
+        ContentAdapter[Content Adapter<br/>Database Integration]
+        SongAdapter[Song Adapter<br/>Song Processing]
+        ScriptureAdapter[Scripture Adapter<br/>Bible Text Processing]
+        ServiceAdapter[Service Adapter<br/>Service Planning]
+
+        subgraph "Real-Time Updates"
+            ContentWatcher[Content Watcher<br/>Database Monitoring]
+            LiveContentManager[Live Content Manager<br/>Dynamic Updates]
+            UpdateQueue[Update Queue<br/>Change Management]
+        end
+    end
+
+    %% Database Layer
+    subgraph "Database Layer (prisma/)"
+        PrismaClient[Prisma Client<br/>ORM Interface]
+
+        subgraph "Data Models"
+            SongModel[(Song Model<br/>Lyrics & Metadata)]
+            ScriptureModel[(Scripture Model<br/>Books, Verses, Translations)]
+            ServiceModel[(Service Model<br/>Service Planning)]
+            MediaModel[(Media Model<br/>Images, Videos, Audio)]
+            PresentationModel[(Presentation Model<br/>Slide Templates)]
+        end
+
+        SQLiteDB[(SQLite Database<br/>Local Storage)]
+    end
+
+    %% State Management
+    subgraph "State Management (src/lib/)"
+        ReduxStore[Redux Store<br/>Centralized State]
+
+        subgraph "State Slices"
+            PresentationState[Presentation State<br/>Current Slides]
+            DisplayState[Display State<br/>Multi-Window Sync]
+            ContentState[Content State<br/>Database Content]
+            SettingsState[Settings State<br/>Configuration]
+        end
+    end
+
+    %% Display Synchronization
+    subgraph "Display Management"
+        DisplayManager[Display Manager<br/>Multi-Display Coordination]
+        DisplaySynchronizer[Display Synchronizer<br/>Real-Time Sync]
+        SlideController[Slide Controller<br/>Navigation Controls]
+    end
+
+    %% Data Flow Connections
+    MainProcess --> OperatorUI
+    MainProcess --> LiveRenderer
+    MainProcess --> DisplayManager
+
+    OperatorUI --> OperatorRenderer
+    OperatorRenderer --> RenderingEngine
+    LiveRenderer --> RenderingEngine
+
+    RenderingEngine --> CanvasRenderer
+    RenderingEngine --> ShapeSystem
+    RenderingEngine --> TemplateManager
+
+    TemplateManager --> SongTemplate
+    TemplateManager --> ScriptureTemplate
+    TemplateManager --> AnnouncementTemplate
+    TemplateManager --> ThemeManager
+
+    ShapeSystem --> TextShape
+    ShapeSystem --> ImageShape
+    ShapeSystem --> RectangleShape
+    ShapeSystem --> BackgroundShape
+
+    ContentAdapter --> SongAdapter
+    ContentAdapter --> ScriptureAdapter
+    ContentAdapter --> ServiceAdapter
+
+    SongAdapter --> SongModel
+    ScriptureAdapter --> ScriptureModel
+    ServiceAdapter --> ServiceModel
+
+    PrismaClient --> SongModel
+    PrismaClient --> ScriptureModel
+    PrismaClient --> ServiceModel
+    PrismaClient --> MediaModel
+    PrismaClient --> PresentationModel
+    PrismaClient --> SQLiteDB
+
+    ContentWatcher --> PrismaClient
+    ContentWatcher --> LiveContentManager
+    LiveContentManager --> UpdateQueue
+    UpdateQueue --> RenderingEngine
+
+    DisplayManager --> DisplaySynchronizer
+    DisplaySynchronizer --> SlideController
+    SlideController --> ReduxStore
+
+    ReduxStore --> PresentationState
+    ReduxStore --> DisplayState
+    ReduxStore --> ContentState
+    ReduxStore --> SettingsState
+
+    RenderingEngine --> PreRenderEngine
+    RenderingEngine --> TransitionEngine
+    RenderingEngine --> CacheManager
+    RenderingEngine --> PerformanceMonitor
+
+    CacheManager --> PreRenderEngine
+    PerformanceMonitor --> RenderingEngine
+
+    %% Styling
+    classDef coreEngine fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef template fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef content fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef database fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef state fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef display fill:#f1f8e9,stroke:#689f38,stroke-width:2px
+
+    class RenderingEngine,CanvasRenderer,ShapeSystem,TextShape,ImageShape,RectangleShape,BackgroundShape coreEngine
+    class TemplateManager,SongTemplate,ScriptureTemplate,AnnouncementTemplate,ThemeManager template
+    class ContentAdapter,SongAdapter,ScriptureAdapter,ServiceAdapter,ContentWatcher,LiveContentManager content
+    class PrismaClient,SongModel,ScriptureModel,ServiceModel,MediaModel,PresentationModel,SQLiteDB database
+    class ReduxStore,PresentationState,DisplayState,ContentState,SettingsState state
+    class DisplayManager,DisplaySynchronizer,SlideController,OperatorUI,LiveRenderer display
