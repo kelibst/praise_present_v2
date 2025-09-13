@@ -2698,12 +2698,12 @@ class LiveDisplayWindow {
       if (config.fullscreen ?? true) {
         this.liveWindow.setFullScreen(true);
       }
-      if ("http://localhost:5174") {
+      if ("http://localhost:5173") {
         await this.liveWindow.loadURL(
-          `${"http://localhost:5174"}?mode=live-display`
+          `${"http://localhost:5173"}?mode=live-display`
         );
       }
-      if ("http://localhost:5174") {
+      if ("http://localhost:5173") {
         this.liveWindow.webContents.openDevTools();
       }
       this.setupWindowEvents();
@@ -3531,7 +3531,7 @@ const createWindow = () => {
     `).catch(console.error);
   });
   {
-    mainWindow.loadURL("http://localhost:5174");
+    mainWindow.loadURL("http://localhost:5173");
   }
 };
 electron.app.on("ready", async () => {

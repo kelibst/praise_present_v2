@@ -186,39 +186,72 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         if (actualSlideIndex === -1) actualSlideIndex = currentSlideIndex;
       }
 
-      // Serialize shapes to plain objects for IPC
+      // Serialize shapes to plain objects for IPC with comprehensive property preservation
       const serializeShape = (shape: any) => {
-        return {
+        const baseProps = {
           id: shape.id,
           type: shape.type,
-          position: shape.position,
-          size: shape.size,
-          rotation: shape.rotation,
-          opacity: shape.opacity,
-          zIndex: shape.zIndex,
-          visible: shape.visible,
+          position: shape.position || { x: 0, y: 0 },
+          size: shape.size || { width: 100, height: 50 },
+          rotation: shape.rotation || 0,
+          opacity: shape.opacity !== undefined ? shape.opacity : 1.0,
+          zIndex: shape.zIndex || 0,
+          visible: shape.visible !== undefined ? shape.visible : true,
           transform: shape.transform,
-          style: shape.style,
-          // Text-specific properties
-          ...(shape.type === 'text' && {
-            text: shape.text,
-            textStyle: shape.textStyle,
-            autoSize: shape.autoSize,
-            wordWrap: shape.wordWrap,
-            maxLines: shape.maxLines
-          }),
-          // Background-specific properties
-          ...(shape.type === 'background' && {
+          style: shape.style
+        };
+
+        // Text-specific properties with comprehensive serialization
+        if (shape.type === 'text') {
+          return {
+            ...baseProps,
+            text: shape.text || '',
+            textStyle: {
+              fontFamily: shape.textStyle?.fontFamily || 'Arial, sans-serif',
+              fontSize: shape.textStyle?.fontSize || 24,
+              fontWeight: shape.textStyle?.fontWeight || 'normal',
+              fontStyle: shape.textStyle?.fontStyle || 'normal',
+              color: shape.textStyle?.color || { r: 255, g: 255, b: 255, a: 1 },
+              textAlign: shape.textStyle?.textAlign || 'left',
+              verticalAlign: shape.textStyle?.verticalAlign || 'top',
+              lineHeight: shape.textStyle?.lineHeight || 1.2,
+              letterSpacing: shape.textStyle?.letterSpacing || 0,
+              textDecoration: shape.textStyle?.textDecoration || 'none',
+              textTransform: shape.textStyle?.textTransform || 'none',
+              textShadow: shape.textStyle?.textShadow,
+              shadowColor: shape.textStyle?.shadowColor,
+              shadowBlur: shape.textStyle?.shadowBlur,
+              shadowOffsetX: shape.textStyle?.shadowOffsetX,
+              shadowOffsetY: shape.textStyle?.shadowOffsetY
+            },
+            autoSize: shape.autoSize !== false,
+            wordWrap: shape.wordWrap !== false,
+            maxLines: shape.maxLines || 0
+          };
+        }
+
+        // Background-specific properties
+        if (shape.type === 'background') {
+          return {
+            ...baseProps,
             backgroundStyle: shape.backgroundStyle
-          }),
-          // Rectangle-specific properties
-          ...(shape.type === 'rectangle' && {
+          };
+        }
+
+        // Rectangle-specific properties
+        if (shape.type === 'rectangle') {
+          return {
+            ...baseProps,
             fillColor: shape.fillColor,
             strokeColor: shape.strokeColor,
             strokeWidth: shape.strokeWidth,
-            borderRadius: shape.borderRadius
-          })
-        };
+            borderRadius: shape.borderRadius,
+            fill: shape.fill,
+            stroke: shape.stroke
+          };
+        }
+
+        return baseProps;
       };
 
       const serializedSlide = {
@@ -691,26 +724,65 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             </div>
 
             {/* Preview Screen */}
-            <div className="flex-1 bg-black rounded-lg border border-gray-700 flex items-center justify-center">
+            <div className="flex-1 bg-black rounded-lg border border-gray-700 flex items-center justify-center relative overflow-hidden">
               {currentSlide ? (
-                <div className="w-full h-full p-8 flex flex-col justify-center">
-                  {currentSlide.shapes.map((shape, index) => (
-                    <div key={index} className="mb-4">
-                      {shape.type === 'text' && (
+                <div className="w-full h-full relative">
+                  {/* Background rendering */}
+                  {currentSlide.background && currentSlide.background.type === 'color' && (
+                    <div
+                      className="absolute inset-0"
+                      style={{ backgroundColor: currentSlide.background.value }}
+                    />
+                  )}
+
+                  {/* Shape rendering with proper positioning and styling */}
+                  {currentSlide.shapes.map((shape, index) => {
+                    if (shape.type === 'text') {
+                      const textStyle = (shape as any).textStyle || {};
+                      const position = (shape as any).position || { x: 0, y: 0 };
+                      const size = (shape as any).size || { width: 100, height: 50 };
+
+                      return (
                         <div
-                          className="text-white text-center"
+                          key={index}
+                          className="absolute"
                           style={{
-                            fontSize: `${(shape as any).textStyle?.fontSize || 24}px`,
-                            color: (shape as any).textStyle?.color ?
-                              `rgba(${(shape as any).textStyle.color.r}, ${(shape as any).textStyle.color.g}, ${(shape as any).textStyle.color.b}, ${(shape as any).textStyle.color.a})` :
-                              'white'
+                            left: `${(position.x / 1920) * 100}%`,
+                            top: `${(position.y / 1080) * 100}%`,
+                            width: `${(size.width / 1920) * 100}%`,
+                            height: `${(size.height / 1080) * 100}%`,
+                            fontSize: `${(textStyle.fontSize || 24) * 0.5}px`, // Scale for preview
+                            fontFamily: textStyle.fontFamily || 'Arial, sans-serif',
+                            fontWeight: textStyle.fontWeight || 'normal',
+                            fontStyle: textStyle.fontStyle || 'normal',
+                            color: textStyle.color ?
+                              `rgba(${textStyle.color.r}, ${textStyle.color.g}, ${textStyle.color.b}, ${textStyle.color.a || 1})` :
+                              'white',
+                            textAlign: textStyle.textAlign || 'left',
+                            display: 'flex',
+                            alignItems: textStyle.verticalAlign === 'middle' ? 'center' :
+                                      textStyle.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start',
+                            justifyContent: textStyle.textAlign === 'center' ? 'center' :
+                                          textStyle.textAlign === 'right' ? 'flex-end' : 'flex-start',
+                            lineHeight: textStyle.lineHeight || 1.2,
+                            letterSpacing: `${textStyle.letterSpacing || 0}px`,
+                            textShadow: textStyle.shadowColor && textStyle.shadowBlur ?
+                              `${textStyle.shadowOffsetX || 0}px ${textStyle.shadowOffsetY || 0}px ${textStyle.shadowBlur}px rgba(${textStyle.shadowColor.r}, ${textStyle.shadowColor.g}, ${textStyle.shadowColor.b}, ${textStyle.shadowColor.a || 1})` :
+                              'none',
+                            opacity: (shape as any).opacity !== undefined ? (shape as any).opacity : 1,
+                            visibility: (shape as any).visible !== false ? 'visible' : 'hidden',
+                            whiteSpace: 'pre-wrap',
+                            wordWrap: 'break-word'
                           }}
                         >
                           {(shape as any).text}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      );
+                    }
+
+                    // Handle other shape types if needed
+                    return null;
+                  })}
                 </div>
               ) : (
                 <div className="text-gray-500">
@@ -787,25 +859,64 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             </div>
 
             {/* Live Display Preview */}
-            <div className="flex-1 bg-black rounded-lg border border-gray-700 flex items-center justify-center">
-              {liveDisplayActive && isPresenting ? (
-                <div className="w-full h-full p-4 flex flex-col justify-center">
-                  {currentSlide?.shapes.map((shape, index) => (
-                    <div key={index} className="mb-2">
-                      {shape.type === 'text' && (
+            <div className="flex-1 bg-black rounded-lg border border-gray-700 flex items-center justify-center relative overflow-hidden">
+              {liveDisplayActive && isPresenting && currentSlide ? (
+                <div className="w-full h-full relative">
+                  {/* Background rendering */}
+                  {currentSlide.background && currentSlide.background.type === 'color' && (
+                    <div
+                      className="absolute inset-0"
+                      style={{ backgroundColor: currentSlide.background.value }}
+                    />
+                  )}
+
+                  {/* Shape rendering with proper positioning and styling (smaller scale for right panel) */}
+                  {currentSlide.shapes.map((shape, index) => {
+                    if (shape.type === 'text') {
+                      const textStyle = (shape as any).textStyle || {};
+                      const position = (shape as any).position || { x: 0, y: 0 };
+                      const size = (shape as any).size || { width: 100, height: 50 };
+
+                      return (
                         <div
-                          className="text-white text-center text-sm"
+                          key={index}
+                          className="absolute"
                           style={{
-                            color: (shape as any).textStyle?.color ?
-                              `rgba(${(shape as any).textStyle.color.r}, ${(shape as any).textStyle.color.g}, ${(shape as any).textStyle.color.b}, ${(shape as any).textStyle.color.a})` :
-                              'white'
+                            left: `${(position.x / 1920) * 100}%`,
+                            top: `${(position.y / 1080) * 100}%`,
+                            width: `${(size.width / 1920) * 100}%`,
+                            height: `${(size.height / 1080) * 100}%`,
+                            fontSize: `${(textStyle.fontSize || 24) * 0.25}px`, // Smaller scale for right panel
+                            fontFamily: textStyle.fontFamily || 'Arial, sans-serif',
+                            fontWeight: textStyle.fontWeight || 'normal',
+                            fontStyle: textStyle.fontStyle || 'normal',
+                            color: textStyle.color ?
+                              `rgba(${textStyle.color.r}, ${textStyle.color.g}, ${textStyle.color.b}, ${textStyle.color.a || 1})` :
+                              'white',
+                            textAlign: textStyle.textAlign || 'left',
+                            display: 'flex',
+                            alignItems: textStyle.verticalAlign === 'middle' ? 'center' :
+                                      textStyle.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start',
+                            justifyContent: textStyle.textAlign === 'center' ? 'center' :
+                                          textStyle.textAlign === 'right' ? 'flex-end' : 'flex-start',
+                            lineHeight: textStyle.lineHeight || 1.2,
+                            letterSpacing: `${textStyle.letterSpacing || 0}px`,
+                            textShadow: textStyle.shadowColor && textStyle.shadowBlur ?
+                              `${textStyle.shadowOffsetX || 0}px ${textStyle.shadowOffsetY || 0}px ${textStyle.shadowBlur}px rgba(${textStyle.shadowColor.r}, ${textStyle.shadowColor.g}, ${textStyle.shadowColor.b}, ${textStyle.shadowColor.a || 1})` :
+                              'none',
+                            opacity: (shape as any).opacity !== undefined ? (shape as any).opacity : 1,
+                            visibility: (shape as any).visible !== false ? 'visible' : 'hidden',
+                            whiteSpace: 'pre-wrap',
+                            wordWrap: 'break-word'
                           }}
                         >
                           {(shape as any).text}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      );
+                    }
+
+                    return null;
+                  })}
                 </div>
               ) : (
                 <div className="text-gray-500 text-center">

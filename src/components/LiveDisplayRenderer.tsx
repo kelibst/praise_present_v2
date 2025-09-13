@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   RenderingEngine,
+  SlideRenderer,
+  createSlideRenderer,
   RectangleShape,
   TextShape,
   ImageShape,
@@ -40,6 +42,7 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<RenderingEngine | null>(null);
+  const slideRendererRef = useRef<SlideRenderer | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentContent, setCurrentContent] = useState<LiveContent | null>(null);
   const [fps, setFps] = useState(0);
@@ -70,18 +73,22 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
 
       engineRef.current = engine;
 
+      // Create SlideRenderer for unified rendering
+      const slideRenderer = createSlideRenderer(engine, {
+        slideSize: { width, height },
+        onRender: () => {
+          const metrics = engine.getPerformanceMetrics();
+          setFps(Math.round(metrics.fps));
+        }
+      });
+      slideRendererRef.current = slideRenderer;
+
       // Initialize template system for live display
       // Template manager is already initialized via constructor
       slideGenerator.setRenderingEngine(engine);
 
-      // Set up performance monitoring
-      engine.setRenderCallback(() => {
-        const metrics = engine.getPerformanceMetrics();
-        setFps(Math.round(metrics.fps));
-      });
-
-      // Start with default content
-      showDefaultContent(engine);
+      // Start with default content using SlideRenderer
+      slideRenderer.renderDefaultSlide();
       engine.startRenderLoop();
       setIsInitialized(true);
       setConnectionStatus('Ready');
@@ -93,6 +100,9 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     }
 
     return () => {
+      if (slideRendererRef.current) {
+        slideRendererRef.current.dispose();
+      }
       if (engineRef.current) {
         engineRef.current.dispose();
       }
@@ -123,32 +133,32 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
 
       console.log('Valid content received, updating display');
       setCurrentContent(content);
-      if (engineRef.current) {
-        renderContent(engineRef.current, content);
+      if (slideRendererRef.current) {
+        slideRendererRef.current.renderContent(content);
       }
     };
 
     const handleContentClear = () => {
       console.log('Live display content cleared');
       setCurrentContent(null);
-      if (engineRef.current) {
-        showDefaultContent(engineRef.current);
+      if (slideRendererRef.current) {
+        slideRendererRef.current.renderDefaultSlide();
       }
     };
 
     const handleShowBlack = () => {
       console.log('Live display showing black screen');
       setCurrentContent({ type: 'black' });
-      if (engineRef.current) {
-        showBlackScreen(engineRef.current);
+      if (slideRendererRef.current) {
+        slideRendererRef.current.renderBlankSlide();
       }
     };
 
     const handleShowLogo = () => {
       console.log('Live display showing logo screen');
       setCurrentContent({ type: 'logo' });
-      if (engineRef.current) {
-        showLogoScreen(engineRef.current);
+      if (slideRendererRef.current) {
+        slideRendererRef.current.renderContent({ type: 'logo' });
       }
     };
 
@@ -180,429 +190,10 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     }
   }, []);
 
-  const showDefaultContent = (engine: RenderingEngine) => {
-    engine.clearShapes();
 
-    // Gradient background
-    const background = BackgroundShape.createLinearGradient(
-      [
-        { offset: 0, color: createColor(45, 55, 72) },
-        { offset: 1, color: createColor(74, 85, 104) }
-      ],
-      135,
-      width,
-      height
-    );
-    engine.addShape(background);
 
-    // Welcome text with better visibility
-    const welcomeText = new TextShape(
-      { position: { x: width * 0.1, y: height * 0.4 }, size: { width: width * 0.8, height: height * 0.1 } },
-      {
-        fontSize: Math.floor(height * 0.08),
-        fontWeight: 'bold',
-        color: createColor(255, 255, 255),
-        textAlign: 'center',
-        verticalAlign: 'middle',
-        shadowColor: createColor(0, 0, 0, 0.8),
-        shadowBlur: 8,
-        shadowOffsetX: 2,
-        shadowOffsetY: 2
-      }
-    );
-    welcomeText.setText('PraisePresent Live Display');
-    welcomeText.setZIndex(1);
-    engine.addShape(welcomeText);
 
-    // Status text with better visibility
-    const statusText = new TextShape(
-      { position: { x: width * 0.1, y: height * 0.55 }, size: { width: width * 0.8, height: height * 0.05 } },
-      {
-        fontSize: Math.floor(height * 0.035),
-        color: createColor(220, 220, 220),
-        textAlign: 'center',
-        verticalAlign: 'middle',
-        shadowColor: createColor(0, 0, 0, 0.6),
-        shadowBlur: 4,
-        shadowOffsetX: 1,
-        shadowOffsetY: 1
-      }
-    );
-    statusText.setText('Ready for presentation content');
-    statusText.setZIndex(1);
-    engine.addShape(statusText);
-  };
 
-  const showBlackScreen = (engine: RenderingEngine) => {
-    engine.clearShapes();
-
-    // Black background
-    const background = BackgroundShape.createSolidColor(createColor(0, 0, 0), width, height);
-    engine.addShape(background);
-  };
-
-  const showLogoScreen = (engine: RenderingEngine) => {
-    engine.clearShapes();
-
-    // Dark background
-    const background = BackgroundShape.createSolidColor(createColor(20, 20, 30), width, height);
-    engine.addShape(background);
-
-    // Logo placeholder
-    const logoBox = new RectangleShape(
-      { position: { x: width * 0.4, y: height * 0.4 }, size: { width: width * 0.2, height: height * 0.2 } },
-      {
-        fill: createColor(100, 150, 255, 0.3),
-        stroke: { width: 3, color: createColor(100, 150, 255), style: 'solid' },
-        borderRadius: 20
-      }
-    );
-    logoBox.setZIndex(1);
-    engine.addShape(logoBox);
-
-    // Logo text
-    const logoText = new TextShape(
-      { position: { x: width * 0.3, y: height * 0.65 }, size: { width: width * 0.4, height: height * 0.08 } },
-      {
-        fontSize: Math.floor(height * 0.04),
-        fontWeight: 'bold',
-        color: createColor(255, 255, 255),
-        textAlign: 'center',
-        verticalAlign: 'middle'
-      }
-    );
-    logoText.setText('Church Logo');
-    logoText.setZIndex(1);
-    engine.addShape(logoText);
-  };
-
-  const renderContent = (engine: RenderingEngine, content: LiveContent) => {
-    // Safety check for content
-    if (!content || typeof content !== 'object') {
-      console.warn('Invalid content provided to renderContent, showing default content');
-      showDefaultContent(engine);
-      return;
-    }
-
-    engine.clearShapes();
-
-    switch (content.type) {
-      case 'rendering-test':
-      case 'rendering-demo':
-      case 'template-demo':
-      case 'simple-rendering-test':
-        renderTestContent(engine, content);
-        break;
-      case 'scripture':
-        renderScriptureContent(engine, content);
-        break;
-      case 'song':
-      case 'announcement':
-      case 'template-generated':
-        renderTemplateGeneratedContent(engine, content);
-        break;
-      case 'template-slide':
-        renderTemplateSlideContent(engine, content);
-        break;
-      case 'placeholder':
-        renderPlaceholderContent(engine, content);
-        break;
-      case 'black':
-        showBlackScreen(engine);
-        break;
-      case 'logo':
-        showLogoScreen(engine);
-        break;
-      default:
-        console.warn(`Unknown content type: ${content.type}, showing default content`);
-        showDefaultContent(engine);
-    }
-  };
-
-  const renderScriptureContent = (engine: RenderingEngine, content: LiveContent) => {
-    // Background for scripture content
-    const background = BackgroundShape.createLinearGradient(
-      [
-        { offset: 0, color: createColor(25, 35, 55) },
-        { offset: 1, color: createColor(45, 55, 75) }
-      ],
-      90,
-      width,
-      height
-    );
-    engine.addShape(background);
-
-    // Main content area
-    const contentArea = new RectangleShape(
-      {
-        position: { x: 100, y: 100 },
-        size: { width: width - 200, height: height - 200 }
-      },
-      {
-        fill: createColor(255, 255, 255, 0.95),
-        stroke: { width: 2, color: createColor(200, 200, 200), style: 'solid' },
-        borderRadius: 15,
-        shadowColor: createColor(0, 0, 0, 0.3),
-        shadowBlur: 20,
-        shadowOffsetX: 0,
-        shadowOffsetY: 10
-      }
-    );
-    contentArea.setZIndex(1);
-    engine.addShape(contentArea);
-
-    // Scripture reference title with better visibility
-    const referenceTitle = new TextShape(
-      {
-        position: { x: 150, y: 140 },
-        size: { width: width - 300, height: 80 }
-      },
-      {
-        fontFamily: 'Georgia, serif',
-        fontSize: Math.max(42, width * 0.025),
-        fontWeight: 'bold',
-        color: createColor(60, 80, 120),
-        textAlign: 'center',
-        shadowColor: createColor(255, 255, 255, 0.8),
-        shadowBlur: 2,
-        shadowOffsetX: 1,
-        shadowOffsetY: 1
-      }
-    );
-    referenceTitle.setText(content.title || 'Scripture');
-    referenceTitle.setZIndex(2);
-    engine.addShape(referenceTitle);
-
-    // Scripture text with improved readability
-    const scriptureText = new TextShape(
-      {
-        position: { x: 150, y: 250 },
-        size: { width: width - 300, height: height - 400 }
-      },
-      {
-        fontFamily: 'Georgia, serif',
-        fontSize: Math.max(32, width * 0.02),
-        lineHeight: 1.8,
-        color: createColor(40, 40, 40),
-        textAlign: 'center',
-        shadowColor: createColor(255, 255, 255, 0.5),
-        shadowBlur: 1,
-        shadowOffsetX: 1,
-        shadowOffsetY: 1
-      }
-    );
-
-    const text = content.content?.text || 'Scripture text not available';
-    scriptureText.setText(`"${text}"`);
-    scriptureText.setZIndex(2);
-    engine.addShape(scriptureText);
-
-    // Translation info with better visibility
-    if (content.content?.translation) {
-      const translation = new TextShape(
-        {
-          position: { x: 150, y: height - 140 },
-          size: { width: width - 300, height: 40 }
-        },
-        {
-          fontFamily: 'Arial, sans-serif',
-          fontSize: Math.max(22, width * 0.015),
-          color: createColor(120, 120, 120),
-          textAlign: 'right',
-          fontStyle: 'italic',
-          shadowColor: createColor(255, 255, 255, 0.3),
-          shadowBlur: 1,
-          shadowOffsetX: 1,
-          shadowOffsetY: 1
-        }
-      );
-      translation.setText(`- ${content.content.translation}`);
-      translation.setZIndex(2);
-      engine.addShape(translation);
-    }
-  };
-
-  const renderTemplateGeneratedContent = async (engine: RenderingEngine, content: LiveContent) => {
-    try {
-      // If we have pre-generated slide shapes, use them directly
-      if (content.slideData && content.slideData.shapes) {
-        console.log('Rendering pre-generated slide shapes:', content.slideData.shapes.length);
-
-        engine.clearShapes();
-        for (const shape of content.slideData.shapes) {
-          engine.addShape(shape);
-        }
-        return;
-      }
-
-      // Generate slide using template system
-      if (content.content && content.templateId) {
-        console.log('Generating slide using template:', content.templateId);
-
-        const slideContent = {
-          id: `live-${Date.now()}`,
-          type: content.type as 'song' | 'scripture' | 'announcement',
-          title: content.title || 'Live Content',
-          data: content.content
-        };
-
-        const slides = await slideGenerator.generateSlidesFromContent(slideContent, {
-          slideSize: { width, height }
-        });
-
-        if (slides && slides.length > 0) {
-          const slide = slides[0]; // Use first slide
-          engine.clearShapes();
-          for (const shape of slide.shapes) {
-            engine.addShape(shape);
-          }
-          console.log(`Template-generated slide rendered with ${slide.shapes.length} shapes`);
-        } else {
-          console.warn('No slides generated from template');
-          showDefaultContent(engine);
-        }
-      } else {
-        console.warn('Template-generated content missing required data');
-        showDefaultContent(engine);
-      }
-    } catch (error) {
-      console.error('Error rendering template-generated content:', error);
-      showDefaultContent(engine);
-    }
-  };
-
-  const renderTestContent = (engine: RenderingEngine, content: LiveContent) => {
-    // Create a demonstration scene similar to test suite scenarios
-
-    // Background
-    const background = BackgroundShape.createLinearGradient(
-      [
-        { offset: 0, color: createColor(20, 20, 40) },
-        { offset: 1, color: createColor(60, 60, 100) }
-      ],
-      135,
-      width,
-      height
-    );
-    engine.addShape(background);
-
-    // Title with improved visibility
-    const title = new TextShape(
-      { position: { x: width * 0.05, y: height * 0.05 }, size: { width: width * 0.9, height: height * 0.1 } },
-      {
-        fontSize: Math.floor(height * 0.06),
-        fontWeight: 'bold',
-        color: createColor(255, 255, 255),
-        textAlign: 'center',
-        verticalAlign: 'middle',
-        shadowColor: createColor(0, 0, 0, 0.8),
-        shadowBlur: 6,
-        shadowOffsetX: 2,
-        shadowOffsetY: 2
-      }
-    );
-    title.setText(content.title || 'Rendering Engine Live Test');
-    title.setZIndex(2);
-    engine.addShape(title);
-
-    // Create some dynamic shapes
-    const shapeCount = 50;
-    for (let i = 0; i < shapeCount; i++) {
-      const rect = new RectangleShape(
-        {
-          position: {
-            x: Math.random() * (width - 40),
-            y: height * 0.2 + Math.random() * (height * 0.7)
-          },
-          size: { width: 30, height: 30 },
-          rotation: Math.random() * 360
-        },
-        {
-          fill: createColor(
-            Math.random() * 255,
-            Math.random() * 255,
-            Math.random() * 255,
-            0.7
-          ),
-          borderRadius: 5
-        }
-      );
-      rect.setZIndex(1);
-      engine.addShape(rect);
-    }
-
-    // Performance info with better visibility
-    const perfText = new TextShape(
-      { position: { x: width * 0.02, y: height * 0.9 }, size: { width: width * 0.3, height: height * 0.05 } },
-      {
-        fontSize: Math.floor(height * 0.025),
-        color: createColor(200, 255, 200),
-        textAlign: 'left',
-        verticalAlign: 'middle',
-        shadowColor: createColor(0, 0, 0, 0.8),
-        shadowBlur: 4,
-        shadowOffsetX: 1,
-        shadowOffsetY: 1
-      }
-    );
-    perfText.setText(`Live Display • ${shapeCount} shapes • ${fps} FPS`);
-    perfText.setZIndex(2);
-    engine.addShape(perfText);
-  };
-
-  const renderPlaceholderContent = (engine: RenderingEngine, content: LiveContent) => {
-    // Background
-    const background = BackgroundShape.createLinearGradient(
-      [
-        { offset: 0, color: createColor(45, 55, 72) },
-        { offset: 1, color: createColor(74, 85, 104) }
-      ],
-      90,
-      width,
-      height
-    );
-    engine.addShape(background);
-
-    // Main content with enhanced visibility
-    if (content.content?.mainText) {
-      const mainText = new TextShape(
-        { position: { x: width * 0.1, y: height * 0.35 }, size: { width: width * 0.8, height: height * 0.15 } },
-        {
-          fontSize: Math.floor(height * 0.09),
-          fontWeight: 'bold',
-          color: createColor(255, 255, 255),
-          textAlign: 'center',
-          verticalAlign: 'middle',
-          shadowColor: createColor(0, 0, 0, 0.8),
-          shadowBlur: 8,
-          shadowOffsetX: 3,
-          shadowOffsetY: 3
-        }
-      );
-      mainText.setText(content.content.mainText);
-      mainText.setZIndex(1);
-      engine.addShape(mainText);
-    }
-
-    if (content.content?.subText) {
-      const subText = new TextShape(
-        { position: { x: width * 0.1, y: height * 0.55 }, size: { width: width * 0.8, height: height * 0.08 } },
-        {
-          fontSize: Math.floor(height * 0.035),
-          color: createColor(220, 220, 220),
-          textAlign: 'center',
-          verticalAlign: 'middle',
-          shadowColor: createColor(0, 0, 0, 0.6),
-          shadowBlur: 4,
-          shadowOffsetX: 2,
-          shadowOffsetY: 2
-        }
-      );
-      subText.setText(content.content.subText);
-      subText.setZIndex(1);
-      engine.addShape(subText);
-    }
-  };
 
   // URL parameter detection for live display mode
   useEffect(() => {
@@ -615,152 +206,6 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     }
   }, []);
 
-  // Render template slide content from ContentViewer
-  const renderTemplateSlideContent = (engine: RenderingEngine, content: LiveContent) => {
-    try {
-      console.log('Rendering template slide:', content);
-
-      // Handle the new template-slide content structure from LivePresentationPage
-      if (content.slide && content.slide.shapes) {
-        const slide = content.slide;
-
-        console.log(`Rendering single slide with ${slide.shapes.length} shapes`);
-
-        engine.clearShapes();
-
-        // Add background if specified
-        if (slide.background) {
-          let backgroundShape;
-          if (slide.background.type === 'color') {
-            const color = parseColor(slide.background.value);
-            backgroundShape = BackgroundShape.createSolidColor(color, width, height);
-          } else if (slide.background.type === 'gradient' && Array.isArray(slide.background.value)) {
-            backgroundShape = BackgroundShape.createLinearGradient(
-              slide.background.value,
-              slide.background.angle || 90,
-              width,
-              height
-            );
-          }
-
-          if (backgroundShape) {
-            engine.addShape(backgroundShape);
-          }
-        }
-
-        // Recreate Shape objects from serialized data
-        for (const shapeData of slide.shapes) {
-          let shapeInstance;
-
-          if (shapeData.type === 'background') {
-            // Background shapes are handled above, skip duplicates
-            if (shapeData.backgroundStyle?.type === 'color') {
-              const color = createColor(
-                shapeData.backgroundStyle.color.r,
-                shapeData.backgroundStyle.color.g,
-                shapeData.backgroundStyle.color.b,
-                shapeData.backgroundStyle.color.a
-              );
-              shapeInstance = BackgroundShape.createSolidColor(color, width, height);
-            }
-          } else if (shapeData.type === 'text') {
-            // Recreate TextShape
-            shapeInstance = new TextShape(
-              {
-                position: shapeData.position,
-                size: shapeData.size,
-                zIndex: shapeData.zIndex,
-                opacity: shapeData.opacity,
-                visible: shapeData.visible
-              },
-              shapeData.textStyle
-            );
-            shapeInstance.text = shapeData.text;
-          } else if (shapeData.type === 'rectangle') {
-            // Recreate RectangleShape
-            shapeInstance = new RectangleShape(
-              {
-                position: shapeData.position,
-                size: shapeData.size,
-                zIndex: shapeData.zIndex,
-                opacity: shapeData.opacity,
-                visible: shapeData.visible
-              },
-              {
-                fill: shapeData.fillColor || shapeData.fill,
-                stroke: shapeData.strokeColor || shapeData.stroke ? {
-                  color: shapeData.strokeColor || shapeData.stroke?.color,
-                  width: shapeData.strokeWidth || shapeData.stroke?.width || 1,
-                  style: 'solid'
-                } : undefined,
-                borderRadius: shapeData.borderRadius
-              }
-            );
-          }
-
-          if (shapeInstance) {
-            engine.addShape(shapeInstance);
-          }
-        }
-
-        console.log(`Successfully rendered template slide with ${slide.shapes.length} shapes`);
-        return;
-      }
-
-      // Fallback: Handle legacy slides array format
-      if (content.content?.slides && Array.isArray(content.content.slides)) {
-        const slides = content.content.slides;
-        const slideIndex = content.content.currentSlide ? content.content.currentSlide - 1 : 0;
-
-        // Update navigation state
-        setAllSlides(slides);
-        setTotalSlides(slides.length);
-        setCurrentSlideIndex(slideIndex);
-
-        if (!slides[slideIndex]) {
-          console.warn(`No slide found at index ${slideIndex}`);
-          showDefaultContent(engine);
-          return;
-        }
-
-        const currentSlide = slides[slideIndex];
-        engine.clearShapes();
-
-        // Render all shapes from the current slide
-        if (currentSlide.shapes && Array.isArray(currentSlide.shapes)) {
-          for (const shape of currentSlide.shapes) {
-            engine.addShape(shape);
-          }
-          console.log(`Rendered slide ${slideIndex + 1}/${slides.length} with ${currentSlide.shapes.length} shapes`);
-        } else {
-          console.warn('Current slide missing shapes data');
-          showDefaultContent(engine);
-        }
-        return;
-      }
-
-      console.warn('Template slide content missing expected slide data structure');
-      showDefaultContent(engine);
-
-    } catch (error) {
-      console.error('Error rendering template slide:', error);
-      showDefaultContent(engine);
-    }
-  };
-
-  // Helper function to parse color strings to Color objects
-  const parseColor = (colorString: string) => {
-    if (colorString.startsWith('#')) {
-      // Parse hex color
-      const hex = colorString.slice(1);
-      const r = parseInt(hex.slice(0, 2), 16);
-      const g = parseInt(hex.slice(2, 4), 16);
-      const b = parseInt(hex.slice(4, 6), 16);
-      return createColor(r, g, b);
-    }
-    // Default fallback
-    return createColor(26, 26, 26); // Dark background
-  };
 
   // Navigation functions (internal use)
   const navigateToSlide = (slideIndex: number) => {
