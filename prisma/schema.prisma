@@ -123,7 +123,8 @@ model Song {
   usageCount  Int @default(0)
   
   serviceItems ServiceItem[]
-  
+  servicePlanItems ServicePlanItem[]
+
   @@index([title])
   @@index([artist])
   @@index([ccliNumber])
@@ -170,7 +171,8 @@ model Presentation {
   template    Template? @relation(fields: [templateId], references: [id])
   slides      Slide[]
   serviceItems ServiceItem[]
-  
+  servicePlanItems ServicePlanItem[]
+
   @@index([title])
   @@map("presentations")
 }
@@ -244,7 +246,8 @@ model Service {
   updatedAt   DateTime @updatedAt
   
   serviceItems ServiceItem[]
-  
+  servicePlans ServicePlan[]
+
   @@index([date])
   @@map("services")
 }
@@ -323,4 +326,46 @@ model ImportLog {
   createdAt   DateTime @default(now())
   
   @@map("import_logs")
-} 
+}
+
+// Service Planning Models
+model ServicePlan {
+  id          String @id @default(cuid())
+  name        String
+  serviceId   String
+  description String?
+  notes       String?
+  order       Int @default(0)
+  isTemplate  Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  service     Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  planItems   ServicePlanItem[]
+
+  @@index([serviceId])
+  @@map("service_plans")
+}
+
+model ServicePlanItem {
+  id            String @id @default(cuid())
+  planId        String
+  type          String // "song", "scripture", "presentation", "announcement", "media", "transition"
+  title         String
+  order         Int
+  duration      Int? // Estimated duration in minutes
+  notes         String?
+  settings      String? // JSON settings specific to the item
+
+  // Content references
+  songId         String?
+  presentationId String?
+  scriptureRef   String? // For scripture references like "John 3:16"
+
+  plan          ServicePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  song          Song? @relation(fields: [songId], references: [id])
+  presentation  Presentation? @relation(fields: [presentationId], references: [id])
+
+  @@index([planId, order])
+  @@map("service_plan_items")
+}

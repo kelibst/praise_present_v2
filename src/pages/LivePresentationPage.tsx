@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, Monitor, MonitorSpeaker, SkipBack, SkipForward, Eye, Settings, Save, Palette, Type, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
+import { Play, Monitor, MonitorSpeaker, SkipBack, SkipForward, Eye, Settings, Save, Palette, AlignLeft, AlignCenter, AlignRight, Calendar, Plus } from 'lucide-react';
 
-// Import data (will be replaced with database queries later)
-import { sampleSongs } from '../../data/sample-songs';
-import { sampleServices } from '../../data/sample-services';
+// Import data (using real database connections)
+import { sampleSongs } from '../../data/sample-songs'; // Keep for song library until database integration
 
 // Import template system
 import { ScriptureTemplate, SongTemplate, SlideGenerator, Shape } from '../rendering';
@@ -16,6 +15,10 @@ import SongLibrary from '../components/songs/SongLibrary';
 import { EditableSlidePreview } from '../components/EditableSlidePreview';
 import { GeneratedSlide } from '../rendering/SlideGenerator';
 
+// Import plan components
+import { PlanManager } from '../components/plans/PlanManager';
+import { PlanWithItems, PlanItemWithContent } from '../types/plan';
+
 // Define Slide interface
 interface Slide {
   id: string;
@@ -27,22 +30,28 @@ interface Slide {
   duration?: number;
 }
 
-interface PresentationItem {
+// Unified service item interface that replaces both PresentationItem and ServiceItem
+interface ServiceItem {
   id: string;
-  type: 'scripture' | 'song' | 'announcement' | 'media';
+  type: 'scripture' | 'song' | 'announcement' | 'media' | 'sermon';
   title: string;
   content: any;
   slides?: Slide[];
   duration?: number;
+  order?: number;
+  notes?: string;
+  // Plan-specific fields (when item comes from a plan)
+  planId?: string;
+  planItemId?: string;
 }
 
 interface LivePresentationPageProps {}
 
 export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // State management
-  const [activeTab, setActiveTab] = useState<'plan' | 'scriptures' | 'songs'>('plan');
-  const [presentationItems, setPresentationItems] = useState<PresentationItem[]>([]);
-  const [selectedItem, setSelectedItem] = useState<PresentationItem | null>(null);
+  const [activeTab, setActiveTab] = useState<'plan' | 'plans' | 'scriptures' | 'songs'>('plan');
+  const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
+  const [selectedItem, setSelectedItem] = useState<ServiceItem | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isPresenting, setIsPresenting] = useState(false);
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
@@ -63,6 +72,13 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showPropertyPanel, setShowPropertyPanel] = useState(false);
+
+  // Plan-related state (simplified)
+  const [selectedPlan, setSelectedPlan] = useState<PlanWithItems | null>(null);
+  const [currentPlanItemIndex, setCurrentPlanItemIndex] = useState(0);
+
+  // Service item management
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
 
   // Template system with enhanced initialization
   const [templateManager] = useState(() => {
@@ -99,18 +115,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   });
   const [slideGenerator] = useState(() => new SlideGenerator());
 
-  // Initialize with sample service data
+  // Initialize with empty service items - users should create plans or add items manually
   useEffect(() => {
-    if (sampleServices.length > 0) {
-      const serviceItems = sampleServices[0].items.map(item => ({
-        id: item.id,
-        type: item.type as 'scripture' | 'song' | 'announcement',
-        title: item.title,
-        content: item.content,
-        duration: item.duration
-      }));
-      setPresentationItems(serviceItems);
-    }
+    setServiceItems([]);
   }, []);
 
   // Check live display status on mount
@@ -369,7 +376,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   };
 
   // Generate slides for selected item
-  const generateSlidesForItem = async (item: PresentationItem, autoPresent = false) => {
+  const generateSlidesForItem = async (item: ServiceItem, autoPresent = false) => {
     if (isGeneratingSlides) return; // Prevent multiple concurrent generations
 
     try {
@@ -482,8 +489,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       setCurrentSlideIndex(0);
       setPresentationMode(autoPresent ? 'live' : 'preview');
 
-      // Update the item in presentation items list
-      setPresentationItems(prev =>
+      // Update the item in service items list
+      setServiceItems(prev =>
         prev.map(p => p.id === item.id ? updatedItem : p)
       );
 
@@ -501,13 +508,13 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   };
 
   // Handle service item selection (single click)
-  const handleServiceItemSelect = (item: PresentationItem, event: React.MouseEvent) => {
+  const handleServiceItemSelect = (item: ServiceItem, event: React.MouseEvent) => {
     event.stopPropagation();
     generateSlidesForItem(item, false);
   };
 
   // Handle service item presentation (double click)
-  const handleServiceItemPresent = async (item: PresentationItem, event: React.MouseEvent) => {
+  const handleServiceItemPresent = async (item: ServiceItem, event: React.MouseEvent) => {
     event.stopPropagation();
 
     if (!liveDisplayActive) {
@@ -612,9 +619,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       console.log('📋 SaveSlideChanges: Setting updated item');
       setSelectedItem(updatedItem);
 
-      // Update presentation items array
-      console.log('📊 SaveSlideChanges: Updating presentation items');
-      setPresentationItems(prev =>
+      // Update service items array
+      console.log('📊 SaveSlideChanges: Updating service items');
+      setServiceItems(prev =>
         prev.map(item => item.id === selectedItem.id ? updatedItem : item)
       );
 
@@ -637,6 +644,74 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       [property]: value
     }));
     setHasUnsavedChanges(true);
+  };
+
+  // Service item management functions
+  const addServiceItem = (item: ServiceItem) => {
+    const newItem = {
+      ...item,
+      id: `${item.type}-${Date.now()}`,
+      order: serviceItems.length + 1
+    };
+    setServiceItems(prev => [...prev, newItem]);
+  };
+
+  const removeServiceItem = (itemId: string) => {
+    setServiceItems(prev => prev.filter(item => item.id !== itemId));
+    // Clear selection if removed item was selected
+    if (selectedItem?.id === itemId) {
+      setSelectedItem(null);
+    }
+  };
+
+  const moveServiceItem = (itemId: string, direction: 'up' | 'down') => {
+    setServiceItems(prev => {
+      const currentIndex = prev.findIndex(item => item.id === itemId);
+      if (currentIndex === -1) return prev;
+
+      const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      if (newIndex < 0 || newIndex >= prev.length) return prev;
+
+      const newItems = [...prev];
+      [newItems[currentIndex], newItems[newIndex]] = [newItems[newIndex], newItems[currentIndex]];
+
+      // Update order numbers
+      return newItems.map((item, index) => ({
+        ...item,
+        order: index + 1
+      }));
+    });
+  };
+
+  const quickAddAnnouncement = () => {
+    const announcement: ServiceItem = {
+      id: `announcement-${Date.now()}`,
+      type: 'announcement',
+      title: 'New Announcement',
+      content: {
+        text: 'Announcement text',
+        description: ''
+      },
+      duration: 60,
+      order: serviceItems.length + 1
+    };
+    addServiceItem(announcement);
+    generateSlidesForItem(announcement);
+  };
+
+  // Session management functions
+  const clearAllItems = () => {
+    setServiceItems([]);
+    setSelectedItem(null);
+    setSelectedPlan(null);
+  };
+
+  const saveCurrentAsNewPlan = () => {
+    if (serviceItems.length === 0) return;
+
+    // This would integrate with plan creation - for now just show notification
+    console.log('Save current items as new plan:', serviceItems);
+    // TODO: Open plan creation modal with current items
   };
 
   const currentSlide = selectedItem?.slides?.[currentSlideIndex];
@@ -733,9 +808,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           {/* Tab Navigation */}
           <div className="flex border-b border-gray-700">
             {[
-              { key: 'plan', label: 'Presentation Plan', icon: Settings },
-              { key: 'scriptures', label: 'Scriptures', icon: Eye },
-              { key: 'songs', label: 'Songs', icon: Play }
+              { key: 'plan', label: 'Current Service', icon: Settings },
+              { key: 'plans', label: 'Plan Manager', icon: Calendar },
+              { key: 'scriptures', label: 'Scripture Library', icon: Eye },
+              { key: 'songs', label: 'Song Library', icon: Play }
             ].map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -756,8 +832,95 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           <div className="p-4 h-full overflow-y-auto">
             {activeTab === 'plan' && (
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold mb-4">Service Items</h3>
-                {presentationItems.map((item, index) => {
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                      <Play className="w-5 h-5 text-green-400" />
+                      Current Service
+                    </h3>
+                    <p className="text-sm text-gray-400">Ready for presentation • Click to preview • Double-click to present live</p>
+                    {selectedPlan && (
+                      <div className="text-xs text-green-300 mt-1 flex items-center gap-1">
+                        <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                        Loaded from plan: {selectedPlan.name}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-400">{serviceItems.length} items</span>
+                    {serviceItems.length > 0 && (
+                      <button
+                        onClick={saveCurrentAsNewPlan}
+                        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+                        title="Save current items as new plan"
+                      >
+                        💾 Save Plan
+                      </button>
+                    )}
+                    {serviceItems.length > 0 && (
+                      <button
+                        onClick={clearAllItems}
+                        className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-colors"
+                        title="Clear all items"
+                      >
+                        🗑️ Clear
+                      </button>
+                    )}
+                    <button
+                      onClick={quickAddAnnouncement}
+                      className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
+                      title="Quick add announcement"
+                    >
+                      + Announcement
+                    </button>
+                  </div>
+                </div>
+
+                {serviceItems.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400">
+                    <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-green-800 to-blue-800 rounded-full flex items-center justify-center">
+                      <Play className="w-10 h-10 text-white" />
+                    </div>
+                    <h4 className="text-xl font-bold mb-2 text-white">🎯 Ready for Presentation</h4>
+                    <p className="text-sm mb-6 text-gray-300 max-w-md mx-auto">
+                      Start by loading a saved plan or adding individual items to build your service presentation
+                    </p>
+                    <div className="grid grid-cols-1 gap-3 max-w-sm mx-auto">
+                      <button
+                        onClick={() => setActiveTab('plans')}
+                        className="flex items-center justify-center gap-3 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                      >
+                        <Calendar className="w-5 h-5" />
+                        Load Saved Plan
+                      </button>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => setActiveTab('scriptures')}
+                          className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                        >
+                          <span className="text-lg">📖</span>
+                          Scripture
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('songs')}
+                          className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                        >
+                          <span className="text-lg">♪</span>
+                          Song
+                        </button>
+                      </div>
+                      <button
+                        onClick={quickAddAnnouncement}
+                        className="flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                      >
+                        <span className="text-lg">📢</span>
+                        Add Announcement
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {serviceItems.map((item, index) => {
                   const isSelected = selectedItem?.id === item.id;
                   const isLoading = isGeneratingSlides && isSelected;
                   const isPresentingThis = isPresenting && isSelected && presentationMode === 'live';
@@ -778,29 +941,45 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <div className="font-medium">{item.title}</div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="text-xs text-gray-500 bg-gray-700 px-2 py-1 rounded">
+                              {index + 1}
+                            </div>
+                            {/* Type icon */}
+                            {item.type === 'song' && <div className="text-blue-400">♪</div>}
+                            {item.type === 'scripture' && <div className="text-purple-400">📖</div>}
+                            {item.type === 'announcement' && <div className="text-yellow-400">📢</div>}
+                            {item.type === 'sermon' && <div className="text-green-400">🎯</div>}
+
+                            <div className="font-medium text-white">{item.title}</div>
+
                             {isLoading && (
                               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                             )}
                             {isPresentingThis && (
-                              <div className="px-2 py-1 bg-green-600 text-white text-xs rounded-full font-medium">
+                              <div className="px-2 py-1 bg-green-600 text-white text-xs rounded-full font-medium animate-pulse">
                                 LIVE
                               </div>
                             )}
+                            {item.planId && (
+                              <div className="px-2 py-1 bg-purple-900/50 text-purple-300 text-xs rounded border border-purple-600/30">
+                                Plan Item
+                              </div>
+                            )}
                           </div>
-                          <div className="text-sm text-gray-400 capitalize">
-                            {item.type} {item.slides && `• ${item.slides.length} slides`}
-                            {item.duration && ` • ${item.duration}s`}
+
+                          <div className="text-sm text-gray-400 flex items-center gap-2">
+                            <span className="capitalize">{item.type}</span>
+                            {item.slides && <span>• {item.slides.length} slides</span>}
+                            {item.duration && <span>• {item.duration}s</span>}
+                            {item.notes && <span>• Has notes</span>}
                           </div>
                         </div>
+
                         <div className="flex flex-col items-end gap-1">
-                          <div className="text-xs text-gray-500">
-                            #{index + 1}
-                          </div>
                           {isSelected && (
-                            <div className="text-xs text-blue-400">
-                              {presentationMode === 'live' ? 'Live' : 'Preview'}
+                            <div className="text-xs px-2 py-1 rounded-full bg-blue-900/50 text-blue-300 border border-blue-600/30">
+                              {presentationMode === 'live' ? 'Live Mode' : 'Preview'}
                             </div>
                           )}
                         </div>
@@ -825,7 +1004,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                         title += `-${lastVerse.verse}`;
                       }
 
-                      const scriptureItem: PresentationItem = {
+                      const scriptureItem: ServiceItem = {
                         id: `scripture-${Date.now()}`,
                         type: 'scripture',
                         title,
@@ -857,7 +1036,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                           const chapter = parseInt(chapterVerse[0]);
                           const verseNum = parseInt(chapterVerse[1]);
 
-                          const scriptureItem: PresentationItem = {
+                          const scriptureItem: ServiceItem = {
                             id: `quick-scripture-${index}`,
                             type: 'scripture',
                             title: verse.ref,
@@ -885,13 +1064,162 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               </div>
             )}
 
+            {activeTab === 'plans' && (
+              <div className="space-y-4">
+                {/* Saved Plans Section */}
+                <div className="bg-gray-800 rounded-lg border border-gray-700">
+                  <div className="p-4 border-b border-gray-700">
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                      <Settings className="w-5 h-5 text-green-400" />
+                      Saved Plans
+                    </h3>
+                    <p className="text-sm text-gray-400">Load a saved presentation plan for this service</p>
+                  </div>
+
+                  <div className="p-4">
+                    <PlanManager
+                      serviceId={undefined} // Remove service dependency
+                      onPlanSelect={(plan) => {
+                        setSelectedPlan(plan);
+                        setCurrentPlanItemIndex(0);
+
+                        // Convert plan items to service items
+                        const planServiceItems: ServiceItem[] = plan.planItems.map((planItem: any) => ({
+                          id: planItem.id,
+                          type: planItem.type as 'scripture' | 'song' | 'announcement',
+                          title: planItem.title,
+                          content: {
+                            // Map content based on type
+                            ...(planItem.type === 'song' && planItem.song ? {
+                              title: planItem.song.title,
+                              artist: planItem.song.artist || planItem.song.artist,
+                              lyrics: planItem.song.lyrics || 'Lyrics not available'
+                            } : {}),
+                            ...(planItem.type === 'scripture' && planItem.scriptureRef ? {
+                              scriptureRef: planItem.scriptureRef,
+                              verses: [{
+                                id: planItem.id,
+                                text: 'Sample verse text',
+                                book: 'Sample Book',
+                                chapter: 1,
+                                verse: 1,
+                                translation: 'KJV'
+                              }]
+                            } : {}),
+                            ...(planItem.type === 'announcement' ? {
+                              text: planItem.title,
+                              description: planItem.notes || ''
+                            } : {})
+                          },
+                          duration: planItem.duration,
+                          order: planItem.order,
+                          notes: planItem.notes,
+                          planId: plan.id,
+                          planItemId: planItem.id
+                        }));
+
+                        setServiceItems(planServiceItems);
+
+                        // Auto-switch to Current Service tab and select first item
+                        setActiveTab('plan');
+                        if (planServiceItems.length > 0) {
+                          generateSlidesForItem(planServiceItems[0]);
+                        }
+                      }}
+                      onPlanCreate={(plan) => {
+                        console.log('Plan created:', plan.name);
+                        setSelectedPlan(plan);
+                      }}
+                      onPlanUpdate={(plan) => {
+                        console.log('Plan updated:', plan.name);
+                        if (selectedPlan?.id === plan.id) {
+                          setSelectedPlan(plan);
+                        }
+                      }}
+                      onPlanDelete={(planId) => {
+                        console.log('Plan deleted:', planId);
+                        if (selectedPlan?.id === planId) {
+                          setSelectedPlan(null);
+                          setServiceItems([]);
+                          setSelectedItem(null);
+                        }
+                      }}
+                      className=""
+                    />
+                  </div>
+                </div>
+
+                {/* Compact Selected Plan Status */}
+                {selectedPlan && (
+                  <div className="bg-green-900/20 border border-green-600/30 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                        <span className="text-green-200 text-sm font-medium">Loaded: {selectedPlan.name}</span>
+                        <span className="text-green-300 text-xs">({selectedPlan.planItems?.length || 0} items)</span>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab('plan')}
+                        className="text-green-300 text-xs hover:text-green-200 underline"
+                      >
+                        View in Current Service →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Actions */}
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+                  <h4 className="text-sm font-medium text-gray-300 mb-3">Quick Actions</h4>
+                  <div className="grid grid-cols-1 gap-2">
+                    <button
+                      onClick={() => setActiveTab('scriptures')}
+                      className="p-3 bg-gray-700 rounded-lg text-left hover:bg-gray-600 transition-colors border border-gray-600 hover:border-gray-500"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-purple-400 text-xl">📖</div>
+                        <div>
+                          <div className="text-sm font-medium text-white">Add Scripture</div>
+                          <div className="text-xs text-gray-400">Browse and select Bible verses</div>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('songs')}
+                      className="p-3 bg-gray-700 rounded-lg text-left hover:bg-gray-600 transition-colors border border-gray-600 hover:border-gray-500"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-blue-400 text-xl">♪</div>
+                        <div>
+                          <div className="text-sm font-medium text-white">Add Song</div>
+                          <div className="text-xs text-gray-400">Browse song library</div>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={quickAddAnnouncement}
+                      className="p-3 bg-gray-700 rounded-lg text-left hover:bg-gray-600 transition-colors border border-gray-600 hover:border-gray-500"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-yellow-400 text-xl">📢</div>
+                        <div>
+                          <div className="text-sm font-medium text-white">Add Announcement</div>
+                          <div className="text-xs text-gray-400">Create custom announcement</div>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'songs' && (
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold mb-4">Song Library</h3>
                 <SongLibrary
                   songs={sampleSongs}
                   onSongSelect={(song) => {
-                    const songItem: PresentationItem = {
+                    const songItem: ServiceItem = {
                       id: `song-${song.id}`,
                       type: 'song',
                       title: song.title,

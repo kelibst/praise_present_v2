@@ -31,6 +31,7 @@ const SettingsPage = () => (
   </div>
 );
 
+
 const AppRoutes = () => {
   return (
     <Routes>

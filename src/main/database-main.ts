@@ -86,6 +86,16 @@ export async function initializeDatabaseMain() {
   }
 }
 
+// Initialize database if not already initialized
+async function initializeDbIfNeeded() {
+  if (!db) {
+    console.log("Database not initialized, initializing now...");
+    db = await initializeDatabase();
+    console.log("Database initialized successfully");
+  }
+  return db;
+}
+
 function setupDatabaseIPC() {
   // Translation operations
   ipcMain.handle("db:loadTranslations", async () => {
@@ -1213,21 +1223,896 @@ function setupDatabaseIPC() {
     }
   });
 
-  // Service operations (for future use)
+  // ===== SERVICE OPERATIONS =====
+
+  // Load services
   ipcMain.handle("db:loadServices", async (event, limit = 20) => {
     try {
       const services = await db.service.findMany({
         include: {
-          items: {
+          serviceItems: {
             orderBy: { order: "asc" },
           },
         },
         orderBy: { date: "desc" },
         take: limit,
       });
-      return services;
+
+      return services.map((service: any) => ({
+        ...service,
+        date: service.date?.toISOString(),
+        createdAt: service.createdAt?.toISOString(),
+        updatedAt: service.updatedAt?.toISOString(),
+        serviceItems: service.serviceItems.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt?.toISOString(),
+          updatedAt: item.updatedAt?.toISOString(),
+        }))
+      }));
     } catch (error) {
       console.error("Error loading services:", error);
+      throw error;
+    }
+  });
+
+  // Get single service
+  ipcMain.handle("db:getService", async (event, serviceId: string) => {
+    try {
+      const service = await db.service.findUnique({
+        where: { id: serviceId },
+        include: {
+          serviceItems: {
+            orderBy: { order: "asc" },
+          },
+          servicePlans: {
+            orderBy: { order: "asc" },
+          },
+        },
+      });
+
+      if (!service) {
+        throw new Error(`Service with ID ${serviceId} not found`);
+      }
+
+      return {
+        ...service,
+        date: service.date?.toISOString(),
+        createdAt: service.createdAt?.toISOString(),
+        updatedAt: service.updatedAt?.toISOString(),
+        serviceItems: service.serviceItems.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt?.toISOString(),
+          updatedAt: item.updatedAt?.toISOString(),
+        })),
+        servicePlans: service.servicePlans.map((plan: any) => ({
+          ...plan,
+          createdAt: plan.createdAt?.toISOString(),
+          updatedAt: plan.updatedAt?.toISOString(),
+        }))
+      };
+    } catch (error) {
+      console.error("Error getting service:", error);
+      throw error;
+    }
+  });
+
+  // Create service
+  ipcMain.handle("db:createService", async (event, serviceData: any) => {
+    try {
+      const newService = await db.service.create({
+        data: {
+          name: serviceData.name,
+          date: serviceData.date ? new Date(serviceData.date) : new Date(),
+          type: serviceData.type || 'Sunday Morning',
+          description: serviceData.description,
+          notes: serviceData.notes,
+        },
+        include: {
+          serviceItems: {
+            orderBy: { order: "asc" },
+          },
+          servicePlans: {
+            orderBy: { order: "asc" },
+          },
+        },
+      });
+
+      return {
+        ...newService,
+        date: newService.date?.toISOString(),
+        createdAt: newService.createdAt?.toISOString(),
+        updatedAt: newService.updatedAt?.toISOString(),
+        serviceItems: newService.serviceItems.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt?.toISOString(),
+          updatedAt: item.updatedAt?.toISOString(),
+        })),
+        servicePlans: newService.servicePlans.map((plan: any) => ({
+          ...plan,
+          createdAt: plan.createdAt?.toISOString(),
+          updatedAt: plan.updatedAt?.toISOString(),
+        }))
+      };
+    } catch (error) {
+      console.error("Error creating service:", error);
+      throw error;
+    }
+  });
+
+  // Find service by name
+  // Add missing service handlers
+  ipcMain.handle("db:getServices", async (event, limit = 50) => {
+    try {
+      await initializeDbIfNeeded();
+      const services = await db.service.findMany({
+        take: limit,
+        orderBy: {
+          date: 'desc'
+        },
+        include: {
+          servicePlans: {
+            include: {
+              _count: {
+                select: {
+                  planItems: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      console.log(`📋 Loaded ${services.length} services`);
+      return services;
+    } catch (error) {
+      console.error("❌ Error loading services:", error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("db:getServiceById", async (event, serviceId: string) => {
+    try {
+      await initializeDbIfNeeded();
+      const service = await db.service.findUnique({
+        where: { id: serviceId },
+        include: {
+          servicePlans: {
+            include: {
+              planItems: {
+                include: {
+                  song: {
+                    select: {
+                      id: true,
+                      title: true,
+                      artist: true
+                    }
+                  },
+                  presentation: {
+                    select: {
+                      id: true,
+                      title: true
+                    }
+                  }
+                },
+                orderBy: {
+                  order: 'asc'
+                }
+              }
+            },
+            orderBy: {
+              order: 'asc'
+            }
+          }
+        }
+      });
+
+      console.log(`📋 Loaded service: ${service?.name || 'Not found'}`);
+      return service;
+    } catch (error) {
+      console.error("❌ Error loading service:", error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("db:updateService", async (event, { id, data }: { id: string, data: any }) => {
+    try {
+      await initializeDbIfNeeded();
+      const service = await db.service.update({
+        where: { id },
+        data: {
+          name: data.name,
+          date: data.date,
+          type: data.type,
+          description: data.description,
+          notes: data.notes,
+          updatedAt: new Date()
+        }
+      });
+
+      console.log(`✅ Updated service: ${service.name}`);
+      return service;
+    } catch (error) {
+      console.error("❌ Error updating service:", error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("db:deleteService", async (event, serviceId: string) => {
+    try {
+      await initializeDbIfNeeded();
+
+      // First delete all service plans and their items for this service
+      const servicePlans = await db.servicePlan.findMany({
+        where: { serviceId },
+        select: { id: true }
+      });
+
+      for (const plan of servicePlans) {
+        await db.servicePlanItem.deleteMany({
+          where: { planId: plan.id }
+        });
+      }
+
+      await db.servicePlan.deleteMany({
+        where: { serviceId }
+      });
+
+      // Then delete the service
+      await db.service.delete({
+        where: { id: serviceId }
+      });
+
+      console.log(`🗑️ Deleted service and all related plans`);
+    } catch (error) {
+      console.error("❌ Error deleting service:", error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("db:findServiceByName", async (event, name: string) => {
+    try {
+      const service = await db.service.findFirst({
+        where: { name },
+        include: {
+          serviceItems: {
+            orderBy: { order: "asc" },
+          },
+          servicePlans: {
+            orderBy: { order: "asc" },
+          },
+        },
+      });
+
+      if (!service) {
+        return null;
+      }
+
+      return {
+        ...service,
+        date: service.date?.toISOString(),
+        createdAt: service.createdAt?.toISOString(),
+        updatedAt: service.updatedAt?.toISOString(),
+        serviceItems: service.serviceItems.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt?.toISOString(),
+          updatedAt: item.updatedAt?.toISOString(),
+        })),
+        servicePlans: service.servicePlans.map((plan: any) => ({
+          ...plan,
+          createdAt: plan.createdAt?.toISOString(),
+          updatedAt: plan.updatedAt?.toISOString(),
+        }))
+      };
+    } catch (error) {
+      console.error("Error finding service by name:", error);
+      throw error;
+    }
+  });
+
+  // ===== SERVICE PLAN OPERATIONS =====
+
+  // Load service plans with search and filtering
+  ipcMain.handle(
+    "db:loadPlans",
+    async (
+      event,
+      params: {
+        serviceId?: string;
+        query?: string;
+        filters?: {
+          isTemplate?: boolean;
+          dateRange?: { start: string; end: string };
+        };
+        limit?: number;
+        offset?: number;
+      } = {}
+    ) => {
+      try {
+        const { serviceId, query, filters = {}, limit = 50, offset = 0 } = params;
+
+        // Build where clause
+        const whereConditions: any[] = [];
+
+        if (serviceId) {
+          whereConditions.push({ serviceId });
+        }
+
+        // Text search across available fields
+        if (query) {
+          whereConditions.push({
+            OR: [
+              { name: { contains: query } },
+              { description: { contains: query } },
+              { notes: { contains: query } },
+            ],
+          });
+        }
+
+        // Apply filters
+        if (filters.isTemplate !== undefined) {
+          whereConditions.push({ isTemplate: filters.isTemplate });
+        }
+
+        if (filters.dateRange) {
+          whereConditions.push({
+            createdAt: {
+              gte: new Date(filters.dateRange.start),
+              lte: new Date(filters.dateRange.end),
+            },
+          });
+        }
+
+        const where = whereConditions.length > 0 ? { AND: whereConditions } : {};
+
+        const plans = await db.servicePlan.findMany({
+          where,
+          include: {
+            planItems: {
+              include: {
+                song: {
+                  select: { id: true, title: true, artist: true }
+                },
+                presentation: {
+                  select: { id: true, title: true }
+                }
+              },
+              orderBy: { order: "asc" },
+            },
+            service: {
+              select: { id: true, name: true, date: true }
+            },
+            _count: {
+              select: { planItems: true }
+            }
+          },
+          orderBy: [
+            { order: "asc" },
+            { updatedAt: "desc" }
+          ],
+          take: limit,
+          skip: offset,
+        });
+
+        // Serialize dates and add computed fields
+        return plans.map((plan: any) => ({
+          ...plan,
+          planItems: plan.planItems.map((item: any) => ({
+            ...item,
+            createdAt: item.createdAt?.toISOString(),
+            updatedAt: item.updatedAt?.toISOString(),
+          })),
+          createdAt: plan.createdAt?.toISOString(),
+          updatedAt: plan.updatedAt?.toISOString(),
+        }));
+      } catch (error) {
+        console.error("Error loading plans:", error);
+        throw error;
+      }
+    }
+  );
+
+  // Get single plan with full details
+  ipcMain.handle("db:getPlan", async (event, planId: string) => {
+    try {
+      const plan = await db.servicePlan.findUnique({
+        where: { id: planId },
+        include: {
+          planItems: {
+            include: {
+              song: {
+                select: { id: true, title: true, artist: true }
+              },
+              presentation: {
+                select: { id: true, title: true }
+              }
+            },
+            orderBy: { order: "asc" },
+          },
+          service: {
+            select: { id: true, name: true, date: true }
+          },
+          _count: {
+            select: { planItems: true }
+          }
+        },
+      });
+
+      if (!plan) {
+        throw new Error(`Plan with ID ${planId} not found`);
+      }
+
+      return {
+        ...plan,
+        planItems: plan.planItems.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt?.toISOString(),
+          updatedAt: item.updatedAt?.toISOString(),
+        })),
+        createdAt: plan.createdAt?.toISOString(),
+        updatedAt: plan.updatedAt?.toISOString(),
+      };
+    } catch (error) {
+      console.error("Error getting plan:", error);
+      throw error;
+    }
+  });
+
+  // Create new plan
+  ipcMain.handle("db:createPlan", async (event, planData: any) => {
+    try {
+      const newPlan = await db.servicePlan.create({
+        data: {
+          name: planData.name,
+          serviceId: planData.serviceId,
+          description: planData.description,
+          notes: planData.notes,
+          order: planData.order || 0,
+          isTemplate: planData.isTemplate || false,
+        },
+        include: {
+          planItems: {
+            include: {
+              song: {
+                select: { id: true, title: true, artist: true }
+              },
+              presentation: {
+                select: { id: true, title: true }
+              }
+            },
+            orderBy: { order: "asc" },
+          },
+          service: {
+            select: { id: true, name: true, date: true }
+          },
+          _count: {
+            select: { planItems: true }
+          }
+        },
+      });
+
+      return {
+        ...newPlan,
+        planItems: newPlan.planItems.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt?.toISOString(),
+          updatedAt: item.updatedAt?.toISOString(),
+        })),
+        createdAt: newPlan.createdAt?.toISOString(),
+        updatedAt: newPlan.updatedAt?.toISOString(),
+      };
+    } catch (error) {
+      console.error("Error creating plan:", error);
+      throw error;
+    }
+  });
+
+  // Update existing plan
+  ipcMain.handle("db:updatePlan", async (event, plan: any) => {
+    try {
+      const {
+        planItems, // Remove computed field
+        service, // Remove computed field
+        _count, // Remove computed field
+        createdAt, // Remove readonly field
+        ...planData
+      } = plan;
+
+      const updatedPlan = await db.servicePlan.update({
+        where: { id: plan.id },
+        data: {
+          name: plan.name,
+          description: plan.description,
+          notes: plan.notes,
+          order: plan.order,
+          isTemplate: plan.isTemplate,
+          updatedAt: new Date(),
+        },
+        include: {
+          planItems: {
+            include: {
+              song: {
+                select: { id: true, title: true, artist: true }
+              },
+              presentation: {
+                select: { id: true, title: true }
+              }
+            },
+            orderBy: { order: "asc" },
+          },
+          service: {
+            select: { id: true, name: true, date: true }
+          },
+          _count: {
+            select: { planItems: true }
+          }
+        },
+      });
+
+      return {
+        ...updatedPlan,
+        planItems: updatedPlan.planItems.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt?.toISOString(),
+          updatedAt: item.updatedAt?.toISOString(),
+        })),
+        createdAt: updatedPlan.createdAt?.toISOString(),
+        updatedAt: updatedPlan.updatedAt?.toISOString(),
+      };
+    } catch (error) {
+      console.error("Error updating plan:", error);
+      throw error;
+    }
+  });
+
+  // Delete plan
+  ipcMain.handle("db:deletePlan", async (event, planId: string) => {
+    try {
+      // Delete all plan items first (cascade delete)
+      await db.servicePlanItem.deleteMany({
+        where: { planId: planId },
+      });
+
+      // Delete the plan
+      await db.servicePlan.delete({
+        where: { id: planId },
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error deleting plan:", error);
+      throw error;
+    }
+  });
+
+  // Duplicate plan
+  ipcMain.handle("db:duplicatePlan", async (event, params: {
+    planId: string;
+    newName: string;
+    serviceId?: string;
+  }) => {
+    try {
+      const { planId, newName, serviceId } = params;
+
+      // Get original plan with items
+      const originalPlan = await db.servicePlan.findUnique({
+        where: { id: planId },
+        include: {
+          planItems: {
+            orderBy: { order: "asc" },
+          },
+        },
+      });
+
+      if (!originalPlan) {
+        throw new Error(`Plan with ID ${planId} not found`);
+      }
+
+      // Create new plan
+      const newPlan = await db.servicePlan.create({
+        data: {
+          name: newName,
+          serviceId: serviceId || originalPlan.serviceId,
+          description: originalPlan.description,
+          notes: originalPlan.notes,
+          order: originalPlan.order,
+          isTemplate: originalPlan.isTemplate,
+        },
+        include: {
+          planItems: {
+            include: {
+              song: {
+                select: { id: true, title: true, artist: true }
+              },
+              presentation: {
+                select: { id: true, title: true }
+              }
+            },
+            orderBy: { order: "asc" },
+          },
+          service: {
+            select: { id: true, name: true, date: true }
+          },
+          _count: {
+            select: { planItems: true }
+          }
+        },
+      });
+
+      // Create plan items
+      if (originalPlan.planItems.length > 0) {
+        await db.servicePlanItem.createMany({
+          data: originalPlan.planItems.map((item: any) => ({
+            planId: newPlan.id,
+            type: item.type,
+            title: item.title,
+            order: item.order,
+            duration: item.duration,
+            notes: item.notes,
+            settings: item.settings,
+            songId: item.songId,
+            presentationId: item.presentationId,
+            scriptureRef: item.scriptureRef,
+          })),
+        });
+
+        // Refetch plan with new items
+        const completeNewPlan = await db.servicePlan.findUnique({
+          where: { id: newPlan.id },
+          include: {
+            planItems: {
+              include: {
+                song: {
+                  select: { id: true, title: true, artist: true }
+                },
+                presentation: {
+                  select: { id: true, title: true }
+                }
+              },
+              orderBy: { order: "asc" },
+            },
+            service: {
+              select: { id: true, name: true, date: true }
+            },
+            _count: {
+              select: { planItems: true }
+            }
+          },
+        });
+
+        return {
+          ...completeNewPlan,
+          planItems: completeNewPlan!.planItems.map((item: any) => ({
+            ...item,
+            createdAt: item.createdAt?.toISOString(),
+            updatedAt: item.updatedAt?.toISOString(),
+          })),
+          createdAt: completeNewPlan!.createdAt?.toISOString(),
+          updatedAt: completeNewPlan!.updatedAt?.toISOString(),
+        };
+      }
+
+      return {
+        ...newPlan,
+        planItems: newPlan.planItems.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt?.toISOString(),
+          updatedAt: item.updatedAt?.toISOString(),
+        })),
+        createdAt: newPlan.createdAt?.toISOString(),
+        updatedAt: newPlan.updatedAt?.toISOString(),
+      };
+    } catch (error) {
+      console.error("Error duplicating plan:", error);
+      throw error;
+    }
+  });
+
+  // ===== SERVICE PLAN ITEM OPERATIONS =====
+
+  // Create new plan item
+  ipcMain.handle("db:createPlanItem", async (event, itemData: any) => {
+    try {
+      const newItem = await db.servicePlanItem.create({
+        data: {
+          planId: itemData.planId,
+          type: itemData.type,
+          title: itemData.title,
+          order: itemData.order,
+          duration: itemData.duration,
+          notes: itemData.notes,
+          settings: itemData.settings ? JSON.stringify(itemData.settings) : null,
+          songId: itemData.songId,
+          presentationId: itemData.presentationId,
+          scriptureRef: itemData.scriptureRef,
+        },
+        include: {
+          song: {
+            select: { id: true, title: true, artist: true }
+          },
+          presentation: {
+            select: { id: true, title: true }
+          }
+        },
+      });
+
+      return {
+        ...newItem,
+        settings: newItem.settings ? JSON.parse(newItem.settings) : null,
+        createdAt: newItem.createdAt?.toISOString(),
+        updatedAt: newItem.updatedAt?.toISOString(),
+      };
+    } catch (error) {
+      console.error("Error creating plan item:", error);
+      throw error;
+    }
+  });
+
+  // Create multiple plan items
+  ipcMain.handle("db:createPlanItems", async (event, params: {
+    planId: string;
+    items: any[];
+  }) => {
+    try {
+      const { planId, items } = params;
+
+      // Get the current max order for the plan
+      const maxOrderItem = await db.servicePlanItem.findFirst({
+        where: { planId },
+        orderBy: { order: "desc" },
+      });
+
+      const startOrder = (maxOrderItem?.order || 0) + 1;
+
+      // Create items with sequential order
+      const itemsData = items.map((item: any, index: number) => ({
+        planId,
+        type: item.type,
+        title: item.title,
+        order: startOrder + index,
+        duration: item.duration,
+        notes: item.notes,
+        settings: item.settings ? JSON.stringify(item.settings) : null,
+        songId: item.songId,
+        presentationId: item.presentationId,
+        scriptureRef: item.scriptureRef,
+      }));
+
+      await db.servicePlanItem.createMany({
+        data: itemsData,
+      });
+
+      // Fetch the created items with relations
+      const createdItems = await db.servicePlanItem.findMany({
+        where: {
+          planId,
+          order: {
+            gte: startOrder,
+            lt: startOrder + items.length,
+          },
+        },
+        include: {
+          song: {
+            select: { id: true, title: true, artist: true }
+          },
+          presentation: {
+            select: { id: true, title: true }
+          }
+        },
+        orderBy: { order: "asc" },
+      });
+
+      return createdItems.map((item: any) => ({
+        ...item,
+        settings: item.settings ? JSON.parse(item.settings) : null,
+        createdAt: item.createdAt?.toISOString(),
+        updatedAt: item.updatedAt?.toISOString(),
+      }));
+    } catch (error) {
+      console.error("Error creating plan items:", error);
+      throw error;
+    }
+  });
+
+  // Update existing plan item
+  ipcMain.handle("db:updatePlanItem", async (event, item: any) => {
+    try {
+      const {
+        song, // Remove computed field
+        presentation, // Remove computed field
+        createdAt, // Remove readonly field
+        ...itemData
+      } = item;
+
+      const updatedItem = await db.servicePlanItem.update({
+        where: { id: item.id },
+        data: {
+          type: item.type,
+          title: item.title,
+          order: item.order,
+          duration: item.duration,
+          notes: item.notes,
+          settings: item.settings ? JSON.stringify(item.settings) : null,
+          songId: item.songId,
+          presentationId: item.presentationId,
+          scriptureRef: item.scriptureRef,
+          updatedAt: new Date(),
+        },
+        include: {
+          song: {
+            select: { id: true, title: true, artist: true }
+          },
+          presentation: {
+            select: { id: true, title: true }
+          }
+        },
+      });
+
+      return {
+        ...updatedItem,
+        settings: updatedItem.settings ? JSON.parse(updatedItem.settings) : null,
+        createdAt: updatedItem.createdAt?.toISOString(),
+        updatedAt: updatedItem.updatedAt?.toISOString(),
+      };
+    } catch (error) {
+      console.error("Error updating plan item:", error);
+      throw error;
+    }
+  });
+
+  // Delete plan item
+  ipcMain.handle("db:deletePlanItem", async (event, itemId: string) => {
+    try {
+      await db.servicePlanItem.delete({
+        where: { id: itemId },
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error deleting plan item:", error);
+      throw error;
+    }
+  });
+
+  // Reorder plan items
+  ipcMain.handle("db:reorderPlanItems", async (event, params: {
+    planId: string;
+    itemOrders: { id: string; order: number }[];
+  }) => {
+    try {
+      const { planId, itemOrders } = params;
+
+      // Update each item's order
+      const updatePromises = itemOrders.map(({ id, order }) =>
+        db.servicePlanItem.update({
+          where: { id },
+          data: { order },
+        })
+      );
+
+      await Promise.all(updatePromises);
+
+      // Return updated items in order
+      const updatedItems = await db.servicePlanItem.findMany({
+        where: { planId },
+        include: {
+          song: {
+            select: { id: true, title: true, artist: true }
+          },
+          presentation: {
+            select: { id: true, title: true }
+          }
+        },
+        orderBy: { order: "asc" },
+      });
+
+      return updatedItems.map((item: any) => ({
+        ...item,
+        settings: item.settings ? JSON.parse(item.settings) : null,
+        createdAt: item.createdAt?.toISOString(),
+        updatedAt: item.updatedAt?.toISOString(),
+      }));
+    } catch (error) {
+      console.error("Error reordering plan items:", error);
       throw error;
     }
   });
