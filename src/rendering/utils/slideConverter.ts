@@ -5,6 +5,7 @@ import { RectangleShape } from '../shapes/RectangleShape';
 import { BackgroundShape } from '../shapes/BackgroundShape';
 import { createColor, Color } from '../types/geometry';
 import { DEFAULT_SLIDE_SIZE } from '../templates/templateUtils';
+import { ShapeFactory } from './ShapeFactory';
 
 // LiveContent interface matching what LiveDisplayRenderer expects
 interface LiveContent {
@@ -147,6 +148,10 @@ export function convertContentToSlide(
   }
 }
 
+/**
+ * Converts template-slide content using ShapeFactory for reconstruction
+ * This handles serialized shapes from IPC communication
+ */
 function convertTemplateSlide(content: LiveContent, slideSize: { width: number; height: number }, baseSlide: GeneratedSlide): GeneratedSlide {
   if (content.slide && content.slide.shapes) {
     const slide = content.slide;
@@ -172,13 +177,9 @@ function convertTemplateSlide(content: LiveContent, slideSize: { width: number; 
       }
     }
 
-    // Reconstruct Shape objects from serialized data
-    for (const shapeData of slide.shapes) {
-      const shapeInstance = reconstructShapeFromData(shapeData);
-      if (shapeInstance) {
-        baseSlide.shapes.push(shapeInstance);
-      }
-    }
+    // Reconstruct Shape objects from serialized data using ShapeFactory
+    const reconstructedShapes = ShapeFactory.reconstructShapes(slide.shapes);
+    baseSlide.shapes.push(...reconstructedShapes);
 
     baseSlide.id = slide.id;
     baseSlide.metadata.shapeCount = baseSlide.shapes.length;
@@ -187,172 +188,6 @@ function convertTemplateSlide(content: LiveContent, slideSize: { width: number; 
   }
 
   return convertDefaultContent(content, slideSize, baseSlide);
-}
-
-/**
- * Reconstructs a Shape instance from serialized shape data
- * This handles the case where templates generate shapes that get serialized via IPC
- */
-function reconstructShapeFromData(shapeData: any): Shape | null {
-  try {
-    if (!shapeData || typeof shapeData !== 'object') {
-      console.warn('Invalid shape data:', shapeData);
-      return null;
-    }
-
-    // If it's already a Shape instance, return as-is
-    if (shapeData.render && typeof shapeData.render === 'function') {
-      return shapeData as Shape;
-    }
-
-    // Reconstruct based on shape type
-    switch (shapeData.type) {
-      case 'background':
-        return reconstructBackgroundShape(shapeData);
-
-      case 'text':
-        return reconstructTextShape(shapeData);
-
-      case 'rectangle':
-        return reconstructRectangleShape(shapeData);
-
-      case 'image':
-        // TODO: Implement when ImageShape reconstruction is needed
-        console.warn('Image shape reconstruction not yet implemented');
-        return null;
-
-      default:
-        console.warn(`Unknown shape type for reconstruction: ${shapeData.type}`);
-        return null;
-    }
-  } catch (error) {
-    console.error('Error reconstructing shape from data:', error, shapeData);
-    return null;
-  }
-}
-
-function reconstructBackgroundShape(shapeData: any): Shape | null {
-  if (shapeData.backgroundStyle?.type === 'color') {
-    const color = shapeData.backgroundStyle.color;
-    return BackgroundShape.createSolidColor(
-      createColor(color.r || 0, color.g || 0, color.b || 0, color.a || 1),
-      shapeData.size?.width || 1920,
-      shapeData.size?.height || 1080
-    );
-  } else if (shapeData.backgroundStyle?.type === 'gradient' && shapeData.backgroundStyle.gradient) {
-    return BackgroundShape.createLinearGradient(
-      shapeData.backgroundStyle.gradient,
-      shapeData.backgroundStyle.angle || 90,
-      shapeData.size?.width || 1920,
-      shapeData.size?.height || 1080
-    );
-  }
-  return null;
-}
-
-function reconstructTextShape(shapeData: any): Shape | null {
-  const position = shapeData.position || { x: 0, y: 0 };
-  const size = shapeData.size || { width: 100, height: 50 };
-
-  // Reconstruct text style with defaults
-  const textStyle = {
-    fontFamily: shapeData.textStyle?.fontFamily || shapeData.fontFamily || SHARED_STYLES.fonts.primary,
-    fontSize: shapeData.textStyle?.fontSize || shapeData.fontSize || 24,
-    fontWeight: shapeData.textStyle?.fontWeight || shapeData.fontWeight || 'normal',
-    fontStyle: shapeData.textStyle?.fontStyle || shapeData.fontStyle || 'normal',
-    color: reconstructColor(shapeData.textStyle?.color || shapeData.color) || SHARED_STYLES.colors.text.primary,
-    textAlign: shapeData.textStyle?.textAlign || shapeData.textAlign || 'left',
-    verticalAlign: shapeData.textStyle?.verticalAlign || shapeData.verticalAlign || 'top',
-    lineHeight: shapeData.textStyle?.lineHeight || shapeData.lineHeight || 1.2,
-    letterSpacing: shapeData.textStyle?.letterSpacing || shapeData.letterSpacing || 0,
-    textDecoration: shapeData.textStyle?.textDecoration || shapeData.textDecoration || 'none',
-    textTransform: shapeData.textStyle?.textTransform || shapeData.textTransform || 'none',
-    shadowColor: reconstructColor(shapeData.textStyle?.shadowColor || shapeData.shadowColor),
-    shadowBlur: shapeData.textStyle?.shadowBlur || shapeData.shadowBlur || 0,
-    shadowOffsetX: shapeData.textStyle?.shadowOffsetX || shapeData.shadowOffsetX || 0,
-    shadowOffsetY: shapeData.textStyle?.shadowOffsetY || shapeData.shadowOffsetY || 0
-  };
-
-  const textShape = new TextShape(
-    {
-      position,
-      size,
-      zIndex: shapeData.zIndex || 0,
-      opacity: shapeData.opacity !== undefined ? shapeData.opacity : 1.0,
-      visible: shapeData.visible !== undefined ? shapeData.visible : true,
-      rotation: shapeData.rotation || 0
-    },
-    textStyle
-  );
-
-  // Set the text content
-  if (shapeData.text || shapeData.content) {
-    textShape.setText(shapeData.text || shapeData.content);
-  }
-
-  return textShape;
-}
-
-function reconstructRectangleShape(shapeData: any): Shape | null {
-  const position = shapeData.position || { x: 0, y: 0 };
-  const size = shapeData.size || { width: 100, height: 100 };
-
-  const rectangleShape = new RectangleShape(
-    {
-      position,
-      size,
-      zIndex: shapeData.zIndex || 0,
-      opacity: shapeData.opacity !== undefined ? shapeData.opacity : 1.0,
-      visible: shapeData.visible !== undefined ? shapeData.visible : true,
-      rotation: shapeData.rotation || 0
-    },
-    {
-      fill: reconstructColor(shapeData.fillColor || shapeData.fill),
-      stroke: shapeData.strokeColor || shapeData.stroke ? {
-        color: reconstructColor(shapeData.strokeColor || shapeData.stroke?.color),
-        width: shapeData.strokeWidth || shapeData.stroke?.width || 1,
-        style: 'solid'
-      } : undefined,
-      borderRadius: shapeData.borderRadius || 0
-    }
-  );
-
-  return rectangleShape;
-}
-
-/**
- * Reconstructs a Color object from various color formats
- */
-function reconstructColor(colorData: any): Color | undefined {
-  if (!colorData) return undefined;
-
-  // If it's already a Color object
-  if (typeof colorData === 'object' && 'r' in colorData && 'g' in colorData && 'b' in colorData) {
-    return createColor(
-      colorData.r || 0,
-      colorData.g || 0,
-      colorData.b || 0,
-      colorData.a !== undefined ? colorData.a : 1
-    );
-  }
-
-  // If it's a hex string
-  if (typeof colorData === 'string' && colorData.startsWith('#')) {
-    return parseColor(colorData);
-  }
-
-  // If it's an array [r, g, b] or [r, g, b, a]
-  if (Array.isArray(colorData) && colorData.length >= 3) {
-    return createColor(
-      colorData[0] || 0,
-      colorData[1] || 0,
-      colorData[2] || 0,
-      colorData[3] !== undefined ? colorData[3] : 1
-    );
-  }
-
-  console.warn('Unable to reconstruct color from:', colorData);
-  return undefined;
 }
 
 function convertScriptureContent(content: LiveContent, slideSize: { width: number; height: number }, baseSlide: GeneratedSlide): GeneratedSlide {
@@ -364,103 +199,66 @@ function convertScriptureContent(content: LiveContent, slideSize: { width: numbe
       { offset: 0, color: SHARED_STYLES.colors.background.gradient2.start },
       { offset: 1, color: SHARED_STYLES.colors.background.gradient2.end }
     ],
-    90,
+    135,
     width,
     height
   );
   baseSlide.shapes.push(background);
 
-  // Main content area
-  const contentArea = new RectangleShape(
+  // Scripture content
+  const verse = content.content?.verse || 'For God so loved the world...';
+  const reference = content.content?.reference || 'John 3:16';
+  const translation = content.content?.translation || 'KJV';
+
+  // Main verse text
+  const verseText = new TextShape(
     {
-      position: { x: 100, y: 100 },
-      size: { width: width - 200, height: height - 200 }
+      position: { x: width * 0.1, y: height * 0.25 },
+      size: { width: width * 0.8, height: height * 0.4 }
     },
     {
-      fill: SHARED_STYLES.colors.scripture.background,
-      stroke: { width: 2, color: SHARED_STYLES.colors.scripture.border, style: 'solid' },
-      borderRadius: 15,
-      shadowColor: SHARED_STYLES.shadows.card.color,
-      shadowBlur: SHARED_STYLES.shadows.card.blur,
-      shadowOffsetX: SHARED_STYLES.shadows.card.offsetX,
-      shadowOffsetY: SHARED_STYLES.shadows.card.offsetY
+      fontSize: Math.floor(height * 0.05),
+      fontFamily: SHARED_STYLES.fonts.serif,
+      color: SHARED_STYLES.colors.text.primary,
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1.4,
+      shadowColor: SHARED_STYLES.shadows.text.color,
+      shadowBlur: SHARED_STYLES.shadows.text.blur,
+      shadowOffsetX: SHARED_STYLES.shadows.text.offsetX,
+      shadowOffsetY: SHARED_STYLES.shadows.text.offsetY
     }
   );
-  contentArea.setZIndex(1);
-  baseSlide.shapes.push(contentArea);
+  verseText.setText(verse);
+  verseText.setZIndex(2);
+  baseSlide.shapes.push(verseText);
 
-  // Scripture reference title
-  const referenceTitle = new TextShape(
+  // Reference text
+  const referenceText = new TextShape(
     {
-      position: { x: 150, y: 140 },
-      size: { width: width - 300, height: 80 }
+      position: { x: width * 0.1, y: height * 0.7 },
+      size: { width: width * 0.8, height: height * 0.1 }
     },
     {
-      fontFamily: SHARED_STYLES.fonts.serif,
-      fontSize: Math.max(42, width * 0.025),
+      fontSize: Math.floor(height * 0.035),
+      fontFamily: SHARED_STYLES.fonts.primary,
       fontWeight: 'bold',
-      color: SHARED_STYLES.colors.scripture.title,
+      color: SHARED_STYLES.colors.text.accent,
       textAlign: 'center',
-      shadowColor: createColor(255, 255, 255, 0.8),
-      shadowBlur: 2,
-      shadowOffsetX: 1,
-      shadowOffsetY: 1
+      verticalAlign: 'middle',
+      shadowColor: SHARED_STYLES.shadows.soft.color,
+      shadowBlur: SHARED_STYLES.shadows.soft.blur,
+      shadowOffsetX: SHARED_STYLES.shadows.soft.offsetX,
+      shadowOffsetY: SHARED_STYLES.shadows.soft.offsetY
     }
   );
-  referenceTitle.setText(content.title || 'Scripture');
-  referenceTitle.setZIndex(2);
-  baseSlide.shapes.push(referenceTitle);
+  referenceText.setText(`${reference} (${translation})`);
+  referenceText.setZIndex(2);
+  baseSlide.shapes.push(referenceText);
 
-  // Scripture text
-  const scriptureText = new TextShape(
-    {
-      position: { x: 150, y: 250 },
-      size: { width: width - 300, height: height - 400 }
-    },
-    {
-      fontFamily: SHARED_STYLES.fonts.serif,
-      fontSize: Math.max(32, width * 0.02),
-      lineHeight: 1.8,
-      color: SHARED_STYLES.colors.text.dark,
-      textAlign: 'center',
-      shadowColor: createColor(255, 255, 255, 0.5),
-      shadowBlur: 1,
-      shadowOffsetX: 1,
-      shadowOffsetY: 1
-    }
-  );
-
-  const text = content.content?.text || 'Scripture text not available';
-  scriptureText.setText(`"${text}"`);
-  scriptureText.setZIndex(2);
-  baseSlide.shapes.push(scriptureText);
-
-  // Translation info
-  if (content.content?.translation) {
-    const translation = new TextShape(
-      {
-        position: { x: 150, y: height - 140 },
-        size: { width: width - 300, height: 40 }
-      },
-      {
-        fontFamily: SHARED_STYLES.fonts.primary,
-        fontSize: Math.max(22, width * 0.015),
-        color: SHARED_STYLES.colors.text.muted,
-        textAlign: 'right',
-        fontStyle: 'italic',
-        shadowColor: createColor(255, 255, 255, 0.3),
-        shadowBlur: 1,
-        shadowOffsetX: 1,
-        shadowOffsetY: 1
-      }
-    );
-    translation.setText(`- ${content.content.translation}`);
-    translation.setZIndex(2);
-    baseSlide.shapes.push(translation);
-  }
-
+  baseSlide.contentId = `scripture-${reference.replace(/\s+/g, '-')}`;
   baseSlide.metadata.shapeCount = baseSlide.shapes.length;
-  baseSlide.contentId = 'scripture';
+  baseSlide.metadata.templateName = 'Scripture Template';
 
   return baseSlide;
 }
@@ -469,24 +267,107 @@ function convertTestContent(content: LiveContent, slideSize: { width: number; he
   const { width, height } = slideSize;
 
   // Background
+  const background = BackgroundShape.createSolidColor(SHARED_STYLES.colors.background.dark, width, height);
+  baseSlide.shapes.push(background);
+
+  // Test title
+  const title = content.title || content.type || 'Test Content';
+  const titleText = new TextShape(
+    {
+      position: { x: width * 0.1, y: height * 0.1 },
+      size: { width: width * 0.8, height: height * 0.15 }
+    },
+    {
+      fontSize: Math.floor(height * 0.08),
+      fontFamily: SHARED_STYLES.fonts.title,
+      color: SHARED_STYLES.colors.text.primary,
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      shadowColor: SHARED_STYLES.shadows.text.color,
+      shadowBlur: SHARED_STYLES.shadows.text.blur,
+      shadowOffsetX: SHARED_STYLES.shadows.text.offsetX,
+      shadowOffsetY: SHARED_STYLES.shadows.text.offsetY
+    }
+  );
+  titleText.setText(title);
+  titleText.setZIndex(1);
+  baseSlide.shapes.push(titleText);
+
+  // Test scenario if available
+  if (content.scenario) {
+    const scenarioText = new TextShape(
+      {
+        position: { x: width * 0.1, y: height * 0.3 },
+        size: { width: width * 0.8, height: height * 0.1 }
+      },
+      {
+        fontSize: Math.floor(height * 0.04),
+        fontFamily: SHARED_STYLES.fonts.primary,
+        color: SHARED_STYLES.colors.text.secondary,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      }
+    );
+    scenarioText.setText(`Scenario: ${content.scenario}`);
+    scenarioText.setZIndex(1);
+    baseSlide.shapes.push(scenarioText);
+  }
+
+  // Test content details
+  const contentDetails = content.content || {};
+  if (Object.keys(contentDetails).length > 0) {
+    const detailsText = new TextShape(
+      {
+        position: { x: width * 0.1, y: height * 0.45 },
+        size: { width: width * 0.8, height: height * 0.4 }
+      },
+      {
+        fontSize: Math.floor(height * 0.025),
+        fontFamily: 'monospace',
+        color: SHARED_STYLES.colors.text.muted,
+        textAlign: 'left',
+        verticalAlign: 'top',
+        lineHeight: 1.4
+      }
+    );
+    detailsText.setText(JSON.stringify(contentDetails, null, 2));
+    detailsText.setZIndex(1);
+    baseSlide.shapes.push(detailsText);
+  }
+
+  baseSlide.contentId = `test-${content.type}`;
+  baseSlide.metadata.shapeCount = baseSlide.shapes.length;
+  baseSlide.metadata.templateName = 'Test Content Template';
+
+  return baseSlide;
+}
+
+function convertPlaceholderContent(content: LiveContent, slideSize: { width: number; height: number }, baseSlide: GeneratedSlide): GeneratedSlide {
+  const { width, height } = slideSize;
+
+  // Background gradient
   const background = BackgroundShape.createLinearGradient(
     [
-      { offset: 0, color: SHARED_STYLES.colors.background.gradient3.start },
-      { offset: 1, color: SHARED_STYLES.colors.background.gradient3.end }
+      { offset: 0, color: SHARED_STYLES.colors.background.gradient1.start },
+      { offset: 1, color: SHARED_STYLES.colors.background.gradient1.end }
     ],
-    135,
+    45,
     width,
     height
   );
   baseSlide.shapes.push(background);
 
-  // Title
-  const title = new TextShape(
-    { position: { x: width * 0.05, y: height * 0.05 }, size: { width: width * 0.9, height: height * 0.1 } },
+  // Main text
+  const mainText = content.content?.mainText || 'PraisePresent';
+  const mainTextShape = new TextShape(
     {
-      fontSize: Math.floor(height * 0.06),
-      fontWeight: 'bold',
+      position: { x: width * 0.1, y: height * 0.3 },
+      size: { width: width * 0.8, height: height * 0.25 }
+    },
+    {
+      fontSize: Math.floor(height * 0.12),
       fontFamily: SHARED_STYLES.fonts.title,
+      fontWeight: 'bold',
       color: SHARED_STYLES.colors.text.primary,
       textAlign: 'center',
       verticalAlign: 'middle',
@@ -496,120 +377,36 @@ function convertTestContent(content: LiveContent, slideSize: { width: number; he
       shadowOffsetY: SHARED_STYLES.shadows.strong.offsetY
     }
   );
-  title.setText(content.title || 'Rendering Engine Live Test');
-  title.setZIndex(2);
-  baseSlide.shapes.push(title);
+  mainTextShape.setText(mainText);
+  mainTextShape.setZIndex(2);
+  baseSlide.shapes.push(mainTextShape);
 
-  // Create dynamic shapes for visual interest
-  const shapeCount = 50;
-  for (let i = 0; i < shapeCount; i++) {
-    const rect = new RectangleShape(
-      {
-        position: {
-          x: Math.random() * (width - 40),
-          y: height * 0.2 + Math.random() * (height * 0.7)
-        },
-        size: { width: 30, height: 30 },
-        rotation: Math.random() * 360
-      },
-      {
-        fill: createColor(
-          Math.random() * 255,
-          Math.random() * 255,
-          Math.random() * 255,
-          0.7
-        ),
-        borderRadius: 5
-      }
-    );
-    rect.setZIndex(1);
-    baseSlide.shapes.push(rect);
-  }
-
-  // Performance info
-  const perfText = new TextShape(
-    { position: { x: width * 0.02, y: height * 0.9 }, size: { width: width * 0.3, height: height * 0.05 } },
+  // Sub text
+  const subText = content.content?.subText || 'Presentation System';
+  const subTextShape = new TextShape(
     {
-      fontSize: Math.floor(height * 0.025),
+      position: { x: width * 0.1, y: height * 0.6 },
+      size: { width: width * 0.8, height: height * 0.15 }
+    },
+    {
+      fontSize: Math.floor(height * 0.04),
       fontFamily: SHARED_STYLES.fonts.primary,
-      color: SHARED_STYLES.colors.text.accent,
-      textAlign: 'left',
+      color: SHARED_STYLES.colors.text.secondary,
+      textAlign: 'center',
       verticalAlign: 'middle',
-      shadowColor: SHARED_STYLES.shadows.text.color,
-      shadowBlur: SHARED_STYLES.shadows.text.blur,
-      shadowOffsetX: SHARED_STYLES.shadows.text.offsetX,
-      shadowOffsetY: SHARED_STYLES.shadows.text.offsetY
+      shadowColor: SHARED_STYLES.shadows.soft.color,
+      shadowBlur: SHARED_STYLES.shadows.soft.blur,
+      shadowOffsetX: SHARED_STYLES.shadows.soft.offsetX,
+      shadowOffsetY: SHARED_STYLES.shadows.soft.offsetY
     }
   );
-  perfText.setText(`Live Display • ${shapeCount} shapes • Test Mode`);
-  perfText.setZIndex(2);
-  baseSlide.shapes.push(perfText);
+  subTextShape.setText(subText);
+  subTextShape.setZIndex(2);
+  baseSlide.shapes.push(subTextShape);
 
-  baseSlide.metadata.shapeCount = baseSlide.shapes.length;
-  baseSlide.contentId = content.type;
-
-  return baseSlide;
-}
-
-function convertPlaceholderContent(content: LiveContent, slideSize: { width: number; height: number }, baseSlide: GeneratedSlide): GeneratedSlide {
-  const { width, height } = slideSize;
-
-  // Background
-  const background = BackgroundShape.createLinearGradient(
-    [
-      { offset: 0, color: SHARED_STYLES.colors.background.gradient1.start },
-      { offset: 1, color: SHARED_STYLES.colors.background.gradient1.end }
-    ],
-    90,
-    width,
-    height
-  );
-  baseSlide.shapes.push(background);
-
-  // Main content
-  if (content.content?.mainText) {
-    const mainText = new TextShape(
-      { position: { x: width * 0.1, y: height * 0.35 }, size: { width: width * 0.8, height: height * 0.15 } },
-      {
-        fontSize: Math.floor(height * 0.09),
-        fontWeight: 'bold',
-        fontFamily: SHARED_STYLES.fonts.title,
-        color: SHARED_STYLES.colors.text.primary,
-        textAlign: 'center',
-        verticalAlign: 'middle',
-        shadowColor: SHARED_STYLES.shadows.text.color,
-        shadowBlur: SHARED_STYLES.shadows.text.blur,
-        shadowOffsetX: 3,
-        shadowOffsetY: 3
-      }
-    );
-    mainText.setText(content.content.mainText);
-    mainText.setZIndex(1);
-    baseSlide.shapes.push(mainText);
-  }
-
-  if (content.content?.subText) {
-    const subText = new TextShape(
-      { position: { x: width * 0.1, y: height * 0.55 }, size: { width: width * 0.8, height: height * 0.08 } },
-      {
-        fontSize: Math.floor(height * 0.035),
-        fontFamily: SHARED_STYLES.fonts.primary,
-        color: SHARED_STYLES.colors.text.secondary,
-        textAlign: 'center',
-        verticalAlign: 'middle',
-        shadowColor: SHARED_STYLES.shadows.soft.color,
-        shadowBlur: SHARED_STYLES.shadows.soft.blur,
-        shadowOffsetX: SHARED_STYLES.shadows.soft.offsetX,
-        shadowOffsetY: SHARED_STYLES.shadows.soft.offsetY
-      }
-    );
-    subText.setText(content.content.subText);
-    subText.setZIndex(1);
-    baseSlide.shapes.push(subText);
-  }
-
-  baseSlide.metadata.shapeCount = baseSlide.shapes.length;
   baseSlide.contentId = 'placeholder';
+  baseSlide.metadata.shapeCount = baseSlide.shapes.length;
+  baseSlide.metadata.templateName = 'Placeholder Template';
 
   return baseSlide;
 }
@@ -621,9 +418,9 @@ function convertBlackScreen(content: LiveContent, slideSize: { width: number; he
   const background = BackgroundShape.createSolidColor(SHARED_STYLES.colors.background.black, width, height);
   baseSlide.shapes.push(background);
 
+  baseSlide.contentId = 'black-screen';
   baseSlide.metadata.shapeCount = baseSlide.shapes.length;
-  baseSlide.contentId = 'black';
-  baseSlide.id = 'black-screen';
+  baseSlide.metadata.templateName = 'Black Screen Template';
 
   return baseSlide;
 }
@@ -631,110 +428,83 @@ function convertBlackScreen(content: LiveContent, slideSize: { width: number; he
 function convertLogoScreen(content: LiveContent, slideSize: { width: number; height: number }, baseSlide: GeneratedSlide): GeneratedSlide {
   const { width, height } = slideSize;
 
-  // Dark background
-  const background = BackgroundShape.createSolidColor(SHARED_STYLES.colors.background.dark, width, height);
+  // Background
+  const background = BackgroundShape.createLinearGradient(
+    [
+      { offset: 0, color: SHARED_STYLES.colors.background.gradient3.start },
+      { offset: 1, color: SHARED_STYLES.colors.background.gradient3.end }
+    ],
+    90,
+    width,
+    height
+  );
   baseSlide.shapes.push(background);
 
-  // Logo placeholder
-  const logoBox = new RectangleShape(
-    { position: { x: width * 0.4, y: height * 0.4 }, size: { width: width * 0.2, height: height * 0.2 } },
+  // Logo placeholder - in a real implementation this would be an ImageShape
+  const logoPlaceholder = new RectangleShape(
     {
-      fill: createColor(100, 150, 255, 0.3),
-      stroke: { width: 3, color: createColor(100, 150, 255), style: 'solid' },
-      borderRadius: 20
+      position: { x: width * 0.35, y: height * 0.25 },
+      size: { width: width * 0.3, height: height * 0.3 }
+    },
+    {
+      fill: SHARED_STYLES.colors.text.primary,
+      borderRadius: 10,
+      shadowColor: SHARED_STYLES.shadows.card.color,
+      shadowBlur: SHARED_STYLES.shadows.card.blur,
+      shadowOffsetY: SHARED_STYLES.shadows.card.offsetY
     }
   );
-  logoBox.setZIndex(1);
-  baseSlide.shapes.push(logoBox);
+  logoPlaceholder.setZIndex(2);
+  baseSlide.shapes.push(logoPlaceholder);
 
-  // Logo text
+  // Logo text overlay
   const logoText = new TextShape(
-    { position: { x: width * 0.3, y: height * 0.65 }, size: { width: width * 0.4, height: height * 0.08 } },
     {
-      fontSize: Math.floor(height * 0.04),
-      fontWeight: 'bold',
-      fontFamily: SHARED_STYLES.fonts.primary,
-      color: SHARED_STYLES.colors.text.primary,
+      position: { x: width * 0.35, y: height * 0.25 },
+      size: { width: width * 0.3, height: height * 0.3 }
+    },
+    {
+      fontSize: Math.floor(height * 0.05),
+      fontFamily: SHARED_STYLES.fonts.title,
+      color: SHARED_STYLES.colors.background.dark,
       textAlign: 'center',
-      verticalAlign: 'middle'
+      verticalAlign: 'middle',
+      fontWeight: 'bold'
     }
   );
-  logoText.setText('Church Logo');
-  logoText.setZIndex(1);
+  logoText.setText('LOGO');
+  logoText.setZIndex(3);
   baseSlide.shapes.push(logoText);
 
+  baseSlide.contentId = 'logo-screen';
   baseSlide.metadata.shapeCount = baseSlide.shapes.length;
-  baseSlide.contentId = 'logo';
-  baseSlide.id = 'logo-screen';
+  baseSlide.metadata.templateName = 'Logo Template';
 
   return baseSlide;
 }
 
 function convertTemplateGeneratedContent(content: LiveContent, slideSize: { width: number; height: number }, baseSlide: GeneratedSlide): GeneratedSlide {
-  // This is a complex case that would need template system integration
-  // For now, create a placeholder that indicates template generation is needed
-  const { width, height } = slideSize;
-
-  // Background
-  const background = BackgroundShape.createLinearGradient(
-    [
-      { offset: 0, color: SHARED_STYLES.colors.background.gradient1.start },
-      { offset: 1, color: SHARED_STYLES.colors.background.gradient1.end }
-    ],
-    135,
-    width,
-    height
-  );
-  baseSlide.shapes.push(background);
-
-  // Template generation message
-  const message = new TextShape(
-    { position: { x: width * 0.1, y: height * 0.4 }, size: { width: width * 0.8, height: height * 0.2 } },
-    {
-      fontSize: Math.floor(height * 0.05),
-      fontWeight: 'bold',
-      fontFamily: SHARED_STYLES.fonts.primary,
-      color: SHARED_STYLES.colors.text.primary,
-      textAlign: 'center',
-      verticalAlign: 'middle',
-      shadowColor: SHARED_STYLES.shadows.text.color,
-      shadowBlur: SHARED_STYLES.shadows.text.blur,
-      shadowOffsetX: SHARED_STYLES.shadows.text.offsetX,
-      shadowOffsetY: SHARED_STYLES.shadows.text.offsetY
-    }
-  );
-  message.setText('Template Generation Required\nContent needs template processing');
-  message.setZIndex(1);
-  baseSlide.shapes.push(message);
-
-  baseSlide.metadata.shapeCount = baseSlide.shapes.length;
-  baseSlide.contentId = content.type;
-
-  return baseSlide;
+  // This handles content that was generated by templates but isn't template-slide type
+  // For now, treat it as placeholder content
+  return convertPlaceholderContent(content, slideSize, baseSlide);
 }
 
 function convertDefaultContent(content: LiveContent, slideSize: { width: number; height: number }, baseSlide: GeneratedSlide): GeneratedSlide {
   const { width, height } = slideSize;
 
-  // Default gradient background
-  const background = BackgroundShape.createLinearGradient(
-    [
-      { offset: 0, color: SHARED_STYLES.colors.background.gradient1.start },
-      { offset: 1, color: SHARED_STYLES.colors.background.gradient1.end }
-    ],
-    135,
-    width,
-    height
-  );
+  // Default dark background
+  const background = BackgroundShape.createSolidColor(SHARED_STYLES.colors.background.dark, width, height);
   baseSlide.shapes.push(background);
 
-  // Welcome text
-  const welcomeText = new TextShape(
-    { position: { x: width * 0.1, y: height * 0.4 }, size: { width: width * 0.8, height: height * 0.1 } },
+  // Unknown content message
+  const errorText = new TextShape(
     {
-      fontSize: Math.floor(height * 0.08),
-      fontWeight: 'bold',
-      fontFamily: SHARED_STYLES.fonts.title,
+      position: { x: width * 0.1, y: height * 0.4 },
+      size: { width: width * 0.8, height: height * 0.2 }
+    },
+    {
+      fontSize: Math.floor(height * 0.05),
+      fontFamily: SHARED_STYLES.fonts.primary,
       color: SHARED_STYLES.colors.text.primary,
       textAlign: 'center',
       verticalAlign: 'middle',
@@ -744,75 +514,77 @@ function convertDefaultContent(content: LiveContent, slideSize: { width: number;
       shadowOffsetY: SHARED_STYLES.shadows.text.offsetY
     }
   );
-  welcomeText.setText('PraisePresent Live Display');
-  welcomeText.setZIndex(1);
-  baseSlide.shapes.push(welcomeText);
+  errorText.setText(`Content type "${content.type}" not supported`);
+  errorText.setZIndex(1);
+  baseSlide.shapes.push(errorText);
 
-  // Status text
-  const statusText = new TextShape(
-    { position: { x: width * 0.1, y: height * 0.55 }, size: { width: width * 0.8, height: height * 0.05 } },
-    {
-      fontSize: Math.floor(height * 0.035),
-      fontFamily: SHARED_STYLES.fonts.primary,
-      color: SHARED_STYLES.colors.text.secondary,
-      textAlign: 'center',
-      verticalAlign: 'middle',
-      shadowColor: SHARED_STYLES.shadows.soft.color,
-      shadowBlur: SHARED_STYLES.shadows.soft.blur,
-      shadowOffsetX: SHARED_STYLES.shadows.soft.offsetX,
-      shadowOffsetY: SHARED_STYLES.shadows.soft.offsetY
-    }
-  );
-  statusText.setText('Ready for presentation content');
-  statusText.setZIndex(1);
-  baseSlide.shapes.push(statusText);
-
+  baseSlide.contentId = `default-${content.type}`;
   baseSlide.metadata.shapeCount = baseSlide.shapes.length;
-  baseSlide.contentId = 'default';
+  baseSlide.metadata.templateName = 'Default Template';
 
   return baseSlide;
 }
 
-// Helper function to parse color strings to Color objects
-function parseColor(colorString: string) {
-  if (colorString.startsWith('#')) {
-    // Parse hex color
-    const hex = colorString.slice(1);
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
-    return createColor(r, g, b);
+/**
+ * Parses color string to Color instance
+ * Supports hex, rgb, rgba, and named colors
+ */
+function parseColor(colorString: string): Color {
+  if (typeof colorString !== 'string') {
+    return SHARED_STYLES.colors.background.black;
   }
-  // Default fallback
-  return createColor(26, 26, 26); // Dark background
+
+  // Handle hex colors
+  if (colorString.startsWith('#')) {
+    const hex = colorString.slice(1);
+    if (hex.length === 6) {
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      return createColor(r, g, b);
+    }
+  }
+
+  // Default to black for unknown formats
+  return SHARED_STYLES.colors.background.black;
 }
 
 /**
- * Validates that a slide has the correct structure for rendering
+ * Validates slide structure for correctness
  */
 export function validateSlideStructure(slide: GeneratedSlide): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
   if (!slide.id) {
-    errors.push('Slide missing required id');
+    errors.push('Slide missing required id field');
+  }
+
+  if (!slide.contentId) {
+    errors.push('Slide missing required contentId field');
   }
 
   if (!Array.isArray(slide.shapes)) {
-    errors.push('Slide missing shapes array');
-  }
-
-  if (!slide.metadata) {
-    errors.push('Slide missing metadata');
-  }
-
-  // Validate that shapes are actual Shape instances
-  if (slide.shapes) {
+    errors.push('Slide shapes must be an array');
+  } else {
     slide.shapes.forEach((shape, index) => {
-      if (!shape || typeof shape.render !== 'function') {
-        errors.push(`Shape at index ${index} is not a valid Shape instance`);
+      if (!shape) {
+        errors.push(`Shape at index ${index} is null/undefined`);
+      } else if (typeof shape.render !== 'function') {
+        errors.push(`Shape at index ${index} missing render method`);
       }
     });
   }
 
-  return { valid: errors.length === 0, errors };
+  if (!slide.metadata) {
+    errors.push('Slide missing metadata object');
+  } else {
+    if (!slide.metadata.generatedAt) {
+      errors.push('Slide metadata missing generatedAt field');
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
 }

@@ -1,9 +1,19 @@
 import { SlideTemplate, SlideTemplateOptions, TemplateContent, TemplatePlaceholder } from './SlideTemplate';
 import { Shape } from '../core/Shape';
 import { TextShape } from '../shapes/TextShape';
+import { ResponsiveTextShape } from '../shapes/ResponsiveTextShape';
 import { BackgroundShape } from '../shapes/BackgroundShape';
 import { RectangleShape } from '../shapes/RectangleShape';
 import { Size, Color } from '../types/geometry';
+import {
+  LayoutMode,
+  percent,
+  px,
+  rem,
+  createFlexiblePosition,
+  createFlexibleSize
+} from '../types/responsive';
+import { TypographyScaleMode } from '../layout/TypographyScaler';
 
 export interface SongSlideContent extends TemplateContent {
   title: string;
@@ -142,21 +152,45 @@ export class SongTemplate extends SlideTemplate {
     return shapes;
   }
 
-  private createTitleShape(title: string): TextShape {
+  private createTitleShape(title: string): ResponsiveTextShape {
     const placeholder = this.getPlaceholder('title')!;
 
-    return this.createTextShape(
-      placeholder,
-      title,
-      {
+    // Create responsive text shape for song title
+    return new ResponsiveTextShape({
+      text: title,
+      flexiblePosition: createFlexiblePosition(
+        percent((placeholder.bounds.x / this.slideSize.width) * 100),
+        percent((placeholder.bounds.y / this.slideSize.height) * 100)
+      ),
+      flexibleSize: createFlexibleSize(
+        percent((placeholder.bounds.width / this.slideSize.width) * 100),
+        percent((placeholder.bounds.height / this.slideSize.height) * 100)
+      ),
+      layoutConfig: {
+        mode: LayoutMode.CENTER,
+        padding: px(12)
+      },
+      typography: {
+        baseSize: rem(3.0), // Equivalent to ~48px at default 16px base
+        scaleRatio: 0.85,
+        minSize: 28,
+        maxSize: 72,
+        lineHeightRatio: 1.2
+      },
+      textStyle: {
         fontFamily: this.theme.fonts.display,
-        fontSize: this.style.titleFontSize,
         color: this.theme.colors.accent,
         textAlign: this.style.centerAlign ? 'center' : 'left',
         fontWeight: 'bold',
         textDecoration: 'none'
-      }
-    );
+      },
+      responsive: true,
+      optimizeReadability: true,
+      scaleMode: TypographyScaleMode.STEPPED,
+      autoSize: true,
+      wordWrap: true,
+      maxLines: 2
+    });
   }
 
   private createSectionLabel(section: string, sectionNumber?: number): TextShape {
@@ -209,25 +243,48 @@ export class SongTemplate extends SlideTemplate {
     );
   }
 
-  private createLyricsShape(lyrics: string): TextShape {
+  private createLyricsShape(lyrics: string): ResponsiveTextShape {
     const placeholder = this.getPlaceholder('lyrics')!;
 
     // Process lyrics for better display
     const processedLyrics = this.processLyrics(lyrics);
 
-    return this.createTextShape(
-      placeholder,
-      processedLyrics,
-      {
+    // Create responsive text shape for song lyrics
+    return new ResponsiveTextShape({
+      text: processedLyrics,
+      flexiblePosition: createFlexiblePosition(
+        percent((placeholder.bounds.x / this.slideSize.width) * 100),
+        percent((placeholder.bounds.y / this.slideSize.height) * 100)
+      ),
+      flexibleSize: createFlexibleSize(
+        percent((placeholder.bounds.width / this.slideSize.width) * 100),
+        percent((placeholder.bounds.height / this.slideSize.height) * 100)
+      ),
+      layoutConfig: {
+        mode: LayoutMode.FIT_CONTENT,
+        padding: px(16),
+        margin: px(8)
+      },
+      typography: {
+        baseSize: rem(2.25), // Equivalent to ~36px at default 16px base
+        scaleRatio: 0.9,
+        minSize: 20,
+        maxSize: 56,
+        lineHeightRatio: this.style.lineSpacing
+      },
+      textStyle: {
         fontFamily: this.theme.fonts.primary,
-        fontSize: this.style.lyricsFontSize,
         color: this.theme.colors.text,
         textAlign: this.style.centerAlign ? 'center' : 'left',
         verticalAlign: 'middle',
-        lineHeight: this.style.lineSpacing,
         fontWeight: 'normal'
-      }
-    );
+      },
+      responsive: true,
+      optimizeReadability: true,
+      scaleMode: TypographyScaleMode.FLUID,
+      autoSize: true,
+      wordWrap: true
+    });
   }
 
   private processLyrics(lyrics: string): string {

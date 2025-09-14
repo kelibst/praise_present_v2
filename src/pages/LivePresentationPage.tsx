@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, Monitor, MonitorSpeaker, SkipBack, SkipForward, Eye, Settings } from 'lucide-react';
+import { Play, Square, Monitor, MonitorSpeaker, SkipBack, SkipForward, Eye, Settings, Save, Palette, Type, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 
 // Import data (will be replaced with database queries later)
 import { sampleSongs } from '../../data/sample-songs';
@@ -11,6 +11,10 @@ import { TemplateManager } from '../rendering/templates/TemplateManager';
 import { DEFAULT_SLIDE_SIZE } from '../rendering/templates/templateUtils';
 import BibleSelector from '../components/bible/BibleSelector';
 import SongLibrary from '../components/songs/SongLibrary';
+
+// Import editable preview component
+import { EditableSlidePreview } from '../components/EditableSlidePreview';
+import { GeneratedSlide } from '../rendering/SlideGenerator';
 
 // Define Slide interface
 interface Slide {
@@ -48,8 +52,28 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const [liveDisplayActive, setLiveDisplayActive] = useState(false);
   const [liveDisplayStatus, setLiveDisplayStatus] = useState('Disconnected');
 
+  // Editable slide state
+  const [editableSlideContent, setEditableSlideContent] = useState<any>(null);
+  const [slideProperties, setSlideProperties] = useState({
+    backgroundColor: '#1a1a1a',
+    fontSize: 48,
+    textAlign: 'center' as 'left' | 'center' | 'right',
+    fontFamily: 'Arial, sans-serif',
+    textColor: '#ffffff'
+  });
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showPropertyPanel, setShowPropertyPanel] = useState(false);
+
   // Template system
-  const [templateManager] = useState(() => new TemplateManager());
+  const [templateManager] = useState(() => {
+    const manager = new TemplateManager(DEFAULT_SLIDE_SIZE);
+    // Ensure manager is properly initialized
+    if (!manager.isInitialized()) {
+      console.warn('TemplateManager not properly initialized, reinitializing...');
+      manager.initialize(DEFAULT_SLIDE_SIZE);
+    }
+    return manager;
+  });
   const [slideGenerator] = useState(() => new SlideGenerator());
 
   // Initialize with sample service data
@@ -186,7 +210,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         if (actualSlideIndex === -1) actualSlideIndex = currentSlideIndex;
       }
 
-      // Serialize shapes to plain objects for IPC with comprehensive property preservation
+      // Enhanced shape serialization with responsive properties preservation
       const serializeShape = (shape: any) => {
         const baseProps = {
           id: shape.id,
@@ -201,10 +225,30 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           style: shape.style
         };
 
+        // Responsive properties (if shape is responsive)
+        const responsiveProps: any = {};
+        if (shape.responsive !== undefined) {
+          responsiveProps.responsive = shape.responsive;
+        }
+        if (shape.flexiblePosition) {
+          responsiveProps.flexiblePosition = shape.flexiblePosition;
+        }
+        if (shape.flexibleSize) {
+          responsiveProps.flexibleSize = shape.flexibleSize;
+        }
+        if (shape.layoutConfig) {
+          responsiveProps.layoutConfig = shape.layoutConfig;
+        }
+        if (shape.typography) {
+          responsiveProps.typography = shape.typography;
+        }
+        if (shape.maintainAspectRatio !== undefined) {
+          responsiveProps.maintainAspectRatio = shape.maintainAspectRatio;
+        }
+
         // Text-specific properties with comprehensive serialization
         if (shape.type === 'text') {
-          return {
-            ...baseProps,
+          const textProps = {
             text: shape.text || '',
             textStyle: {
               fontFamily: shape.textStyle?.fontFamily || 'Arial, sans-serif',
@@ -226,7 +270,16 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             },
             autoSize: shape.autoSize !== false,
             wordWrap: shape.wordWrap !== false,
-            maxLines: shape.maxLines || 0
+            maxLines: shape.maxLines || 0,
+            // Responsive text-specific properties
+            optimizeReadability: shape.optimizeReadability !== false,
+            scaleMode: shape.scaleMode || 'fluid'
+          };
+
+          return {
+            ...baseProps,
+            ...responsiveProps,
+            ...textProps
           };
         }
 
@@ -234,6 +287,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         if (shape.type === 'background') {
           return {
             ...baseProps,
+            ...responsiveProps,
             backgroundStyle: shape.backgroundStyle
           };
         }
@@ -242,6 +296,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         if (shape.type === 'rectangle') {
           return {
             ...baseProps,
+            ...responsiveProps,
             fillColor: shape.fillColor,
             strokeColor: shape.strokeColor,
             strokeWidth: shape.strokeWidth,
@@ -251,7 +306,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           };
         }
 
-        return baseProps;
+        return {
+          ...baseProps,
+          ...responsiveProps
+        };
       };
 
       const serializedSlide = {
@@ -462,7 +520,121 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     }
   };
 
+  // Slide editing functions
+  const handleSlideContentChange = (newContent: any) => {
+    console.log('🔄 HandleSlideContentChange: Content changed', {
+      hasSelectedItem: !!selectedItem,
+      hasSelectedSlides: !!selectedItem?.slides,
+      newContentType: newContent?.type,
+      hasNewSlide: !!newContent?.slide,
+      newSlideShapeCount: newContent?.slide?.shapes?.length
+    });
+
+    if (!selectedItem || !selectedItem.slides) {
+      console.log('❌ HandleSlideContentChange: Missing selected item or slides');
+      return;
+    }
+
+    // Update editable content and mark as changed
+    setEditableSlideContent(newContent);
+    setHasUnsavedChanges(true);
+    console.log('✅ HandleSlideContentChange: Content updated and marked as changed');
+  };
+
+  // Note: handleSlideGenerated removed to prevent infinite loop
+  // The EditableSlidePreview will use the content directly from getPreviewContent()
+
+  const saveSlideChanges = async () => {
+    console.log('💾 SaveSlideChanges: Starting save process', {
+      hasSelectedItem: !!selectedItem,
+      hasSelectedSlides: !!selectedItem?.slides,
+      hasEditableContent: !!editableSlideContent,
+      slidesLength: selectedItem?.slides?.length,
+      currentSlideIndex,
+      hasUnsavedChanges
+    });
+
+    if (!selectedItem || !selectedItem.slides || !editableSlideContent) {
+      console.log('❌ SaveSlideChanges: Missing required data');
+      return;
+    }
+
+    try {
+      console.log('🔄 SaveSlideChanges: Processing changes', {
+        editableContentType: editableSlideContent.type,
+        hasSlide: !!editableSlideContent.slide,
+        slideShapeCount: editableSlideContent.slide?.shapes?.length
+      });
+
+      // Update the current slide with modified content
+      const updatedSlides = [...selectedItem.slides];
+      if (editableSlideContent.slide) {
+        const updatedSlide = {
+          id: editableSlideContent.slide.id,
+          shapes: editableSlideContent.slide.shapes,
+          background: editableSlideContent.slide.background || { type: 'color', value: slideProperties.backgroundColor }
+        };
+
+        console.log('📝 SaveSlideChanges: Updated slide created', {
+          slideId: updatedSlide.id,
+          shapeCount: updatedSlide.shapes.length,
+          background: updatedSlide.background
+        });
+
+        updatedSlides[currentSlideIndex] = updatedSlide;
+      }
+
+      // Update the presentation item
+      const updatedItem = { ...selectedItem, slides: updatedSlides };
+      console.log('📋 SaveSlideChanges: Setting updated item');
+      setSelectedItem(updatedItem);
+
+      // Update presentation items array
+      console.log('📊 SaveSlideChanges: Updating presentation items');
+      setPresentationItems(prev =>
+        prev.map(item => item.id === selectedItem.id ? updatedItem : item)
+      );
+
+      // If in live mode, immediately update the live display
+      if (presentationMode === 'live' && liveDisplayActive) {
+        console.log('📺 SaveSlideChanges: Updating live display');
+        await sendSlideToLive(updatedSlides[currentSlideIndex], updatedItem, currentSlideIndex);
+      }
+
+      setHasUnsavedChanges(false);
+      console.log('✅ SaveSlideChanges: Save completed successfully');
+    } catch (error) {
+      console.error('❌ SaveSlideChanges: Failed to save slide changes:', error);
+    }
+  };
+
+  const updateSlideProperty = (property: string, value: any) => {
+    setSlideProperties(prev => ({
+      ...prev,
+      [property]: value
+    }));
+    setHasUnsavedChanges(true);
+  };
+
   const currentSlide = selectedItem?.slides?.[currentSlideIndex];
+
+  // Prepare content for EditableSlidePreview - stable reference to prevent loops
+  const getPreviewContent = React.useMemo(() => {
+    if (editableSlideContent) {
+      return editableSlideContent;
+    }
+
+    if (currentSlide && selectedItem) {
+      return {
+        type: 'template-slide' as const,
+        title: selectedItem.title,
+        content: selectedItem.content,
+        slide: currentSlide
+      };
+    }
+
+    return null;
+  }, [editableSlideContent, currentSlide?.id, selectedItem?.id]); // Use IDs for stable comparison
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -711,82 +883,148 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           </div>
         </div>
 
-        {/* Center Panel - Preview */}
+        {/* Center Panel - Editable Preview */}
         <div className="flex-1 bg-gray-900 p-4">
           <div className="h-full flex flex-col">
+            {/* Header with title and controls */}
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Preview</h3>
-              {selectedItem && (
-                <div className="text-sm text-gray-400">
-                  {selectedItem.title} - Slide {currentSlideIndex + 1} of {selectedItem.slides?.length || 0}
-                </div>
-              )}
+              <h3 className="text-lg font-semibold">Editable Preview</h3>
+              <div className="flex items-center gap-4">
+                {selectedItem && (
+                  <div className="text-sm text-gray-400">
+                    {selectedItem.title} - Slide {currentSlideIndex + 1} of {selectedItem.slides?.length || 0}
+                  </div>
+                )}
+                <button
+                  onClick={() => setShowPropertyPanel(!showPropertyPanel)}
+                  className="p-2 bg-gray-700 text-white rounded hover:bg-gray-600 flex items-center gap-2"
+                  title="Toggle Properties Panel"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {/* Preview Screen */}
-            <div className="flex-1 bg-black rounded-lg border border-gray-700 flex items-center justify-center relative overflow-hidden">
-              {currentSlide ? (
-                <div className="w-full h-full relative">
-                  {/* Background rendering */}
-                  {currentSlide.background && currentSlide.background.type === 'color' && (
-                    <div
-                      className="absolute inset-0"
-                      style={{ backgroundColor: currentSlide.background.value }}
+            {/* Property Panel */}
+            {showPropertyPanel && (
+              <div className="bg-gray-800 rounded-lg p-4 mb-4 border border-gray-600">
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Palette className="w-4 h-4" />
+                  Slide Properties
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Background Color */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Background</label>
+                    <input
+                      type="color"
+                      value={slideProperties.backgroundColor}
+                      onChange={(e) => updateSlideProperty('backgroundColor', e.target.value)}
+                      className="w-full h-8 rounded border border-gray-600 bg-gray-700"
                     />
-                  )}
+                  </div>
 
-                  {/* Shape rendering with proper positioning and styling */}
-                  {currentSlide.shapes.map((shape, index) => {
-                    if (shape.type === 'text') {
-                      const textStyle = (shape as any).textStyle || {};
-                      const position = (shape as any).position || { x: 0, y: 0 };
-                      const size = (shape as any).size || { width: 100, height: 50 };
+                  {/* Font Size */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Font Size</label>
+                    <input
+                      type="range"
+                      min="16"
+                      max="120"
+                      value={slideProperties.fontSize}
+                      onChange={(e) => updateSlideProperty('fontSize', parseInt(e.target.value))}
+                      className="w-full"
+                    />
+                    <div className="text-xs text-gray-500 text-center">{slideProperties.fontSize}px</div>
+                  </div>
 
-                      return (
-                        <div
-                          key={index}
-                          className="absolute"
-                          style={{
-                            left: `${(position.x / 1920) * 100}%`,
-                            top: `${(position.y / 1080) * 100}%`,
-                            width: `${(size.width / 1920) * 100}%`,
-                            height: `${(size.height / 1080) * 100}%`,
-                            fontSize: `${(textStyle.fontSize || 24) * 0.5}px`, // Scale for preview
-                            fontFamily: textStyle.fontFamily || 'Arial, sans-serif',
-                            fontWeight: textStyle.fontWeight || 'normal',
-                            fontStyle: textStyle.fontStyle || 'normal',
-                            color: textStyle.color ?
-                              `rgba(${textStyle.color.r}, ${textStyle.color.g}, ${textStyle.color.b}, ${textStyle.color.a || 1})` :
-                              'white',
-                            textAlign: textStyle.textAlign || 'left',
-                            display: 'flex',
-                            alignItems: textStyle.verticalAlign === 'middle' ? 'center' :
-                                      textStyle.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start',
-                            justifyContent: textStyle.textAlign === 'center' ? 'center' :
-                                          textStyle.textAlign === 'right' ? 'flex-end' : 'flex-start',
-                            lineHeight: textStyle.lineHeight || 1.2,
-                            letterSpacing: `${textStyle.letterSpacing || 0}px`,
-                            textShadow: textStyle.shadowColor && textStyle.shadowBlur ?
-                              `${textStyle.shadowOffsetX || 0}px ${textStyle.shadowOffsetY || 0}px ${textStyle.shadowBlur}px rgba(${textStyle.shadowColor.r}, ${textStyle.shadowColor.g}, ${textStyle.shadowColor.b}, ${textStyle.shadowColor.a || 1})` :
-                              'none',
-                            opacity: (shape as any).opacity !== undefined ? (shape as any).opacity : 1,
-                            visibility: (shape as any).visible !== false ? 'visible' : 'hidden',
-                            whiteSpace: 'pre-wrap',
-                            wordWrap: 'break-word'
-                          }}
+                  {/* Text Alignment */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Text Align</label>
+                    <div className="flex gap-1">
+                      {(['left', 'center', 'right'] as const).map((align) => (
+                        <button
+                          key={align}
+                          onClick={() => updateSlideProperty('textAlign', align)}
+                          className={`p-2 rounded ${
+                            slideProperties.textAlign === align
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                          }`}
                         >
-                          {(shape as any).text}
-                        </div>
-                      );
-                    }
+                          {align === 'left' && <AlignLeft className="w-4 h-4" />}
+                          {align === 'center' && <AlignCenter className="w-4 h-4" />}
+                          {align === 'right' && <AlignRight className="w-4 h-4" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-                    // Handle other shape types if needed
-                    return null;
-                  })}
+                  {/* Text Color */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Text Color</label>
+                    <input
+                      type="color"
+                      value={slideProperties.textColor}
+                      onChange={(e) => updateSlideProperty('textColor', e.target.value)}
+                      className="w-full h-8 rounded border border-gray-600 bg-gray-700"
+                    />
+                  </div>
+                </div>
+
+                {/* Save Button */}
+                <div className="flex justify-end mt-4">
+                  <button
+                    onClick={saveSlideChanges}
+                    disabled={!hasUnsavedChanges}
+                    className={`px-4 py-2 rounded flex items-center gap-2 ${
+                      hasUnsavedChanges
+                        ? 'bg-green-600 text-white hover:bg-green-700'
+                        : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <Save className="w-4 h-4" />
+                    {hasUnsavedChanges ? 'Save Changes' : 'No Changes'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Editable Preview Screen */}
+            <div className="flex-1 min-h-0">
+              {getPreviewContent ? (
+                <div className="h-full flex flex-col">
+                  {/* Debug info - remove after testing */}
+                  <div className="text-xs text-gray-400 mb-2 p-2 bg-gray-800 rounded flex-shrink-0">
+                    Debug Info:<br/>
+                    • Selected Item: {selectedItem?.title || 'None'}<br/>
+                    • Current Slide Index: {currentSlideIndex}<br/>
+                    • Total Slides: {selectedItem?.slides?.length || 0}<br/>
+                    • Content Type: {getPreviewContent?.type}<br/>
+                    • Slide Shapes: {getPreviewContent?.slide?.shapes?.length || 0}<br/>
+                    • Current Slide ID: {currentSlide?.id || 'None'}<br/>
+                    • First Shape Type: {getPreviewContent?.slide?.shapes?.[0]?.type || 'None'}<br/>
+                    • First Shape Constructor: {getPreviewContent?.slide?.shapes?.[0]?.constructor?.name || 'None'}<br/>
+                    • Shape has isVisible method: {typeof getPreviewContent?.slide?.shapes?.[0]?.isVisible === 'function' ? 'Yes' : 'No'}
+                  </div>
+                  <div className="flex-1 min-h-0">
+                    <EditableSlidePreview
+                      content={getPreviewContent}
+                      width={800}
+                      height={450}
+                      editable={true}
+                      onContentChange={handleSlideContentChange}
+                      backgroundColor={slideProperties.backgroundColor}
+                      showControls={true}
+                      className="h-full"
+                    />
+                  </div>
                 </div>
               ) : (
-                <div className="text-gray-500">
-                  Select an item to preview slides
+                <div className="h-full bg-black rounded-lg border border-gray-700 flex items-center justify-center">
+                  <div className="text-gray-500">
+                    Select an item to preview and edit slides
+                  </div>
                 </div>
               )}
             </div>
@@ -841,6 +1079,15 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     )}
                   </div>
                 </div>
+
+                {/* Unsaved Changes Indicator */}
+                {hasUnsavedChanges && (
+                  <div className="text-center">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm bg-yellow-900/50 text-yellow-300 border border-yellow-600">
+                      Unsaved changes - Click save to apply
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -870,53 +1117,20 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     />
                   )}
 
-                  {/* Shape rendering with proper positioning and styling (smaller scale for right panel) */}
-                  {currentSlide.shapes.map((shape, index) => {
-                    if (shape.type === 'text') {
-                      const textStyle = (shape as any).textStyle || {};
-                      const position = (shape as any).position || { x: 0, y: 0 };
-                      const size = (shape as any).size || { width: 100, height: 50 };
-
-                      return (
-                        <div
-                          key={index}
-                          className="absolute"
-                          style={{
-                            left: `${(position.x / 1920) * 100}%`,
-                            top: `${(position.y / 1080) * 100}%`,
-                            width: `${(size.width / 1920) * 100}%`,
-                            height: `${(size.height / 1080) * 100}%`,
-                            fontSize: `${(textStyle.fontSize || 24) * 0.25}px`, // Smaller scale for right panel
-                            fontFamily: textStyle.fontFamily || 'Arial, sans-serif',
-                            fontWeight: textStyle.fontWeight || 'normal',
-                            fontStyle: textStyle.fontStyle || 'normal',
-                            color: textStyle.color ?
-                              `rgba(${textStyle.color.r}, ${textStyle.color.g}, ${textStyle.color.b}, ${textStyle.color.a || 1})` :
-                              'white',
-                            textAlign: textStyle.textAlign || 'left',
-                            display: 'flex',
-                            alignItems: textStyle.verticalAlign === 'middle' ? 'center' :
-                                      textStyle.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start',
-                            justifyContent: textStyle.textAlign === 'center' ? 'center' :
-                                          textStyle.textAlign === 'right' ? 'flex-end' : 'flex-start',
-                            lineHeight: textStyle.lineHeight || 1.2,
-                            letterSpacing: `${textStyle.letterSpacing || 0}px`,
-                            textShadow: textStyle.shadowColor && textStyle.shadowBlur ?
-                              `${textStyle.shadowOffsetX || 0}px ${textStyle.shadowOffsetY || 0}px ${textStyle.shadowBlur}px rgba(${textStyle.shadowColor.r}, ${textStyle.shadowColor.g}, ${textStyle.shadowColor.b}, ${textStyle.shadowColor.a || 1})` :
-                              'none',
-                            opacity: (shape as any).opacity !== undefined ? (shape as any).opacity : 1,
-                            visibility: (shape as any).visible !== false ? 'visible' : 'hidden',
-                            whiteSpace: 'pre-wrap',
-                            wordWrap: 'break-word'
-                          }}
-                        >
-                          {(shape as any).text}
-                        </div>
-                      );
-                    }
-
-                    return null;
-                  })}
+                  {/* Use EditableSlidePreview for consistent rendering */}
+                  <EditableSlidePreview
+                    content={{
+                      type: 'template-slide',
+                      title: `${selectedItem?.title} - Slide ${currentSlideIndex + 1}`,
+                      slide: currentSlide
+                    }}
+                    width={300} // Smaller width for right panel
+                    height={169} // Maintain 16:9 aspect ratio (300*9/16 = 169)
+                    editable={false}
+                    showControls={false}
+                    backgroundColor={currentSlide.background?.value || '#1a1a1a'}
+                    className="w-full h-full"
+                  />
                 </div>
               ) : (
                 <div className="text-gray-500 text-center">

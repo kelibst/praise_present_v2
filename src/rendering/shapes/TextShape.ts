@@ -31,6 +31,7 @@ export class TextShape extends Shape {
   public maxLines: number;
   private cachedMetrics: TextMetrics | null = null;
   private metricsCache: Map<string, TextMetrics> = new Map();
+  private readonly MAX_CACHE_SIZE = 50; // Limit cache to prevent memory leaks
 
   constructor(props: TextShapeProps = {}, style: TextStyle = {}) {
     super(props);
@@ -99,6 +100,16 @@ export class TextShape extends Shape {
     }
 
     const metrics = this.measureText(ctx);
+
+    // Implement LRU-style cache eviction
+    if (this.metricsCache.size >= this.MAX_CACHE_SIZE) {
+      // Remove the oldest entry (first one in Map)
+      const firstKey = this.metricsCache.keys().next().value;
+      if (firstKey) {
+        this.metricsCache.delete(firstKey);
+      }
+    }
+
     this.metricsCache.set(cacheKey, metrics);
     return metrics;
   }
@@ -311,14 +322,31 @@ export class TextShape extends Shape {
     if (this.text !== text) {
       this.text = text;
       this.cachedMetrics = null;
-      this.metricsCache.clear();
+      this.clearMetricsCache();
     }
   }
 
   public setTextStyle(style: Partial<TextStyle>): void {
     this.textStyle = { ...this.textStyle, ...style };
     this.cachedMetrics = null;
+    this.clearMetricsCache();
+  }
+
+  /**
+   * Clears the text metrics cache to free memory
+   */
+  public clearMetricsCache(): void {
     this.metricsCache.clear();
+  }
+
+  /**
+   * Gets cache statistics for debugging
+   */
+  public getCacheStats(): { size: number; maxSize: number } {
+    return {
+      size: this.metricsCache.size,
+      maxSize: this.MAX_CACHE_SIZE
+    };
   }
 
   public setFontSize(size: number): void {

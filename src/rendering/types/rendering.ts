@@ -16,6 +16,9 @@ export interface RenderContext {
   textAlign?: CanvasTextAlign;
   textBaseline?: CanvasTextBaseline;
   globalAlpha?: number;
+
+  // Responsive rendering support
+  layoutManager?: any; // ResponsiveLayoutManager (avoiding circular imports)
 }
 
 export interface RenderOptions {

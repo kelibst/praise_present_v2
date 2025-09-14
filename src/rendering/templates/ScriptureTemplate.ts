@@ -1,8 +1,18 @@
 import { SlideTemplate, SlideTemplateOptions, TemplateContent, TemplatePlaceholder } from './SlideTemplate';
 import { Shape } from '../core/Shape';
 import { TextShape } from '../shapes/TextShape';
+import { ResponsiveTextShape } from '../shapes/ResponsiveTextShape';
 import { BackgroundShape } from '../shapes/BackgroundShape';
 import { Size, Color } from '../types/geometry';
+import {
+  LayoutMode,
+  percent,
+  px,
+  rem,
+  createFlexiblePosition,
+  createFlexibleSize
+} from '../types/responsive';
+import { TypographyScaleMode } from '../layout/TypographyScaler';
 
 export interface ScriptureSlideContent extends TemplateContent {
   verse: string;
@@ -141,26 +151,49 @@ export class ScriptureTemplate extends SlideTemplate {
     };
   }
 
-  private createVerseShape(verse: string): TextShape {
+  private createVerseShape(verse: string): ResponsiveTextShape {
     const placeholder = this.getPlaceholder('verse')!;
 
     // Process the verse text
     let processedVerse = this.processVerseText(verse);
 
-    return this.createTextShape(
-      placeholder,
-      processedVerse,
-      {
+    // Create responsive text shape for main verse
+    return new ResponsiveTextShape({
+      text: processedVerse,
+      flexiblePosition: createFlexiblePosition(
+        percent((placeholder.bounds.x / this.slideSize.width) * 100),
+        percent((placeholder.bounds.y / this.slideSize.height) * 100)
+      ),
+      flexibleSize: createFlexibleSize(
+        percent((placeholder.bounds.width / this.slideSize.width) * 100),
+        percent((placeholder.bounds.height / this.slideSize.height) * 100)
+      ),
+      layoutConfig: {
+        mode: LayoutMode.FIT_CONTENT,
+        padding: px(16),
+        margin: px(8)
+      },
+      typography: {
+        baseSize: rem(2.5), // Equivalent to ~40px at default 16px base
+        scaleRatio: 0.9,
+        minSize: 24,
+        maxSize: 72,
+        lineHeightRatio: this.style.lineSpacing
+      },
+      textStyle: {
         fontFamily: this.theme.fonts.primary,
-        fontSize: this.style.verseFontSize,
         color: this.theme.colors.text,
         textAlign: this.style.centerAlign ? 'center' : 'left',
         verticalAlign: 'middle',
-        lineHeight: this.style.lineSpacing,
         fontWeight: 'normal',
         letterSpacing: 0.5
-      }
-    );
+      },
+      responsive: true,
+      optimizeReadability: true,
+      scaleMode: TypographyScaleMode.FLUID,
+      autoSize: true,
+      wordWrap: true
+    });
   }
 
   private processVerseText(verse: string): string {
@@ -180,24 +213,47 @@ export class ScriptureTemplate extends SlideTemplate {
     return processed;
   }
 
-  private createReferenceShape(reference: string): TextShape {
+  private createReferenceShape(reference: string): ResponsiveTextShape {
     const placeholder = this.getPlaceholder('reference')!;
 
     // Format the reference nicely
     const formattedReference = this.formatReference(reference);
 
-    return this.createTextShape(
-      placeholder,
-      formattedReference,
-      {
+    // Create responsive text shape for reference
+    return new ResponsiveTextShape({
+      text: formattedReference,
+      flexiblePosition: createFlexiblePosition(
+        percent((placeholder.bounds.x / this.slideSize.width) * 100),
+        percent((placeholder.bounds.y / this.slideSize.height) * 100)
+      ),
+      flexibleSize: createFlexibleSize(
+        percent((placeholder.bounds.width / this.slideSize.width) * 100),
+        percent((placeholder.bounds.height / this.slideSize.height) * 100)
+      ),
+      layoutConfig: {
+        mode: LayoutMode.CENTER,
+        padding: px(8)
+      },
+      typography: {
+        baseSize: rem(2.0), // Equivalent to ~32px at default 16px base
+        scaleRatio: 0.8,
+        minSize: 18,
+        maxSize: 48,
+        lineHeightRatio: 1.2
+      },
+      textStyle: {
         fontFamily: this.theme.fonts.display,
-        fontSize: this.style.referenceFontSize,
         color: this.theme.colors.accent,
         textAlign: this.style.centerAlign ? 'center' : 'right',
         fontWeight: '600',
         fontStyle: 'italic'
-      }
-    );
+      },
+      responsive: true,
+      optimizeReadability: true,
+      scaleMode: TypographyScaleMode.STEPPED,
+      autoSize: true,
+      wordWrap: false
+    });
   }
 
   private formatReference(reference: string): string {
@@ -208,20 +264,43 @@ export class ScriptureTemplate extends SlideTemplate {
       .replace(/(\d+):(\d+)/g, '$1:$2'); // Ensure proper verse formatting
   }
 
-  private createTranslationShape(translation: string): TextShape {
+  private createTranslationShape(translation: string): ResponsiveTextShape {
     const placeholder = this.getPlaceholder('translation')!;
 
-    return this.createTextShape(
-      placeholder,
-      `— ${translation}`,
-      {
+    // Create responsive text shape for translation
+    return new ResponsiveTextShape({
+      text: `— ${translation}`,
+      flexiblePosition: createFlexiblePosition(
+        percent((placeholder.bounds.x / this.slideSize.width) * 100),
+        percent((placeholder.bounds.y / this.slideSize.height) * 100)
+      ),
+      flexibleSize: createFlexibleSize(
+        percent((placeholder.bounds.width / this.slideSize.width) * 100),
+        percent((placeholder.bounds.height / this.slideSize.height) * 100)
+      ),
+      layoutConfig: {
+        mode: LayoutMode.CENTER,
+        padding: px(4)
+      },
+      typography: {
+        baseSize: rem(1.5), // Equivalent to ~24px at default 16px base
+        scaleRatio: 0.7,
+        minSize: 14,
+        maxSize: 32,
+        lineHeightRatio: 1.1
+      },
+      textStyle: {
         fontFamily: this.theme.fonts.secondary,
-        fontSize: this.style.translationFontSize,
         color: this.theme.colors.textSecondary,
         textAlign: this.style.centerAlign ? 'center' : 'right',
         opacity: 0.8
-      }
-    );
+      },
+      responsive: true,
+      optimizeReadability: true,
+      scaleMode: TypographyScaleMode.LINEAR,
+      autoSize: true,
+      wordWrap: false
+    });
   }
 
   public static createReadingSlide(

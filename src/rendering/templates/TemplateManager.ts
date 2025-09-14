@@ -38,10 +38,42 @@ export class TemplateManager {
   private templates: Map<string, TemplateRegistration> = new Map();
   private themes: Map<string, TemplateTheme> = new Map();
   private defaultTheme: TemplateTheme;
+  private initialized: boolean = false;
+  private slideSize: Size;
 
-  constructor() {
+  constructor(slideSize?: Size) {
+    this.slideSize = slideSize || { width: 1920, height: 1080 };
     this.defaultTheme = this.createDefaultTheme();
     this.themes.set(this.defaultTheme.id, this.defaultTheme);
+    this.initialized = true;
+  }
+
+  /**
+   * Checks if the TemplateManager is properly initialized
+   */
+  public isInitialized(): boolean {
+    return this.initialized &&
+           this.templates.size >= 0 &&
+           this.themes.size > 0 &&
+           this.defaultTheme !== undefined;
+  }
+
+  /**
+   * Initialize or re-initialize the TemplateManager with a specific slide size
+   */
+  public initialize(slideSize: Size): void {
+    this.slideSize = slideSize;
+    this.defaultTheme = this.createDefaultTheme();
+    this.themes.clear();
+    this.themes.set(this.defaultTheme.id, this.defaultTheme);
+    this.initialized = true;
+  }
+
+  /**
+   * Gets the current slide size
+   */
+  public getSlideSize(): Size {
+    return { ...this.slideSize };
   }
 
   private createDefaultTheme(): TemplateTheme {
@@ -380,4 +412,15 @@ export class TemplateManager {
   }
 }
 
-export const templateManager = new TemplateManager();
+// Create singleton with proper initialization checks
+export const templateManager = (() => {
+  const manager = new TemplateManager();
+
+  // Ensure template manager is properly initialized
+  if (!manager.isInitialized()) {
+    console.warn('Global TemplateManager not properly initialized, reinitializing...');
+    manager.initialize({ width: 1920, height: 1080 });
+  }
+
+  return manager;
+})();

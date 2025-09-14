@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  RenderingEngine,
+  ResponsiveRenderingEngine,
   SlideRenderer,
   createSlideRenderer,
   RectangleShape,
   TextShape,
   ImageShape,
-  BackgroundShape
+  BackgroundShape,
+  LayoutMode,
+  px
 } from '../rendering';
 import { createColor } from '../rendering/types/geometry';
 import { RenderQuality } from '../rendering/types/rendering';
@@ -41,7 +43,7 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
   height = 1080
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<RenderingEngine | null>(null);
+  const engineRef = useRef<ResponsiveRenderingEngine | null>(null);
   const slideRendererRef = useRef<SlideRenderer | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentContent, setCurrentContent] = useState<LiveContent | null>(null);
@@ -59,21 +61,55 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     const canvas = canvasRef.current;
 
     try {
-      const engine = new RenderingEngine({
+      console.log('🎯 LiveDisplayRenderer: Initializing ResponsiveRenderingEngine for live display', {
+        targetResolution: `${width}x${height}`,
+        viewport: `${window.innerWidth}x${window.innerHeight}`
+      });
+
+      const engine = new ResponsiveRenderingEngine({
         canvas,
         enableDebug: false, // Disable debug overlay for live display
+        enableResponsive: true, // Enable responsive rendering
         settings: {
           quality: RenderQuality.HIGH,
           targetFPS: 60,
           enableCaching: true,
           enableGPUAcceleration: true,
           debugMode: false
-        }
+        },
+        breakpoints: [
+          {
+            name: 'live-small',
+            maxWidth: 1280,
+            config: {
+              mode: LayoutMode.ASPECT_FIT,
+              padding: px(16)
+            }
+          },
+          {
+            name: 'live-standard',
+            minWidth: 1281,
+            maxWidth: 1920,
+            config: {
+              mode: LayoutMode.FILL_CONTAINER,
+              padding: px(8)
+            }
+          },
+          {
+            name: 'live-large',
+            minWidth: 1921,
+            config: {
+              mode: LayoutMode.ASPECT_FIT,
+              padding: px(4)
+            }
+          }
+        ],
+        baseFontSize: 16
       });
 
       engineRef.current = engine;
 
-      // Create SlideRenderer for unified rendering
+      // Create SlideRenderer for unified rendering with target resolution
       const slideRenderer = createSlideRenderer(engine, {
         slideSize: { width, height },
         onRender: () => {
@@ -233,18 +269,22 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
         {connectionStatus} {isInitialized && `• ${fps} FPS`}
       </div>
 
-      {/* Main canvas */}
+      {/* Main canvas with proper aspect ratio scaling */}
       <canvas
         ref={canvasRef}
         width={width}
         height={height}
         style={{
-          width: '100vw',
-          height: '100vh',
+          width: '100%',
+          height: '100%',
+          maxWidth: '100vw',
+          maxHeight: '100vh',
           backgroundColor: '#000',
-          display: 'block'
+          display: 'block',
+          margin: 'auto', // Center the canvas
+          objectFit: 'contain' // Maintain aspect ratio while fitting container
         }}
-        className="w-full h-full"
+        className="block mx-auto"
       />
 
       {/* Content info overlay (only show in development) */}
