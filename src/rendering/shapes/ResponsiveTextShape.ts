@@ -4,6 +4,7 @@ import { ShapeType, TextStyle, defaultTextStyle } from '../types/shapes';
 import { Color, colorToString } from '../types/geometry';
 import { ResponsiveLayoutManager } from '../layout/ResponsiveLayoutManager';
 import { TypographyScaler, TypographyScaleMode } from '../layout/TypographyScaler';
+import { SmartTextScaler, ContentCharacteristics } from '../layout/SmartTextScaler';
 import {
   TypographyConfig,
   FlexibleValue,
@@ -22,6 +23,11 @@ export interface ResponsiveTextShapeProps extends ResponsiveShapePropsExtended {
   maxLines?: number;
   optimizeReadability?: boolean;
   scaleMode?: TypographyScaleMode;
+
+  // Smart scaling options
+  enableSmartScaling?: boolean;
+  contentContext?: 'scripture' | 'song' | 'announcement' | 'title';
+  smartScalingConfig?: Partial<import('../layout/SmartTextScaler').SmartScalingConfig>;
 }
 
 /**
@@ -55,6 +61,11 @@ export class ResponsiveTextShape extends ResponsiveShape {
   // Typography scaler for intelligent font sizing
   private typographyScaler: TypographyScaler;
 
+  // Smart text scaler for content-aware scaling
+  private smartTextScaler?: SmartTextScaler;
+  public enableSmartScaling: boolean;
+  public contentContext: 'scripture' | 'song' | 'announcement' | 'title';
+
   // Cached text metrics
   private cachedMetrics: ResponsiveTextMetrics | null = null;
   private lastTextHash: string | null = null;
@@ -70,11 +81,24 @@ export class ResponsiveTextShape extends ResponsiveShape {
     this.optimizeReadability = props.optimizeReadability !== false;
     this.scaleMode = props.scaleMode || TypographyScaleMode.FLUID;
 
+    // Smart scaling configuration
+    this.enableSmartScaling = props.enableSmartScaling !== false;
+    this.contentContext = props.contentContext || 'scripture';
+
     this.typographyScaler = new TypographyScaler({
       mode: this.scaleMode,
       minScale: 0.3,
       maxScale: 5.0
     });
+
+    // Initialize smart text scaler if enabled
+    if (this.enableSmartScaling) {
+      this.smartTextScaler = new SmartTextScaler(props.smartScalingConfig);
+      console.log('🧠 ResponsiveTextShape: Smart scaling enabled', {
+        context: this.contentContext,
+        hasCustomConfig: !!props.smartScalingConfig
+      });
+    }
 
     // Ensure typography config exists
     if (!this.typography) {
@@ -130,80 +154,226 @@ export class ResponsiveTextShape extends ResponsiveShape {
       // Use responsive calculations
       const containerInfo = layoutManager.getContainerInfo();
 
-      if (this.optimizeReadability) {
-        // Optimize for readability
-        const optimization = this.typographyScaler.optimizeForReadability(
-          this.typography,
-          containerInfo,
-          this.text
-        );
+      // Calculate initial metrics
+      metrics = this.calculateInitialMetrics(containerInfo, context);
 
-        metrics = {
-          fontSize: optimization.fontSize,
-          lineHeight: optimization.lineHeight,
-          actualWidth: 0, // Will be calculated during text measurement
-          actualHeight: 0, // Will be calculated during text measurement
-          lines: this.wrapText(this.text, optimization.fontSize),
-          charactersPerLine: optimization.metrics.charactersPerLine,
-          readabilityScore: optimization.metrics.readabilityScore
-        };
-      } else {
-        // Use basic responsive scaling
-        const fontSize = this.typographyScaler.calculateFontSize(
-          this.typography,
-          containerInfo,
-          this.text.length
-        );
-
-        const lineHeight = this.typographyScaler.calculateLineHeight(
-          fontSize,
-          this.typography,
-          containerInfo
-        );
-
-        metrics = {
-          fontSize,
-          lineHeight,
-          actualWidth: 0,
-          actualHeight: 0,
-          lines: this.wrapText(this.text, fontSize),
-          charactersPerLine: Math.floor(this.size.width / (fontSize * 0.6)),
-          readabilityScore: 1.0
-        };
-      }
-
-      // Measure actual text dimensions
-      if (context?.context instanceof CanvasRenderingContext2D) {
-        const dimensions = this.measureTextDimensions(
-          context.context,
-          metrics.lines,
-          metrics.fontSize,
-          metrics.lineHeight
-        );
-        metrics.actualWidth = dimensions.width;
-        metrics.actualHeight = dimensions.height;
-      }
+      // Apply overflow protection
+      metrics = this.applyOverflowProtection(metrics, context?.context as CanvasRenderingContext2D);
     } else {
       // Fallback to static typography
-      const fontSize = this.textStyle.fontSize || 16;
-      const lineHeight = fontSize * 1.2;
-      const lines = this.wordWrap ? this.wrapText(this.text, fontSize) : [this.text];
-
-      metrics = {
-        fontSize,
-        lineHeight,
-        actualWidth: 0,
-        actualHeight: lines.length * lineHeight,
-        lines,
-        charactersPerLine: 60, // Default assumption
-        readabilityScore: 0.7
-      };
+      metrics = this.calculateFallbackMetrics(context?.context as CanvasRenderingContext2D);
     }
 
     this.cachedMetrics = metrics;
     this.lastTextHash = textHash;
 
     return metrics;
+  }
+
+  /**
+   * Calculate initial responsive metrics
+   */
+  private calculateInitialMetrics(
+    containerInfo: any,
+    context?: RenderContext
+  ): ResponsiveTextMetrics {
+    let metrics: ResponsiveTextMetrics;
+
+    if (this.enableSmartScaling && this.smartTextScaler && this.text.trim().length > 0) {
+        // Use smart scaling for optimal size based on content
+        console.log('🎯 ResponsiveTextShape: Using smart scaling for content analysis');
+
+        const smartResult = this.smartTextScaler.calculateOptimalSize(
+          this.text,
+          containerInfo,
+          this.typography,
+          this.contentContext
+        );
+
+        console.log('🧠 Smart scaling result:', {
+          fontSize: smartResult.fontSize,
+          confidence: smartResult.confidence,
+          wordCount: smartResult.metrics.wordCount,
+          complexity: smartResult.metrics.complexity.toFixed(2),
+          reasons: smartResult.adjustmentReason
+        });
+
+      metrics = {
+        fontSize: smartResult.fontSize,
+        lineHeight: smartResult.lineHeight,
+        actualWidth: 0,
+        actualHeight: 0,
+        lines: this.wrapText(this.text, smartResult.fontSize, context?.context as CanvasRenderingContext2D),
+        charactersPerLine: smartResult.metrics.characterCount / Math.max(smartResult.metrics.wordCount, 1),
+        readabilityScore: smartResult.confidence
+      };
+    } else if (this.optimizeReadability) {
+      // Optimize for readability
+      const optimization = this.typographyScaler.optimizeForReadability(
+        this.typography,
+        containerInfo,
+        this.text
+      );
+
+      metrics = {
+        fontSize: optimization.fontSize,
+        lineHeight: optimization.lineHeight,
+        actualWidth: 0, // Will be calculated during text measurement
+        actualHeight: 0, // Will be calculated during text measurement
+        lines: this.wrapText(this.text, optimization.fontSize, context?.context as CanvasRenderingContext2D),
+        charactersPerLine: optimization.metrics.charactersPerLine,
+        readabilityScore: optimization.metrics.readabilityScore
+      };
+    } else {
+      // Use basic responsive scaling
+      const fontSize = this.typographyScaler.calculateFontSize(
+        this.typography,
+        containerInfo,
+        this.text.length
+      );
+
+      const lineHeight = this.typographyScaler.calculateLineHeight(
+        fontSize,
+        this.typography,
+        containerInfo
+      );
+
+      metrics = {
+        fontSize,
+        lineHeight,
+        actualWidth: 0,
+        actualHeight: 0,
+        lines: this.wrapText(this.text, fontSize, context?.context as CanvasRenderingContext2D),
+        charactersPerLine: Math.floor(Math.max(this.size.width, fontSize * 2) / (fontSize * 0.6)),
+        readabilityScore: 1.0
+      };
+    }
+
+    // Measure actual text dimensions
+    if (context?.context instanceof CanvasRenderingContext2D) {
+      const dimensions = this.measureTextDimensions(
+        context.context,
+        metrics.lines,
+        metrics.fontSize,
+        metrics.lineHeight
+      );
+      metrics.actualWidth = dimensions.width;
+      metrics.actualHeight = dimensions.height;
+    }
+
+    return metrics;
+  }
+
+  /**
+   * Calculate fallback metrics for non-responsive mode
+   */
+  private calculateFallbackMetrics(ctx?: CanvasRenderingContext2D): ResponsiveTextMetrics {
+    const fontSize = this.textStyle.fontSize || 16;
+    const lineHeight = fontSize * 1.2;
+    const lines = this.wordWrap ? this.wrapText(this.text, fontSize, ctx) : [this.text];
+
+    return {
+      fontSize,
+      lineHeight,
+      actualWidth: 0,
+      actualHeight: lines.length * lineHeight,
+      lines,
+      charactersPerLine: 60, // Default assumption
+      readabilityScore: 0.7
+    };
+  }
+
+  /**
+   * Apply overflow protection by reducing font size if text doesn't fit
+   */
+  private applyOverflowProtection(
+    metrics: ResponsiveTextMetrics,
+    ctx?: CanvasRenderingContext2D
+  ): ResponsiveTextMetrics {
+    if (!ctx || !this.size.width || !this.size.height) {
+      return metrics; // Can't measure without context or container
+    }
+
+    const maxIterations = 10;
+    let currentMetrics = { ...metrics };
+    let iteration = 0;
+
+    while (iteration < maxIterations) {
+      // Check if current metrics fit in container
+      const estimatedHeight = currentMetrics.lines.length * currentMetrics.lineHeight;
+
+      // Check vertical overflow
+      if (estimatedHeight > this.size.height) {
+        // Reduce font size by 10%
+        const newFontSize = Math.max(currentMetrics.fontSize * 0.9, 8); // Minimum 8px
+        const newLineHeight = newFontSize * (currentMetrics.lineHeight / currentMetrics.fontSize);
+
+        if (newFontSize === currentMetrics.fontSize) {
+          break; // Can't reduce further
+        }
+
+        currentMetrics = {
+          ...currentMetrics,
+          fontSize: newFontSize,
+          lineHeight: newLineHeight,
+          lines: this.wrapText(this.text, newFontSize, ctx)
+        };
+
+        console.log(`🔧 ResponsiveTextShape: Reduced font size to ${newFontSize}px for overflow protection`);
+      } else {
+        // Check horizontal overflow for each line
+        let hasHorizontalOverflow = false;
+        ctx.save();
+        this.setCanvasFont(ctx, currentMetrics.fontSize);
+
+        for (const line of currentMetrics.lines) {
+          const lineWidth = ctx.measureText(line).width;
+          if (lineWidth > this.size.width) {
+            hasHorizontalOverflow = true;
+            break;
+          }
+        }
+        ctx.restore();
+
+        if (hasHorizontalOverflow) {
+          // Re-wrap text with current font size
+          currentMetrics = {
+            ...currentMetrics,
+            lines: this.wrapText(this.text, currentMetrics.fontSize, ctx)
+          };
+        } else {
+          // Text fits, we're done
+          break;
+        }
+      }
+
+      iteration++;
+    }
+
+    // Update actual dimensions
+    if (ctx) {
+      const dimensions = this.measureTextDimensions(
+        ctx,
+        currentMetrics.lines,
+        currentMetrics.fontSize,
+        currentMetrics.lineHeight
+      );
+      currentMetrics.actualWidth = dimensions.width;
+      currentMetrics.actualHeight = dimensions.height;
+    }
+
+    return currentMetrics;
+  }
+
+  /**
+   * Set canvas font based on text style and font size
+   */
+  private setCanvasFont(ctx: CanvasRenderingContext2D, fontSize: number): void {
+    const style = this.textStyle;
+    const fontStyle = style.fontStyle || 'normal';
+    const fontWeight = style.fontWeight || 'normal';
+    const fontFamily = style.fontFamily || 'Arial, sans-serif';
+    ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
   }
 
   /**
@@ -302,19 +472,123 @@ export class ResponsiveTextShape extends ResponsiveShape {
   }
 
   /**
-   * Wrap text to fit within specified width
+   * Wrap text to fit within specified width using proper canvas text measurement
    */
-  private wrapText(text: string, fontSize: number): string[] {
+  private wrapText(text: string, fontSize: number, context?: CanvasRenderingContext2D): string[] {
     if (!this.wordWrap) {
       return [text];
     }
 
-    // Estimate character width (rough approximation)
-    const charWidth = fontSize * 0.6;
-    const maxCharsPerLine = Math.floor(this.size.width / charWidth);
+    // Ensure we have a minimum container width to work with
+    const minWidth = Math.max(fontSize * 2, 50); // At least 2 characters worth of space
+    const containerWidth = Math.max(this.size.width, minWidth);
 
-    if (maxCharsPerLine <= 0) {
-      return [text];
+    // If we have a canvas context, use precise text measurement
+    if (context) {
+      return this.wrapTextWithMeasurement(text, fontSize, containerWidth, context);
+    }
+
+    // Fallback to improved character width estimation
+    return this.wrapTextWithEstimation(text, fontSize, containerWidth);
+  }
+
+  /**
+   * Wrap text using precise canvas text measurement
+   */
+  private wrapTextWithMeasurement(
+    text: string,
+    fontSize: number,
+    containerWidth: number,
+    ctx: CanvasRenderingContext2D
+  ): string[] {
+    // Set font for measurement
+    const style = this.textStyle;
+    const fontStyle = style.fontStyle || 'normal';
+    const fontWeight = style.fontWeight || 'normal';
+    const fontFamily = style.fontFamily || 'Arial, sans-serif';
+    ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
+
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const metrics = ctx.measureText(testLine);
+
+      if (metrics.width > containerWidth && currentLine) {
+        // Current line would overflow, push it and start new line
+        lines.push(currentLine);
+        currentLine = word;
+
+        // Check if single word is too long
+        const wordMetrics = ctx.measureText(word);
+        if (wordMetrics.width > containerWidth) {
+          // Break long word into parts
+          const brokenWord = this.breakLongWord(word, containerWidth, ctx);
+          if (brokenWord.length > 1) {
+            // Add all but last part to lines, keep last part as current
+            for (let i = 0; i < brokenWord.length - 1; i++) {
+              lines.push(brokenWord[i]);
+            }
+            currentLine = brokenWord[brokenWord.length - 1];
+          }
+        }
+
+        // Check max lines limit
+        if (this.maxLines > 0 && lines.length >= this.maxLines) {
+          if (lines.length === this.maxLines) {
+            // Add ellipsis to the last line
+            const lastLine = lines[lines.length - 1];
+            const ellipsis = '...';
+            const ellipsisWidth = ctx.measureText(ellipsis).width;
+
+            // Trim the last line to fit ellipsis
+            let trimmedLine = lastLine;
+            while (trimmedLine.length > 0 && ctx.measureText(trimmedLine + ellipsis).width > containerWidth) {
+              trimmedLine = trimmedLine.slice(0, -1);
+            }
+            lines[lines.length - 1] = trimmedLine + ellipsis;
+          }
+          break;
+        }
+      } else {
+        currentLine = testLine;
+      }
+    }
+
+    // Add remaining text if within line limits
+    if (currentLine && (this.maxLines === 0 || lines.length < this.maxLines)) {
+      lines.push(currentLine);
+    }
+
+    return lines.length > 0 ? lines : ['']; // Always return at least one line
+  }
+
+  /**
+   * Wrap text using improved character width estimation (fallback)
+   */
+  private wrapTextWithEstimation(text: string, fontSize: number, containerWidth: number): string[] {
+    // Improved character width estimation based on font properties
+    let charWidth = fontSize * 0.6; // Base estimate
+
+    // Adjust for font weight
+    if (this.textStyle.fontWeight === 'bold' || this.textStyle.fontWeight === '700' || this.textStyle.fontWeight === '800' || this.textStyle.fontWeight === '900') {
+      charWidth *= 1.1; // Bold text is wider
+    }
+
+    // Adjust for font family
+    if (this.textStyle.fontFamily?.includes('monospace')) {
+      charWidth = fontSize * 0.6; // Monospace is more predictable
+    } else if (this.textStyle.fontFamily?.includes('serif')) {
+      charWidth *= 1.05; // Serif fonts tend to be slightly wider
+    }
+
+    const maxCharsPerLine = Math.floor(containerWidth / charWidth);
+
+    // Ensure we can fit at least one character
+    if (maxCharsPerLine < 1) {
+      return [text]; // Return as-is if container is too small
     }
 
     const words = text.split(' ');
@@ -326,14 +600,26 @@ export class ResponsiveTextShape extends ResponsiveShape {
 
       if (testLine.length > maxCharsPerLine && currentLine) {
         lines.push(currentLine);
-        currentLine = word;
+
+        // Handle long words that exceed line length
+        if (word.length > maxCharsPerLine) {
+          const brokenParts = this.breakLongWordByChars(word, maxCharsPerLine);
+          for (let i = 0; i < brokenParts.length - 1; i++) {
+            lines.push(brokenParts[i]);
+          }
+          currentLine = brokenParts[brokenParts.length - 1];
+        } else {
+          currentLine = word;
+        }
 
         // Check max lines limit
         if (this.maxLines > 0 && lines.length >= this.maxLines) {
-          // Add ellipsis to the last line if we've hit the limit
           if (lines.length === this.maxLines) {
             const lastLine = lines[lines.length - 1];
-            lines[lines.length - 1] = lastLine.slice(0, -3) + '...';
+            const maxCharsWithEllipsis = maxCharsPerLine - 3;
+            if (lastLine.length > maxCharsWithEllipsis) {
+              lines[lines.length - 1] = lastLine.slice(0, maxCharsWithEllipsis) + '...';
+            }
           }
           break;
         }
@@ -346,7 +632,49 @@ export class ResponsiveTextShape extends ResponsiveShape {
       lines.push(currentLine);
     }
 
-    return lines;
+    return lines.length > 0 ? lines : [''];
+  }
+
+  /**
+   * Break a long word using canvas measurement
+   */
+  private breakLongWord(word: string, containerWidth: number, ctx: CanvasRenderingContext2D): string[] {
+    if (word.length <= 1) return [word];
+
+    const parts: string[] = [];
+    let currentPart = '';
+
+    for (const char of word) {
+      const testPart = currentPart + char;
+      const metrics = ctx.measureText(testPart);
+
+      if (metrics.width > containerWidth && currentPart) {
+        parts.push(currentPart);
+        currentPart = char;
+      } else {
+        currentPart = testPart;
+      }
+    }
+
+    if (currentPart) {
+      parts.push(currentPart);
+    }
+
+    return parts.length > 0 ? parts : [word];
+  }
+
+  /**
+   * Break a long word by character count (fallback)
+   */
+  private breakLongWordByChars(word: string, maxCharsPerLine: number): string[] {
+    if (word.length <= maxCharsPerLine) return [word];
+
+    const parts: string[] = [];
+    for (let i = 0; i < word.length; i += maxCharsPerLine) {
+      parts.push(word.slice(i, i + maxCharsPerLine));
+    }
+
+    return parts;
   }
 
   /**
@@ -413,11 +741,34 @@ export class ResponsiveTextShape extends ResponsiveShape {
   }
 
   /**
-   * Get layout manager from render context
+   * Get layout manager from render context or cached instance
    */
   private getLayoutManagerFromRenderContext(context: RenderContext): ResponsiveLayoutManager | undefined {
-    // Extract layout manager from render context if available
-    return context.layoutManager as ResponsiveLayoutManager | undefined;
+    // First try to get from render context (preferred)
+    const contextLayoutManager = context.layoutManager as ResponsiveLayoutManager | undefined;
+    if (contextLayoutManager) {
+      return contextLayoutManager;
+    }
+
+    // Fallback to cached layout manager
+    return this.getLayoutManager();
+  }
+
+  /**
+   * Override invalidateLayout to clear cached metrics
+   */
+  protected invalidateLayout(): void {
+    super.invalidateLayout();
+    this.cachedMetrics = null;
+    this.lastTextHash = null;
+
+    console.log('🎯 ResponsiveTextShape: Layout invalidated, cached metrics cleared', {
+      shapeId: this.id,
+      hasLayoutManager: !!this.getLayoutManager(),
+      responsive: this.responsive,
+      hasTypography: !!this.typography,
+      text: this.text.substring(0, 30) + '...'
+    });
   }
 
   /**
@@ -453,6 +804,77 @@ export class ResponsiveTextShape extends ResponsiveShape {
    */
   public getTextMetrics(layoutManager?: ResponsiveLayoutManager): ResponsiveTextMetrics {
     return this.calculateResponsiveMetrics(layoutManager);
+  }
+
+  /**
+   * Update smart scaling configuration
+   */
+  public updateSmartScaling(enabled: boolean, context?: 'scripture' | 'song' | 'announcement' | 'title'): void {
+    this.enableSmartScaling = enabled;
+    if (context) {
+      this.contentContext = context;
+    }
+
+    if (enabled && !this.smartTextScaler) {
+      this.smartTextScaler = new SmartTextScaler();
+    }
+
+    this.invalidateTextCache();
+    console.log('🧠 ResponsiveTextShape: Smart scaling updated', {
+      enabled,
+      context: this.contentContext
+    });
+  }
+
+  /**
+   * Get content analysis for the current text
+   */
+  public analyzeContent(): ContentCharacteristics | null {
+    if (!this.smartTextScaler || !this.text.trim()) return null;
+    return this.smartTextScaler.analyzeContent(this.text);
+  }
+
+  /**
+   * Predict if current text will fit with given constraints
+   */
+  public predictTextFit(maxLines?: number): ReturnType<SmartTextScaler['predictTextFit']> | null {
+    if (!this.smartTextScaler || !this.text.trim()) return null;
+
+    const containerInfo = {
+      width: this.size.width,
+      height: this.size.height
+    };
+
+    const currentMetrics = this.cachedMetrics;
+    if (!currentMetrics) return null;
+
+    return this.smartTextScaler.predictTextFit(
+      this.text,
+      currentMetrics.fontSize,
+      currentMetrics.lineHeight,
+      containerInfo,
+      maxLines || this.maxLines || undefined
+    );
+  }
+
+  /**
+   * Find the optimal font size that fits the content
+   */
+  public findOptimalFitSize(): ReturnType<SmartTextScaler['findOptimalFitSize']> | null {
+    if (!this.smartTextScaler || !this.text.trim() || !this.typography) return null;
+
+    const containerInfo = {
+      width: this.size.width,
+      height: this.size.height
+    };
+
+    return this.smartTextScaler.findOptimalFitSize(
+      this.text,
+      containerInfo,
+      this.typography,
+      this.contentContext,
+      this.maxLines || undefined
+    );
   }
 
   /**

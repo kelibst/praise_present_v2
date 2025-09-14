@@ -30,3 +30,10 @@ export {
   analyzeShape
 } from './utils/shapeTypeGuards';
 export { ScalingManager } from './utils/ScalingManager';
+
+// Advanced layout system
+export {
+  AdvancedLayoutMode,
+  AdvancedLayoutManager,
+  ADVANCED_LAYOUT_CONFIGS
+} from './layout/AdvancedLayoutModes';

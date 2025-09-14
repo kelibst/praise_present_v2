@@ -52,10 +52,76 @@ export class TemplateManager {
    * Checks if the TemplateManager is properly initialized
    */
   public isInitialized(): boolean {
-    return this.initialized &&
-           this.templates.size >= 0 &&
-           this.themes.size > 0 &&
-           this.defaultTheme !== undefined;
+    try {
+      return this.initialized &&
+             this.templates.size >= 0 &&
+             this.themes.size > 0 &&
+             this.defaultTheme !== undefined &&
+             this.slideSize?.width > 0 &&
+             this.slideSize?.height > 0;
+    } catch (error) {
+      console.error('TemplateManager: Error checking initialization state:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Validates the current state and attempts recovery if needed
+   */
+  public validateAndRecover(): { isValid: boolean; warnings: string[]; recovered: boolean } {
+    const warnings: string[] = [];
+    let recovered = false;
+
+    // Check basic initialization
+    if (!this.initialized) {
+      warnings.push('TemplateManager not initialized');
+      this.initialize(this.slideSize || { width: 1920, height: 1080 });
+      recovered = true;
+    }
+
+    // Validate slide size
+    if (!this.slideSize || this.slideSize.width <= 0 || this.slideSize.height <= 0) {
+      warnings.push('Invalid slide size detected');
+      this.slideSize = { width: 1920, height: 1080 };
+      recovered = true;
+    }
+
+    // Validate themes
+    if (this.themes.size === 0 || !this.defaultTheme) {
+      warnings.push('No themes available');
+      this.defaultTheme = this.createDefaultTheme();
+      this.themes.set(this.defaultTheme.id, this.defaultTheme);
+      recovered = true;
+    }
+
+    // Validate default theme structure
+    try {
+      const theme = this.defaultTheme;
+      if (!theme.colors || !theme.fonts || !theme.spacing) {
+        warnings.push('Default theme structure incomplete');
+        this.defaultTheme = this.createDefaultTheme();
+        this.themes.set(this.defaultTheme.id, this.defaultTheme);
+        recovered = true;
+      }
+    } catch (error) {
+      warnings.push('Default theme validation failed');
+      this.defaultTheme = this.createDefaultTheme();
+      this.themes.set(this.defaultTheme.id, this.defaultTheme);
+      recovered = true;
+    }
+
+    const isValid = this.isInitialized();
+
+    if (recovered) {
+      console.log('TemplateManager: Recovery completed', {
+        isValid,
+        warnings,
+        totalThemes: this.themes.size,
+        totalTemplates: this.templates.size
+      });
+    }
+
+    return { isValid, warnings, recovered };
   }
 
   /**
@@ -412,15 +478,46 @@ export class TemplateManager {
   }
 }
 
-// Create singleton with proper initialization checks
+// Create singleton with enhanced initialization and recovery
 export const templateManager = (() => {
   const manager = new TemplateManager();
 
-  // Ensure template manager is properly initialized
-  if (!manager.isInitialized()) {
-    console.warn('Global TemplateManager not properly initialized, reinitializing...');
-    manager.initialize({ width: 1920, height: 1080 });
+  // Validate and recover if needed
+  const validationResult = manager.validateAndRecover();
+
+  if (!validationResult.isValid) {
+    console.error('Global TemplateManager: Critical initialization failure. Attempting full reset...');
+    try {
+      manager.initialize({ width: 1920, height: 1080 });
+      const retryValidation = manager.validateAndRecover();
+
+      if (retryValidation.isValid) {
+        console.log('Global TemplateManager: Successfully recovered after full reset');
+      } else {
+        console.error('Global TemplateManager: Failed to initialize even after full reset', retryValidation.warnings);
+      }
+    } catch (error) {
+      console.error('Global TemplateManager: Fatal initialization error:', error);
+    }
+  } else if (validationResult.recovered) {
+    console.log('Global TemplateManager: Successfully initialized with auto-recovery', validationResult.warnings);
+  } else {
+    console.log('Global TemplateManager: Successfully initialized without issues');
   }
 
   return manager;
 })();
+
+/**
+ * Utility function to ensure template manager is ready before use
+ */
+export function ensureTemplateManagerReady(): typeof templateManager {
+  const validation = templateManager.validateAndRecover();
+
+  if (!validation.isValid) {
+    console.warn('TemplateManager validation failed, attempting recovery');
+    templateManager.initialize({ width: 1920, height: 1080 });
+  }
+
+  return templateManager;
+}

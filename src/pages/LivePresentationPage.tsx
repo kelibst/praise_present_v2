@@ -7,7 +7,7 @@ import { sampleServices } from '../../data/sample-services';
 
 // Import template system
 import { ScriptureTemplate, SongTemplate, SlideGenerator, Shape } from '../rendering';
-import { TemplateManager } from '../rendering/templates/TemplateManager';
+import { TemplateManager, ensureTemplateManagerReady } from '../rendering/templates/TemplateManager';
 import { DEFAULT_SLIDE_SIZE } from '../rendering/templates/templateUtils';
 import BibleSelector from '../components/bible/BibleSelector';
 import SongLibrary from '../components/songs/SongLibrary';
@@ -64,14 +64,37 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showPropertyPanel, setShowPropertyPanel] = useState(false);
 
-  // Template system
+  // Template system with enhanced initialization
   const [templateManager] = useState(() => {
-    const manager = new TemplateManager(DEFAULT_SLIDE_SIZE);
-    // Ensure manager is properly initialized
-    if (!manager.isInitialized()) {
-      console.warn('TemplateManager not properly initialized, reinitializing...');
+    console.log('🔧 LivePresentationPage: Initializing TemplateManager with enhanced validation');
+
+    // Use the enhanced template manager initialization
+    const manager = ensureTemplateManagerReady();
+
+    // Validate it's ready for our specific slide size
+    const validation = manager.validateAndRecover();
+
+    if (!validation.isValid) {
+      console.warn('TemplateManager validation failed for LivePresentationPage, performing full initialization');
+      manager.initialize(DEFAULT_SLIDE_SIZE);
+    } else if (validation.recovered) {
+      console.log('TemplateManager auto-recovered successfully', validation.warnings);
+    }
+
+    // Double-check with our slide size
+    if (manager.getSlideSize().width !== DEFAULT_SLIDE_SIZE.width ||
+        manager.getSlideSize().height !== DEFAULT_SLIDE_SIZE.height) {
+      console.log('TemplateManager: Updating slide size to match DEFAULT_SLIDE_SIZE');
       manager.initialize(DEFAULT_SLIDE_SIZE);
     }
+
+    console.log('✅ LivePresentationPage: TemplateManager ready', {
+      isInitialized: manager.isInitialized(),
+      slideSize: manager.getSlideSize(),
+      themeCount: manager.getAllThemes().length,
+      templateCount: manager.getAllTemplates().length
+    });
+
     return manager;
   });
   const [slideGenerator] = useState(() => new SlideGenerator());
@@ -995,18 +1018,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               {getPreviewContent ? (
                 <div className="h-full flex flex-col">
                   {/* Debug info - remove after testing */}
-                  <div className="text-xs text-gray-400 mb-2 p-2 bg-gray-800 rounded flex-shrink-0">
-                    Debug Info:<br/>
-                    • Selected Item: {selectedItem?.title || 'None'}<br/>
-                    • Current Slide Index: {currentSlideIndex}<br/>
-                    • Total Slides: {selectedItem?.slides?.length || 0}<br/>
-                    • Content Type: {getPreviewContent?.type}<br/>
-                    • Slide Shapes: {getPreviewContent?.slide?.shapes?.length || 0}<br/>
-                    • Current Slide ID: {currentSlide?.id || 'None'}<br/>
-                    • First Shape Type: {getPreviewContent?.slide?.shapes?.[0]?.type || 'None'}<br/>
-                    • First Shape Constructor: {getPreviewContent?.slide?.shapes?.[0]?.constructor?.name || 'None'}<br/>
-                    • Shape has isVisible method: {typeof getPreviewContent?.slide?.shapes?.[0]?.isVisible === 'function' ? 'Yes' : 'No'}
-                  </div>
                   <div className="flex-1 min-h-0">
                     <EditableSlidePreview
                       content={getPreviewContent}

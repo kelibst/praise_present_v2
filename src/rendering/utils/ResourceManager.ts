@@ -37,7 +37,7 @@ export class ResourceManager {
   }
 
   /**
-   * Creates a debounced ResizeObserver for dimension watching
+   * Creates a debounced ResizeObserver for dimension watching with enhanced cleanup
    */
   public createDimensionWatcher(
     id: string,
@@ -49,23 +49,85 @@ export class ResourceManager {
     this.cleanupObserver(id);
 
     let timeoutId: NodeJS.Timeout;
+    let isDisposed = false;
+
     const debouncedCallback = (entries: ResizeObserverEntry[]) => {
+      if (isDisposed) return; // Prevent callbacks after disposal
+
       if (timeoutId) clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => callback(entries), debounceMs);
+      timeoutId = setTimeout(() => {
+        if (!isDisposed) {
+          callback(entries);
+        }
+      }, debounceMs);
     };
 
     const observer = new ResizeObserver(debouncedCallback);
-    observer.observe(element);
 
-    this.observers.set(id, observer);
+    try {
+      observer.observe(element);
+      this.observers.set(id, observer);
 
-    // Store cleanup timeout reference
-    const cleanup = () => {
+      // Store enhanced cleanup timeout reference with disposal flag
+      const cleanup = () => {
+        isDisposed = true;
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+      this.addCleanupTask(cleanup);
+
+      console.log(`ResourceManager: Created dimension watcher ${id} with ${debounceMs}ms debounce`);
+    } catch (error) {
+      console.error(`ResourceManager: Failed to create dimension watcher ${id}:`, error);
+      isDisposed = true;
       if (timeoutId) clearTimeout(timeoutId);
-    };
-    this.addCleanupTask(cleanup);
+    }
+  }
 
-    console.log(`ResourceManager: Created dimension watcher ${id}`);
+  /**
+   * Creates a smart dimension watcher that automatically adjusts debounce based on change frequency
+   */
+  public createSmartDimensionWatcher(
+    id: string,
+    element: Element,
+    callback: (entries: ResizeObserverEntry[]) => void,
+    options: {
+      minDebounceMs?: number;
+      maxDebounceMs?: number;
+      adaptiveThreshold?: number;
+    } = {}
+  ): void {
+    const {
+      minDebounceMs = 100,
+      maxDebounceMs = 1000,
+      adaptiveThreshold = 5
+    } = options;
+
+    let changeCount = 0;
+    let lastChangeTime = Date.now();
+    let currentDebounce = Math.min(500, maxDebounceMs);
+
+    const adaptiveCallback = (entries: ResizeObserverEntry[]) => {
+      const now = Date.now();
+      const timeSinceLastChange = now - lastChangeTime;
+
+      changeCount++;
+      lastChangeTime = now;
+
+      // Adjust debounce based on change frequency
+      if (timeSinceLastChange < 200 && changeCount > adaptiveThreshold) {
+        // Rapid changes detected, increase debounce
+        currentDebounce = Math.min(currentDebounce * 1.5, maxDebounceMs);
+      } else if (timeSinceLastChange > 1000) {
+        // Slow changes, reduce debounce for responsiveness
+        currentDebounce = Math.max(currentDebounce * 0.8, minDebounceMs);
+        changeCount = 0; // Reset counter
+      }
+
+      callback(entries);
+    };
+
+    this.createDimensionWatcher(id, element, adaptiveCallback, currentDebounce);
+    console.log(`ResourceManager: Created smart dimension watcher ${id} (adaptive: ${minDebounceMs}-${maxDebounceMs}ms)`);
   }
 
   /**
@@ -162,6 +224,67 @@ export class ResourceManager {
     if (stats.observers > 10) {
       console.warn('ResourceManager: High number of observers, potential memory leak');
     }
+    if (stats.intervals > 20) {
+      console.warn('ResourceManager: High number of intervals, potential performance issue');
+    }
+    if (stats.cleanupTasks > 50) {
+      console.warn('ResourceManager: High number of cleanup tasks, consider batch cleanup');
+    }
+  }
+
+  /**
+   * Performs automatic memory cleanup based on resource usage
+   */
+  public performMaintenanceCleanup(): void {
+    const stats = this.getStats();
+
+    console.log('ResourceManager: Starting maintenance cleanup', stats);
+
+    // Clean up any stale resources
+    let cleanedUp = 0;
+
+    // Force garbage collection if available (development only)
+    if (typeof window !== 'undefined' && (window as any).gc && process.env.NODE_ENV === 'development') {
+      try {
+        (window as any).gc();
+        console.log('ResourceManager: Forced garbage collection');
+      } catch (e) {
+        // gc not available
+      }
+    }
+
+    // Log memory usage if available
+    if (typeof window !== 'undefined' && 'performance' in window && 'memory' in (window.performance as any)) {
+      const memory = (window.performance as any).memory;
+      console.log('ResourceManager: Memory usage', {
+        used: `${Math.round(memory.usedJSHeapSize / 1024 / 1024)}MB`,
+        total: `${Math.round(memory.totalJSHeapSize / 1024 / 1024)}MB`,
+        limit: `${Math.round(memory.jsHeapSizeLimit / 1024 / 1024)}MB`
+      });
+    }
+
+    const finalStats = this.getStats();
+    console.log(`ResourceManager: Maintenance cleanup completed. Resources: ${stats.engines + stats.observers + stats.intervals + stats.timeouts} → ${finalStats.engines + finalStats.observers + finalStats.intervals + finalStats.timeouts}`);
+  }
+
+  /**
+   * Schedules periodic maintenance cleanup
+   */
+  public startMaintenanceSchedule(intervalMs: number = 300000): void { // Default: 5 minutes
+    const maintenanceId = 'resource-maintenance';
+    this.createInterval(maintenanceId, () => {
+      this.performMaintenanceCleanup();
+    }, intervalMs);
+
+    console.log(`ResourceManager: Started maintenance schedule every ${intervalMs / 1000}s`);
+  }
+
+  /**
+   * Stops maintenance schedule
+   */
+  public stopMaintenanceSchedule(): void {
+    this.cleanupInterval('resource-maintenance');
+    console.log('ResourceManager: Stopped maintenance schedule');
   }
 
   // Private cleanup methods

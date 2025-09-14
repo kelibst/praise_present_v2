@@ -49,6 +49,9 @@ export abstract class ResponsiveShape extends Shape {
   public maintainAspectRatio: boolean;
   public adaptToContainer: boolean;
 
+  // Cached layout manager for responsive calculations
+  protected cachedLayoutManager?: ResponsiveLayoutManager;
+
   // Cached computed values
   private cachedPixelPosition: Point | null = null;
   private cachedPixelSize: Size | null = null;
@@ -150,6 +153,9 @@ export abstract class ResponsiveShape extends Shape {
       }
     }
 
+    // Apply defensive bounds checking to prevent zero/negative sizes
+    this.cachedPixelSize = this.sanitizeSize(this.cachedPixelSize);
+
     this.lastContainerInfo = containerHash;
     return this.cachedPixelSize;
   }
@@ -222,6 +228,28 @@ export abstract class ResponsiveShape extends Shape {
   }
 
   /**
+   * Set layout manager and invalidate cached calculations
+   */
+  public setLayoutManager(layoutManager: ResponsiveLayoutManager): void {
+    this.cachedLayoutManager = layoutManager;
+    this.invalidateLayout();
+  }
+
+  /**
+   * Get current layout manager (for subclasses)
+   */
+  protected getLayoutManager(): ResponsiveLayoutManager | undefined {
+    return this.cachedLayoutManager;
+  }
+
+  /**
+   * Invalidate layout calculations (for subclasses to override)
+   */
+  protected invalidateLayout(): void {
+    // Subclasses can override to clear cached calculations
+  }
+
+  /**
    * Create default flexible position from current position
    */
   private createDefaultFlexiblePosition(): FlexiblePosition {
@@ -267,6 +295,20 @@ export abstract class ResponsiveShape extends Shape {
     }
 
     return size;
+  }
+
+  /**
+   * Sanitize size to ensure valid dimensions
+   */
+  private sanitizeSize(size: Size): Size {
+    const minWidth = 1; // Minimum 1px width
+    const minHeight = 1; // Minimum 1px height
+    const maxDimension = 10000; // Maximum reasonable dimension
+
+    return {
+      width: Math.max(minWidth, Math.min(maxDimension, Math.abs(size.width) || minWidth)),
+      height: Math.max(minHeight, Math.min(maxDimension, Math.abs(size.height) || minHeight))
+    };
   }
 
   /**

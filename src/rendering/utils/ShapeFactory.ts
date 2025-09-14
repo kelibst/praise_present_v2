@@ -52,7 +52,16 @@ export class ShapeFactory {
                                    serializedShape.optimizeReadability !== undefined;
 
           if (hasResponsiveProps) {
-            // Create ResponsiveTextShape
+            // Create ResponsiveTextShape with default typography if missing
+            const defaultTypography = {
+              scaleRatio: 0.8,
+              minSize: { value: 16, unit: 'px' as const },
+              maxSize: { value: 120, unit: 'px' as const },
+              lineHeightRatio: 1.2,
+              adaptiveScaling: true,
+              scaleMode: TypographyScaleMode.FLUID
+            };
+
             const responsiveProps = {
               text: text || serializedShape.text || '',
               textStyle: serializedShape.textStyle || style || {},
@@ -65,7 +74,7 @@ export class ShapeFactory {
               flexiblePosition: serializedShape.flexiblePosition,
               flexibleSize: serializedShape.flexibleSize,
               layoutConfig: serializedShape.layoutConfig,
-              typography: serializedShape.typography,
+              typography: serializedShape.typography || defaultTypography,
               maintainAspectRatio: serializedShape.maintainAspectRatio,
               position: shapeBounds.position || { x: 0, y: 0 },
               size: shapeBounds.size || { width: 100, height: 50 },
@@ -79,7 +88,11 @@ export class ShapeFactory {
               responsive: responsiveProps.responsive,
               hasFlexiblePosition: !!responsiveProps.flexiblePosition,
               hasLayoutConfig: !!responsiveProps.layoutConfig,
-              optimizeReadability: responsiveProps.optimizeReadability
+              optimizeReadability: responsiveProps.optimizeReadability,
+              hasTypography: !!responsiveProps.typography,
+              typographyFromSerial: !!serializedShape.typography,
+              typographyMinSize: responsiveProps.typography?.minSize,
+              typographyMaxSize: responsiveProps.typography?.maxSize
             });
 
             return new ResponsiveTextShape(responsiveProps);

@@ -12,13 +12,24 @@ import {
   percent,
   px,
   createFlexiblePosition,
-  createFlexibleSize
+  createFlexibleSize,
+  AdvancedLayoutMode,
+  AdvancedLayoutManager
 } from '../rendering';
 import { RenderQuality } from '../rendering/types/rendering';
 import { GeneratedSlide } from '../rendering/SlideGenerator';
 import { createColor } from '../rendering/types/geometry';
 import { ResourceManager } from '../rendering/utils/ResourceManager';
 import { isTextShape } from '../rendering/utils/shapeTypeGuards';
+import { ResponsiveControlPanel, ResponsiveControlConfig, DEFAULT_RESPONSIVE_CONFIG } from './controls/ResponsiveControlPanel';
+import {
+  PreviewSyncManager,
+  SyncEventType,
+  emitSlideUpdated,
+  emitTextEdited,
+  emitConfigUpdated,
+  emitResponsiveUpdated
+} from '../rendering/sync/PreviewSyncManager';
 
 interface EditableSlidePreviewProps {
   /** Content to render in the preview */
@@ -80,12 +91,25 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
   const [editPosition, setEditPosition] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Responsive controls configuration
+  const [responsiveConfig, setResponsiveConfig] = useState<ResponsiveControlConfig>(DEFAULT_RESPONSIVE_CONFIG);
+  const [showResponsiveControls, setShowResponsiveControls] = useState(false);
+
+  // Sync manager for real-time updates
+  const syncManagerRef = useRef<PreviewSyncManager | null>(null);
+
   // Initialize rendering engine and slide renderer
   useEffect(() => {
     if (!canvasRef.current) return;
 
     const resourceManager = ResourceManager.getInstance();
     const resourceId = `editable-preview-${Date.now()}`;
+
+    // Start maintenance schedule for resource cleanup (only once globally)
+    if (typeof window !== 'undefined' && !(window as any).__resourceMaintenanceStarted) {
+      resourceManager.startMaintenanceSchedule(300000); // 5 minutes
+      (window as any).__resourceMaintenanceStarted = true;
+    }
 
     try {
       console.log('🔧 EditableSlidePreview: Initializing ResponsiveRenderingEngine with canvas', {
@@ -131,8 +155,103 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
 
       engineRef.current = engine;
 
+      // Initialize sync manager
+      syncManagerRef.current = PreviewSyncManager.getInstance({
+        debounceMs: 150,
+        enableBatching: true,
+        batchTimeoutMs: 50,
+        enableLogging: true
+      });
+
+      // Set up sync event listeners for real-time updates
+      const configUnsubscribe = syncManagerRef.current.subscribe(
+        SyncEventType.CONFIG_UPDATED,
+        (event: any) => {
+          console.log('🔄 EditableSlidePreview: Received config update sync event', event);
+          if (event.source !== 'preview') {
+            // Update our config to match the change from live display or controls
+            setResponsiveConfig(event.config);
+
+            // Re-render with new config
+            if (engineRef.current && currentSlide) {
+              engineRef.current.render();
+            }
+          }
+        }
+      );
+
+      const textEditUnsubscribe = syncManagerRef.current.subscribe(
+        SyncEventType.TEXT_EDITED,
+        (event: any) => {
+          console.log('🔄 EditableSlidePreview: Received text edit sync event', event);
+          if (event.source !== 'preview') {
+            // Update text from external source (live display)
+            const shapeToUpdate = editableShapes.find(s => s.originalShape.id === event.shapeId);
+            if (shapeToUpdate && shapeToUpdate.originalShape.setText) {
+              shapeToUpdate.originalShape.setText(event.newText);
+
+              // Re-render the slide
+              if (engineRef.current) {
+                engineRef.current.render();
+              }
+
+              // Update our state
+              setEditableShapes(prev => prev.map(s => ({
+                ...s,
+                originalText: s.originalShape.id === event.shapeId ? event.newText : s.originalText,
+                editingText: s.originalShape.id === event.shapeId ? event.newText : s.editingText
+              })));
+            }
+          }
+        }
+      );
+
+      // Store unsubscribe functions for cleanup
+      (syncManagerRef.current as any)._unsubscribeFunctions = [
+        configUnsubscribe,
+        textEditUnsubscribe
+      ];
+
+      console.log('🔄 EditableSlidePreview: Sync manager initialized with event listeners');
+
       // Register engine with resource manager for proper cleanup
       resourceManager.registerEngine(resourceId, engine);
+
+      // Set up smart dimension watching for responsive updates
+      if (canvasRef.current) {
+        resourceManager.createSmartDimensionWatcher(
+          `${resourceId}-canvas`,
+          canvasRef.current,
+          (entries) => {
+            console.log('📐 EditableSlidePreview: Canvas dimensions changed, updating responsive layout');
+
+            // Update canvas dimensions
+            const canvas = canvasRef.current;
+            if (canvas && entries.length > 0) {
+              const entry = entries[0];
+              const newWidth = Math.round(entry.contentRect.width);
+              const newHeight = Math.round(entry.contentRect.height);
+
+              if (newWidth !== canvas.clientWidth || newHeight !== canvas.clientHeight) {
+                console.log('🎯 EditableSlidePreview: Resizing canvas for responsive layout', {
+                  from: `${canvas.clientWidth}x${canvas.clientHeight}`,
+                  to: `${newWidth}x${newHeight}`
+                });
+
+                // Trigger responsive re-render
+                if (engineRef.current) {
+                  engineRef.current.resize(newWidth, newHeight);
+                }
+              }
+            }
+          },
+          {
+            minDebounceMs: 100,  // Quick response for smooth resizing
+            maxDebounceMs: 500,  // Don't delay too long
+            adaptiveThreshold: 3 // Adjust quickly to resize patterns
+          }
+        );
+      }
 
       // Set canvas to actual container size for responsive rendering
       if (canvasRef.current) {
@@ -173,6 +292,13 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
     }
 
     return () => {
+      // Clean up sync manager listeners
+      if (syncManagerRef.current && (syncManagerRef.current as any)._unsubscribeFunctions) {
+        (syncManagerRef.current as any)._unsubscribeFunctions.forEach((unsubscribe: () => void) => {
+          unsubscribe();
+        });
+      }
+
       // Clean up all resources for this component
       resourceManager.cleanup(resourceId);
 
@@ -183,6 +309,7 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
       // Engine cleanup is handled by ResourceManager, but clean up refs
       engineRef.current = null;
       slideRendererRef.current = null;
+      syncManagerRef.current = null;
 
       console.log(`EditableSlidePreview: Cleaned up resources for ${resourceId}`);
     };
@@ -465,6 +592,16 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
         onContentChange(updatedContent);
       }
 
+      // Emit sync event for text change
+      if (syncManagerRef.current) {
+        emitTextEdited(
+          shapeId,
+          newText,
+          shape.originalText,
+          'preview'
+        );
+      }
+
       // Clear editing state
       setActiveEditId(null);
       setEditPosition(null);
@@ -476,6 +613,209 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
       setError(`Save failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }, [editableShapes, currentSlide, content, onContentChange]);
+
+  // Apply responsive configuration changes to the ResponsiveRenderingEngine
+  useEffect(() => {
+    if (!engineRef.current) return;
+
+    const engine = engineRef.current;
+
+    // Apply responsive settings
+    engine.setResponsiveEnabled(responsiveConfig.responsive.enabled);
+
+    // Apply performance settings
+    engine.setSelectiveRenderingEnabled(responsiveConfig.performance.selectiveRendering);
+
+    // Apply layout settings
+    if (responsiveConfig.layout.mode && responsiveConfig.layout.mode !== AdvancedLayoutMode.SCRIPTURE_CENTERED) {
+      engine.setAdvancedLayoutMode(responsiveConfig.layout.mode);
+    } else if (responsiveConfig.layout.autoDetect) {
+      // Auto-detect layout mode based on content
+      const detectedMode = detectLayoutModeFromContent();
+      if (detectedMode) {
+        engine.setAdvancedLayoutMode(detectedMode);
+      }
+    }
+
+    // Apply typography settings to all responsive text shapes
+    const allShapes = engine.getAllShapes();
+    let responsiveShapesUpdated = 0;
+
+    allShapes.forEach((shape: Shape) => {
+      if (shape instanceof ResponsiveTextShape) {
+        // CRITICAL: Set layout manager for responsive calculations
+        shape.setLayoutManager(engine.getLayoutManager());
+
+        // Update responsive typography configuration
+        shape.updateSmartScaling(
+          responsiveConfig.smartScaling.enabled,
+          responsiveConfig.smartScaling.context
+        );
+
+        // Update typography configuration with better scaling parameters
+        shape.updateTypography({
+          scaleRatio: 0.75, // Slightly more aggressive scaling
+          minSize: responsiveConfig.smartScaling.minSize,
+          maxSize: responsiveConfig.smartScaling.maxSize,
+          lineHeightRatio: 1.2 // Better line spacing
+        });
+
+        // Update responsive configuration
+        engine.updateResponsiveConfiguration(shape.id, {
+          responsive: responsiveConfig.responsive.enabled,
+          maintainAspectRatio: responsiveConfig.responsive.maintainAspectRatio
+        });
+
+        responsiveShapesUpdated++;
+      }
+    });
+
+    // Trigger re-render with new configuration
+    engine.requestRender();
+
+    console.log('🎯 EditableSlidePreview: Applied responsive configuration to engine', {
+      responsive: responsiveConfig.responsive.enabled,
+      smartScaling: responsiveConfig.smartScaling.enabled,
+      context: responsiveConfig.smartScaling.context,
+      shapesUpdated: responsiveShapesUpdated,
+      totalShapes: allShapes.length,
+      hasLayoutManager: !!engine.getLayoutManager()
+    });
+
+  }, [responsiveConfig]);
+
+  // Apply responsive configuration when content changes (newly loaded shapes)
+  useEffect(() => {
+    if (!engineRef.current || !content) return;
+
+    const engine = engineRef.current;
+
+    // Wait for content to be fully loaded, then apply responsive configuration
+    const applyTimer = setTimeout(() => {
+      const allShapes = engine.getAllShapes();
+      let newShapesConfigured = 0;
+
+      allShapes.forEach((shape: Shape) => {
+        if (shape instanceof ResponsiveTextShape) {
+          // Ensure layout manager is set for newly added shapes
+          shape.setLayoutManager(engine.getLayoutManager());
+
+          // Apply current responsive configuration if not already configured
+          if (!shape.typography) {
+            shape.updateTypography({
+              scaleRatio: 0.75,
+              minSize: responsiveConfig.smartScaling.minSize,
+              maxSize: responsiveConfig.smartScaling.maxSize,
+              lineHeightRatio: 1.2
+            });
+            newShapesConfigured++;
+          }
+
+          // Ensure smart scaling is properly configured
+          shape.updateSmartScaling(
+            responsiveConfig.smartScaling.enabled,
+            responsiveConfig.smartScaling.context
+          );
+        }
+      });
+
+      if (newShapesConfigured > 0) {
+        engine.requestRender();
+        console.log('🔄 EditableSlidePreview: Configured newly loaded shapes', {
+          newShapesConfigured,
+          totalShapes: allShapes.length,
+          contentType: content.type
+        });
+      }
+    }, 100); // Small delay to ensure shapes are fully loaded
+
+    return () => clearTimeout(applyTimer);
+  }, [content, responsiveConfig]);
+
+  // Auto-detect layout mode based on content type and context
+  const detectLayoutModeFromContent = useCallback((): AdvancedLayoutMode | null => {
+    if (!content) return null;
+
+    // Detect based on content type
+    if (content.type === 'template-slide' && content.slide) {
+      // Look for content hints in the slide
+      const textShapes = content.slide.shapes.filter((shape: any) => shape.type === 'text');
+      const totalTextLength = textShapes.reduce((sum: number, shape: any) => sum + (shape.text?.length || 0), 0);
+
+      // Scripture detection (usually longer text, specific formatting)
+      if (textShapes.length <= 3 && totalTextLength > 50) {
+        // Check if it looks like a verse + reference
+        const hasReference = textShapes.some((shape: any) =>
+          shape.text && /\d+:\d+/.test(shape.text) && shape.text.length < 30
+        );
+        if (hasReference) {
+          return AdvancedLayoutMode.SCRIPTURE_VERSE_REFERENCE;
+        }
+        return AdvancedLayoutMode.SCRIPTURE_CENTERED;
+      }
+
+      // Song detection (multiple verses, shorter lines)
+      if (textShapes.length >= 2 && totalTextLength < 200) {
+        return AdvancedLayoutMode.SONG_TITLE_VERSE;
+      }
+
+      // Announcement detection (varied content)
+      if (textShapes.length >= 3) {
+        return AdvancedLayoutMode.ANNOUNCEMENT_HEADER;
+      }
+    }
+
+    // Legacy content type detection
+    switch (content.type) {
+      case 'scripture':
+        return AdvancedLayoutMode.SCRIPTURE_CENTERED;
+      case 'song':
+        return AdvancedLayoutMode.SONG_TITLE_VERSE;
+      case 'announcement':
+        return AdvancedLayoutMode.ANNOUNCEMENT_HEADER;
+      default:
+        return null;
+    }
+  }, [content]);
+
+  // Emit sync events when responsive configuration changes
+  useEffect(() => {
+    if (syncManagerRef.current && responsiveConfig !== DEFAULT_RESPONSIVE_CONFIG) {
+      // Determine which sections changed by comparing with default
+      const changedSections: (keyof ResponsiveControlConfig)[] = [];
+      const changedKeys: string[] = [];
+
+      Object.keys(responsiveConfig).forEach(section => {
+        const sectionKey = section as keyof ResponsiveControlConfig;
+        const defaultSection = DEFAULT_RESPONSIVE_CONFIG[sectionKey];
+        const currentSection = responsiveConfig[sectionKey];
+
+        if (JSON.stringify(defaultSection) !== JSON.stringify(currentSection)) {
+          changedSections.push(sectionKey);
+
+          if (typeof currentSection === 'object' && currentSection !== null) {
+            Object.keys(currentSection).forEach(key => {
+              if ((currentSection as any)[key] !== (defaultSection as any)?.[key]) {
+                changedKeys.push(`${section}.${key}`);
+              }
+            });
+          }
+        }
+      });
+
+      if (changedSections.length > 0) {
+        // Emit config update event for each changed section
+        changedSections.forEach(section => {
+          emitConfigUpdated(
+            responsiveConfig,
+            section,
+            changedKeys.filter(key => key.startsWith(`${section}.`)),
+            'preview'
+          );
+        });
+      }
+    }
+  }, [responsiveConfig]);
 
   // Handle input key events
   const handleInputKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -608,6 +948,38 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
               • Editing text (Enter to save, Esc to cancel)
             </span>
           )}
+        </div>
+      )}
+
+      {/* Responsive Controls Toggle */}
+      {showControls && (
+        <div className="absolute top-2 right-2 z-30">
+          <button
+            onClick={() => setShowResponsiveControls(!showResponsiveControls)}
+            className={`p-2 rounded-lg transition-colors ${
+              showResponsiveControls
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+            }`}
+            title="Toggle responsive controls"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Responsive Controls Panel */}
+      {showResponsiveControls && showControls && (
+        <div className="absolute top-14 right-2 w-96 z-40">
+          <ResponsiveControlPanel
+            config={responsiveConfig}
+            onChange={setResponsiveConfig}
+            onReset={() => setResponsiveConfig(DEFAULT_RESPONSIVE_CONFIG)}
+            collapsed={false}
+          />
         </div>
       )}
 

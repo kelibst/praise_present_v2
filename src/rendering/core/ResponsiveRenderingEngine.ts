@@ -1,7 +1,8 @@
-import { RenderingEngine, RenderingEngineOptions } from './RenderingEngine';
+import { SelectiveRenderingEngine, SelectiveRenderingOptions } from './SelectiveRenderingEngine';
 import { ResponsiveShape } from './ResponsiveShape';
 import { ResponsiveLayoutManager } from '../layout/ResponsiveLayoutManager';
 import { TypographyScaler } from '../layout/TypographyScaler';
+import { AdvancedLayoutManager, AdvancedLayoutMode } from '../layout/AdvancedLayoutModes';
 import { Shape } from './Shape';
 import { RenderContext } from '../types/rendering';
 import {
@@ -13,19 +14,21 @@ import {
 /**
  * Options for responsive rendering engine
  */
-export interface ResponsiveRenderingEngineOptions extends RenderingEngineOptions {
+export interface ResponsiveRenderingEngineOptions extends SelectiveRenderingOptions {
   breakpoints?: ResponsiveBreakpoint[];
   enableResponsive?: boolean;
   baseFontSize?: number;
 }
 
 /**
- * Enhanced rendering engine with responsive layout capabilities
+ * Enhanced rendering engine with responsive layout capabilities and selective rendering
  */
-export class ResponsiveRenderingEngine extends RenderingEngine {
+export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
   private layoutManager: ResponsiveLayoutManager;
   private typographyScaler: TypographyScaler;
+  private advancedLayoutManager: AdvancedLayoutManager;
   private enableResponsive: boolean;
+  private currentAdvancedLayoutMode: AdvancedLayoutMode | null = null;
   private lastContainerSize: { width: number; height: number } | null = null;
 
   constructor(options: ResponsiveRenderingEngineOptions) {
@@ -43,6 +46,12 @@ export class ResponsiveRenderingEngine extends RenderingEngine {
     );
 
     this.typographyScaler = new TypographyScaler();
+
+    // Initialize advanced layout manager
+    this.advancedLayoutManager = new AdvancedLayoutManager(
+      containerInfo,
+      options.breakpoints || this.createDefaultBreakpoints()
+    );
 
     // Override the resize method to update responsive layout
     this.setupResponsiveResizeHandling();
@@ -106,10 +115,19 @@ export class ResponsiveRenderingEngine extends RenderingEngine {
   }
 
   /**
-   * Add responsive shape to the engine
+   * Add responsive shape to the engine with smart tracking
    */
   public addResponsiveShape(shape: ResponsiveShape): void {
     this.addShape(shape);
+
+    // Track responsive shape changes more intelligently
+    if (shape.responsive) {
+      console.log('🎯 ResponsiveRenderingEngine: Added responsive shape', {
+        shapeId: shape.id,
+        hasFlexiblePosition: !!shape.flexiblePosition,
+        hasLayoutConfig: !!shape.layoutConfig
+      });
+    }
   }
 
   /**
@@ -136,11 +154,31 @@ export class ResponsiveRenderingEngine extends RenderingEngine {
         shape.maintainAspectRatio = config.maintainAspectRatio;
       }
 
-      this.requestRender();
+      // Use selective rendering to update only this shape
+      this.markShapeDirty(shapeId, 'responsive-config-change');
       return true;
     }
 
     return false;
+  }
+
+  /**
+   * Intelligently mark responsive shapes as dirty when container changes
+   */
+  private markResponsiveShapesDirty(reason: string): void {
+    console.log('🔄 ResponsiveRenderingEngine: Marking responsive shapes dirty', { reason });
+
+    const allShapes = this.getAllShapes();
+    let responsiveShapesMarked = 0;
+
+    allShapes.forEach(shape => {
+      if (shape instanceof ResponsiveShape && shape.responsive) {
+        this.markShapeDirty(shape.id, reason);
+        responsiveShapesMarked++;
+      }
+    });
+
+    console.log(`✅ ResponsiveRenderingEngine: Marked ${responsiveShapesMarked} responsive shapes as dirty`);
   }
 
   /**
@@ -181,6 +219,87 @@ export class ResponsiveRenderingEngine extends RenderingEngine {
       this.enableResponsive = enabled;
       this.requestRender();
     }
+  }
+
+  /**
+   * Enable or disable selective rendering (inherited from SelectiveRenderingEngine)
+   */
+  public setSelectiveRenderingEnabled(enabled: boolean): void {
+    super.setSelectiveRenderingEnabled(enabled);
+  }
+
+  /**
+   * Get selective rendering status
+   */
+  public isSelectiveRenderingEnabled(): boolean {
+    return this.enableSelectiveRendering;
+  }
+
+  /**
+   * Set advanced layout mode for content-aware layouts
+   */
+  public setAdvancedLayoutMode(mode: AdvancedLayoutMode | null): void {
+    if (this.currentAdvancedLayoutMode !== mode) {
+      this.currentAdvancedLayoutMode = mode;
+      this.applyAdvancedLayoutMode();
+      this.requestRender();
+
+      console.log('🎯 ResponsiveRenderingEngine: Advanced layout mode changed', {
+        previousMode: this.currentAdvancedLayoutMode,
+        newMode: mode,
+        enableResponsive: this.enableResponsive
+      });
+    }
+  }
+
+  /**
+   * Get current advanced layout mode
+   */
+  public getCurrentAdvancedLayoutMode(): AdvancedLayoutMode | null {
+    return this.currentAdvancedLayoutMode;
+  }
+
+  /**
+   * Apply advanced layout mode to all responsive shapes
+   */
+  private applyAdvancedLayoutMode(): void {
+    if (!this.currentAdvancedLayoutMode || !this.enableResponsive) {
+      return;
+    }
+
+    const allShapes = this.getAllShapes();
+    const containerInfo = this.layoutManager.getContainerInfo();
+
+    console.log('🔧 ResponsiveRenderingEngine: Applying advanced layout mode', {
+      mode: this.currentAdvancedLayoutMode,
+      shapeCount: allShapes.length,
+      containerSize: `${containerInfo.width}x${containerInfo.height}`
+    });
+
+    // Apply layout configuration to responsive shapes
+    const layoutConfig = this.advancedLayoutManager.getLayoutConfig(
+      this.currentAdvancedLayoutMode,
+      containerInfo
+    );
+
+    let processedShapes = 0;
+    allShapes.forEach(shape => {
+      if (shape instanceof ResponsiveShape && shape.responsive) {
+        // Apply layout-specific configuration
+        this.advancedLayoutManager.applyLayoutToShape(shape, layoutConfig, containerInfo);
+        this.markShapeDirty(shape.id, 'advanced-layout-change');
+        processedShapes++;
+      }
+    });
+
+    console.log(`✅ ResponsiveRenderingEngine: Applied advanced layout to ${processedShapes} responsive shapes`);
+  }
+
+  /**
+   * Get advanced layout manager for external access
+   */
+  public getAdvancedLayoutManager(): AdvancedLayoutManager {
+    return this.advancedLayoutManager;
   }
 
   /**
@@ -286,8 +405,8 @@ export class ResponsiveRenderingEngine extends RenderingEngine {
         const needsRecalculation = this.layoutManager.updateContainer(containerInfo);
 
         if (needsRecalculation) {
-          // Force re-render with new layout calculations
-          this.requestRender();
+          // Use selective rendering to update only responsive shapes
+          this.markResponsiveShapesDirty('container-resize');
         }
       }
     };
@@ -410,7 +529,7 @@ export class ResponsiveRenderingEngine extends RenderingEngine {
   /**
    * Get the internal renderer (protected method access)
    */
-  private getRenderer(): any {
+  protected getResponsiveRenderer(): any {
     return (this as any).renderer;
   }
 
