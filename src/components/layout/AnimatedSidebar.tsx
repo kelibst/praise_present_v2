@@ -15,12 +15,6 @@ import {
 } from "react-icons/fi";
 /* @ts-ignore */
 import logoLight from "../../assets/logo-white.png";
-import { useTheme } from "@/lib/theme";
-import { Badge } from "../ui/badge";
-import { useDispatch } from "react-redux";
-import { AppDispatch } from "@/lib/store";
-import { selectSettings, setTheme } from "@/lib/settingSlice";
-import { useSelector } from "react-redux";
 import AsideThemeToggler from "../settings/AsideThemeToggler";
 
 const menu = [
@@ -47,15 +41,7 @@ const AnimatedSidebar: React.FC<{ open: boolean; onToggle: () => void }> = ({
   open,
   onToggle,
 }) => {
-  const { setTheme: applyTheme } = useTheme();
-  const dispatch = useDispatch<AppDispatch>();
-  const settings = useSelector(selectSettings);
   const location = useLocation();
-
-  const handleThemeChange = (newTheme: "light" | "dark" | "system") => {
-    dispatch(setTheme(newTheme));
-    applyTheme(newTheme);
-  };
 
   // Handle keyboard navigation
   const handleKeyDown = (event: React.KeyboardEvent) => {

@@ -1,4 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { selectTheme, setTheme as setReduxTheme } from './settingSlice';
+import { AppDispatch } from './store';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -10,14 +13,20 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('theme') as Theme;
-      if (savedTheme) return savedTheme;
-      return 'system';
-    }
-    return 'system';
-  });
+  const reduxTheme = useSelector(selectTheme);
+  const dispatch = useDispatch<AppDispatch>();
+  const [theme, setLocalTheme] = useState<Theme>(reduxTheme);
+
+  // Sync with Redux state
+  useEffect(() => {
+    setLocalTheme(reduxTheme);
+  }, [reduxTheme]);
+
+  // Custom setTheme that updates both local and Redux state
+  const setTheme = (newTheme: Theme) => {
+    dispatch(setReduxTheme(newTheme));
+    setLocalTheme(newTheme);
+  };
 
   // Function to apply theme
   const applyTheme = (newTheme: Theme) => {
@@ -33,10 +42,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Apply theme immediately on mount to prevent flash
+  useEffect(() => {
+    applyTheme(reduxTheme);
+  }, []);
+
   // Apply theme on mount and when theme changes
   useEffect(() => {
     applyTheme(theme);
-    localStorage.setItem('theme', theme);
   }, [theme]);
 
   // Listen for system theme changes

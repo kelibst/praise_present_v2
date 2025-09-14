@@ -735,9 +735,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   }, [editableSlideContent, currentSlide?.id, selectedItem?.id]); // Use IDs for stable comparison
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4">
+      <div className="bg-card border-b border-border p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <MonitorSpeaker className="w-8 h-8 text-blue-400" />
@@ -747,7 +747,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           {/* Live Display Controls */}
           {window.electronAPI && (
             <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-400">
+              <div className="text-sm text-muted-foreground">
                 Live Display: <span className={
                   liveDisplayStatus === 'Active' ? 'text-green-400' :
                   liveDisplayStatus === 'Error' ? 'text-red-400' : 'text-yellow-400'
@@ -757,7 +757,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 {!liveDisplayActive ? (
                   <button
                     onClick={createLiveDisplay}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 flex items-center gap-2"
                   >
                     <Monitor className="w-4 h-4" />
                     Create Live Display
@@ -766,19 +766,19 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   <>
                     <button
                       onClick={clearLiveDisplay}
-                      className="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
+                      className="px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 border border-orange-600 hover:border-orange-700"
                     >
                       Clear
                     </button>
                     <button
                       onClick={showBlackScreen}
-                      className="px-3 py-1 bg-gray-700 text-white rounded text-sm hover:bg-gray-600"
+                      className="px-3 py-1 bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 rounded text-sm hover:bg-gray-800 dark:hover:bg-gray-200 border border-gray-900 dark:border-gray-100"
                     >
                       Black
                     </button>
                     <button
                       onClick={closeLiveDisplay}
-                      className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                      className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 border border-red-600 hover:border-red-700"
                     >
                       Close
                     </button>
@@ -791,9 +791,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       </div>
 
       {/* Keyboard Shortcuts Help */}
-      <div className="bg-gray-800 border-b border-gray-700 px-4 py-2">
-        <div className="text-xs text-gray-400 text-center">
-          <span className="font-medium text-gray-300">Keyboard Shortcuts:</span>
+      <div className="bg-card border-b border-border px-4 py-2">
+        <div className="text-xs text-muted-foreground text-center">
+          <span className="font-medium text-foreground">Keyboard Shortcuts:</span>
           <span className="mx-2">Space/Enter/→ Next</span>
           <span className="mx-2">Backspace/← Prev</span>
           <span className="mx-2">F Present</span>
@@ -804,9 +804,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
       <div className="flex h-[calc(100vh-120px)]">
         {/* Left Panel - Tabs and Content */}
-        <div className="w-1/3 bg-gray-800 border-r border-gray-700">
+        <div className="w-1/3 bg-card border-r border-border">
           {/* Tab Navigation */}
-          <div className="flex border-b border-gray-700">
+          <div className="flex border-b border-border">
             {[
               { key: 'plan', label: 'Current Service', icon: Settings },
               { key: 'plans', label: 'Plan Manager', icon: Calendar },
@@ -816,10 +816,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               <button
                 key={key}
                 onClick={() => setActiveTab(key as any)}
-                className={`flex-1 px-4 py-3 text-sm font-medium border-r border-gray-700 last:border-r-0 flex items-center justify-center gap-2 ${
+                className={`flex-1 px-4 py-3 text-sm font-medium border-r border-border last:border-r-0 flex items-center justify-center gap-2 ${
                   activeTab === key
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -834,11 +834,11 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               <div className="space-y-4">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
                       <Play className="w-5 h-5 text-green-400" />
                       Current Service
                     </h3>
-                    <p className="text-sm text-gray-400">Ready for presentation • Click to preview • Double-click to present live</p>
+                    <p className="text-sm text-muted-foreground">Ready for presentation • Click to preview • Double-click to present live</p>
                     {selectedPlan && (
                       <div className="text-xs text-green-300 mt-1 flex items-center gap-1">
                         <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
@@ -847,7 +847,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-400">{serviceItems.length} items</span>
+                    <span className="text-sm text-muted-foreground">{serviceItems.length} items</span>
                     {serviceItems.length > 0 && (
                       <button
                         onClick={saveCurrentAsNewPlan}
@@ -877,12 +877,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 </div>
 
                 {serviceItems.length === 0 ? (
-                  <div className="text-center py-12 text-gray-400">
+                  <div className="text-center py-12 text-muted-foreground">
                     <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-green-800 to-blue-800 rounded-full flex items-center justify-center">
                       <Play className="w-10 h-10 text-white" />
                     </div>
-                    <h4 className="text-xl font-bold mb-2 text-white">🎯 Ready for Presentation</h4>
-                    <p className="text-sm mb-6 text-gray-300 max-w-md mx-auto">
+                    <h4 className="text-xl font-bold mb-2 text-foreground">🎯 Ready for Presentation</h4>
+                    <p className="text-sm mb-6 text-foreground max-w-md mx-auto">
                       Start by loading a saved plan or adding individual items to build your service presentation
                     </p>
                     <div className="grid grid-cols-1 gap-3 max-w-sm mx-auto">
@@ -933,16 +933,16 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                       className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
                         isSelected
                           ? isPresentingThis
-                            ? 'border-green-500 bg-green-900/30 shadow-lg'
-                            : 'border-blue-500 bg-blue-900/30 shadow-md'
-                          : 'border-gray-600 bg-gray-700 hover:bg-gray-600 hover:border-gray-500'
+                            ? 'border-green-500 bg-green-500/10 dark:bg-green-900/30 shadow-lg'
+                            : 'border-primary bg-primary/10 dark:bg-blue-900/30 shadow-md'
+                          : 'border-border bg-secondary hover:bg-secondary/80 hover:border-border'
                       } ${isLoading ? 'animate-pulse' : ''}`}
                       title={`Single click to preview • Double click to present live`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <div className="text-xs text-gray-500 bg-gray-700 px-2 py-1 rounded">
+                            <div className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded">
                               {index + 1}
                             </div>
                             {/* Type icon */}
@@ -962,13 +962,13 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                               </div>
                             )}
                             {item.planId && (
-                              <div className="px-2 py-1 bg-purple-900/50 text-purple-300 text-xs rounded border border-purple-600/30">
+                              <div className="px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 text-xs rounded border border-purple-300 dark:border-purple-600/30">
                                 Plan Item
                               </div>
                             )}
                           </div>
 
-                          <div className="text-sm text-gray-400 flex items-center gap-2">
+                          <div className="text-sm text-muted-foreground flex items-center gap-2">
                             <span className="capitalize">{item.type}</span>
                             {item.slides && <span>• {item.slides.length} slides</span>}
                             {item.duration && <span>• {item.duration}s</span>}
@@ -978,7 +978,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                         <div className="flex flex-col items-end gap-1">
                           {isSelected && (
-                            <div className="text-xs px-2 py-1 rounded-full bg-blue-900/50 text-blue-300 border border-blue-600/30">
+                            <div className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary dark:bg-blue-900/50 dark:text-blue-300 border border-primary dark:border-blue-600/30">
                               {presentationMode === 'live' ? 'Live Mode' : 'Preview'}
                             </div>
                           )}
@@ -1017,8 +1017,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 />
 
                 {/* Quick Scripture Selection */}
-                <div className="border-t border-gray-700 pt-4">
-                  <h4 className="text-sm font-medium text-gray-300 mb-2">Popular Verses</h4>
+                <div className="border-t border-border pt-4">
+                  <h4 className="text-sm font-medium text-foreground mb-2">Popular Verses</h4>
                   <div className="space-y-2">
                     {[
                       { ref: 'John 3:16', text: 'For God so loved the world...' },
@@ -1053,10 +1053,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                           };
                           generateSlidesForItem(scriptureItem);
                         }}
-                        className="w-full text-left p-2 rounded border border-gray-700 bg-gray-800 hover:bg-gray-700 text-sm"
+                        className="w-full text-left p-2 rounded border border-border bg-card hover:bg-card/80 text-sm"
                       >
                         <div className="font-medium text-blue-400">{verse.ref}</div>
-                        <div className="text-gray-400 text-xs">{verse.text}</div>
+                        <div className="text-muted-foreground text-xs">{verse.text}</div>
                       </button>
                     ))}
                   </div>
@@ -1067,13 +1067,13 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             {activeTab === 'plans' && (
               <div className="space-y-4">
                 {/* Saved Plans Section */}
-                <div className="bg-gray-800 rounded-lg border border-gray-700">
-                  <div className="p-4 border-b border-gray-700">
-                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <div className="bg-card rounded-lg border border-border">
+                  <div className="p-4 border-b border-border">
+                    <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
                       <Settings className="w-5 h-5 text-green-400" />
                       Saved Plans
                     </h3>
-                    <p className="text-sm text-gray-400">Load a saved presentation plan for this service</p>
+                    <p className="text-sm text-muted-foreground">Load a saved presentation plan for this service</p>
                   </div>
 
                   <div className="p-4">
@@ -1151,16 +1151,16 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                 {/* Compact Selected Plan Status */}
                 {selectedPlan && (
-                  <div className="bg-green-900/20 border border-green-600/30 rounded-lg p-3">
+                  <div className="bg-green-100 dark:bg-green-900/20 border border-green-300 dark:border-green-600/30 rounded-lg p-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                        <span className="text-green-200 text-sm font-medium">Loaded: {selectedPlan.name}</span>
-                        <span className="text-green-300 text-xs">({selectedPlan.planItems?.length || 0} items)</span>
+                        <div className="w-2 h-2 bg-green-500 dark:bg-green-400 rounded-full"></div>
+                        <span className="text-green-800 dark:text-green-200 text-sm font-medium">Loaded: {selectedPlan.name}</span>
+                        <span className="text-green-700 dark:text-green-300 text-xs">({selectedPlan.planItems?.length || 0} items)</span>
                       </div>
                       <button
                         onClick={() => setActiveTab('plan')}
-                        className="text-green-300 text-xs hover:text-green-200 underline"
+                        className="text-green-700 dark:text-green-300 text-xs hover:text-green-600 dark:hover:text-green-200 underline"
                       >
                         View in Current Service →
                       </button>
@@ -1169,42 +1169,42 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 )}
 
                 {/* Quick Actions */}
-                <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-                  <h4 className="text-sm font-medium text-gray-300 mb-3">Quick Actions</h4>
+                <div className="bg-card rounded-lg border border-border p-4">
+                  <h4 className="text-sm font-medium text-foreground mb-3">Quick Actions</h4>
                   <div className="grid grid-cols-1 gap-2">
                     <button
                       onClick={() => setActiveTab('scriptures')}
-                      className="p-3 bg-gray-700 rounded-lg text-left hover:bg-gray-600 transition-colors border border-gray-600 hover:border-gray-500"
+                      className="p-3 bg-secondary rounded-lg text-left hover:bg-secondary/80 transition-colors border border-border hover:border-border"
                     >
                       <div className="flex items-center gap-3">
                         <div className="text-purple-400 text-xl">📖</div>
                         <div>
                           <div className="text-sm font-medium text-white">Add Scripture</div>
-                          <div className="text-xs text-gray-400">Browse and select Bible verses</div>
+                          <div className="text-xs text-muted-foreground">Browse and select Bible verses</div>
                         </div>
                       </div>
                     </button>
                     <button
                       onClick={() => setActiveTab('songs')}
-                      className="p-3 bg-gray-700 rounded-lg text-left hover:bg-gray-600 transition-colors border border-gray-600 hover:border-gray-500"
+                      className="p-3 bg-secondary rounded-lg text-left hover:bg-secondary/80 transition-colors border border-border hover:border-border"
                     >
                       <div className="flex items-center gap-3">
                         <div className="text-blue-400 text-xl">♪</div>
                         <div>
                           <div className="text-sm font-medium text-white">Add Song</div>
-                          <div className="text-xs text-gray-400">Browse song library</div>
+                          <div className="text-xs text-muted-foreground">Browse song library</div>
                         </div>
                       </div>
                     </button>
                     <button
                       onClick={quickAddAnnouncement}
-                      className="p-3 bg-gray-700 rounded-lg text-left hover:bg-gray-600 transition-colors border border-gray-600 hover:border-gray-500"
+                      className="p-3 bg-secondary rounded-lg text-left hover:bg-secondary/80 transition-colors border border-border hover:border-border"
                     >
                       <div className="flex items-center gap-3">
                         <div className="text-yellow-400 text-xl">📢</div>
                         <div>
                           <div className="text-sm font-medium text-white">Add Announcement</div>
-                          <div className="text-xs text-gray-400">Create custom announcement</div>
+                          <div className="text-xs text-muted-foreground">Create custom announcement</div>
                         </div>
                       </div>
                     </button>
@@ -1235,20 +1235,20 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         </div>
 
         {/* Center Panel - Editable Preview */}
-        <div className="flex-1 bg-gray-900 p-4">
+        <div className="flex-1 bg-background p-4">
           <div className="h-full flex flex-col">
             {/* Header with title and controls */}
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Editable Preview</h3>
               <div className="flex items-center gap-4">
                 {selectedItem && (
-                  <div className="text-sm text-gray-400">
+                  <div className="text-sm text-muted-foreground">
                     {selectedItem.title} - Slide {currentSlideIndex + 1} of {selectedItem.slides?.length || 0}
                   </div>
                 )}
                 <button
                   onClick={() => setShowPropertyPanel(!showPropertyPanel)}
-                  className="p-2 bg-gray-700 text-white rounded hover:bg-gray-600 flex items-center gap-2"
+                  className="p-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 flex items-center gap-2"
                   title="Toggle Properties Panel"
                 >
                   <Settings className="w-4 h-4" />
@@ -1258,7 +1258,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
             {/* Property Panel */}
             {showPropertyPanel && (
-              <div className="bg-gray-800 rounded-lg p-4 mb-4 border border-gray-600">
+              <div className="bg-card rounded-lg p-4 mb-4 border border-border">
                 <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
                   <Palette className="w-4 h-4" />
                   Slide Properties
@@ -1266,18 +1266,18 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 <div className="grid grid-cols-2 gap-4">
                   {/* Background Color */}
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Background</label>
+                    <label className="block text-xs text-muted-foreground mb-1">Background</label>
                     <input
                       type="color"
                       value={slideProperties.backgroundColor}
                       onChange={(e) => updateSlideProperty('backgroundColor', e.target.value)}
-                      className="w-full h-8 rounded border border-gray-600 bg-gray-700"
+                      className="w-full h-8 rounded border border-border bg-input"
                     />
                   </div>
 
                   {/* Font Size */}
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Font Size</label>
+                    <label className="block text-xs text-muted-foreground mb-1">Font Size</label>
                     <input
                       type="range"
                       min="16"
@@ -1286,12 +1286,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                       onChange={(e) => updateSlideProperty('fontSize', parseInt(e.target.value))}
                       className="w-full"
                     />
-                    <div className="text-xs text-gray-500 text-center">{slideProperties.fontSize}px</div>
+                    <div className="text-xs text-muted-foreground text-center">{slideProperties.fontSize}px</div>
                   </div>
 
                   {/* Text Alignment */}
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Text Align</label>
+                    <label className="block text-xs text-muted-foreground mb-1">Text Align</label>
                     <div className="flex gap-1">
                       {(['left', 'center', 'right'] as const).map((align) => (
                         <button
@@ -1299,8 +1299,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                           onClick={() => updateSlideProperty('textAlign', align)}
                           className={`p-2 rounded ${
                             slideProperties.textAlign === align
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
                           }`}
                         >
                           {align === 'left' && <AlignLeft className="w-4 h-4" />}
@@ -1313,12 +1313,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                   {/* Text Color */}
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Text Color</label>
+                    <label className="block text-xs text-muted-foreground mb-1">Text Color</label>
                     <input
                       type="color"
                       value={slideProperties.textColor}
                       onChange={(e) => updateSlideProperty('textColor', e.target.value)}
-                      className="w-full h-8 rounded border border-gray-600 bg-gray-700"
+                      className="w-full h-8 rounded border border-border bg-input"
                     />
                   </div>
                 </div>
@@ -1331,7 +1331,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     className={`px-4 py-2 rounded flex items-center gap-2 ${
                       hasUnsavedChanges
                         ? 'bg-green-600 text-white hover:bg-green-700'
-                        : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                        : 'bg-secondary text-muted-foreground cursor-not-allowed'
                     }`}
                   >
                     <Save className="w-4 h-4" />
@@ -1360,8 +1360,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   </div>
                 </div>
               ) : (
-                <div className="h-full bg-black rounded-lg border border-gray-700 flex items-center justify-center">
-                  <div className="text-gray-500">
+                <div className="h-full bg-black rounded-lg border border-border flex items-center justify-center">
+                  <div className="text-gray-300">
                     Select an item to preview and edit slides
                   </div>
                 </div>
@@ -1375,7 +1375,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   <button
                     onClick={goToPreviousSlide}
                     disabled={currentSlideIndex === 0}
-                    className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     <SkipBack className="w-4 h-4" />
                     Previous
@@ -1397,7 +1397,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   <button
                     onClick={goToNextSlide}
                     disabled={currentSlideIndex >= (selectedItem.slides?.length || 1) - 1}
-                    className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     Next
                     <SkipForward className="w-4 h-4" />
@@ -1408,8 +1408,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 <div className="text-center">
                   <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm ${
                     presentationMode === 'live'
-                      ? 'bg-green-900/50 text-green-300 border border-green-600'
-                      : 'bg-blue-900/50 text-blue-300 border border-blue-600'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300 border border-green-300 dark:border-green-600'
+                      : 'bg-primary/10 text-primary dark:bg-blue-900/50 dark:text-blue-300 border border-primary dark:border-blue-600'
                   }`}>
                     {presentationMode === 'live' ? (
                       <>Live Mode - Changes go directly to display</>
@@ -1422,7 +1422,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 {/* Unsaved Changes Indicator */}
                 {hasUnsavedChanges && (
                   <div className="text-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm bg-yellow-900/50 text-yellow-300 border border-yellow-600">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-600">
                       Unsaved changes - Click save to apply
                     </div>
                   </div>
@@ -1433,19 +1433,19 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         </div>
 
         {/* Right Panel - Live Display Preview */}
-        <div className="w-1/3 bg-gray-800 border-l border-gray-700 p-4">
+        <div className="w-1/3 bg-card border-l border-border p-4">
           <div className="h-full flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Live Display</h3>
               <div className={`px-2 py-1 rounded text-xs ${
-                liveDisplayActive ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'
+                liveDisplayActive ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
               }`}>
                 {liveDisplayActive ? 'LIVE' : 'OFF'}
               </div>
             </div>
 
             {/* Live Display Preview */}
-            <div className="flex-1 bg-black rounded-lg border border-gray-700 flex items-center justify-center relative overflow-hidden">
+            <div className="flex-1 bg-black rounded-lg border border-border flex items-center justify-center relative overflow-hidden">
               {liveDisplayActive && isPresenting && currentSlide ? (
                 <div className="w-full h-full relative">
                   {/* Background rendering */}
@@ -1472,14 +1472,14 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   />
                 </div>
               ) : (
-                <div className="text-gray-500 text-center">
+                <div className="text-muted-foreground text-center">
                   {liveDisplayActive ? 'Ready for presentation' : 'Create live display to see preview'}
                 </div>
               )}
             </div>
 
             {/* Live Status */}
-            <div className="mt-4 text-sm text-gray-400 text-center space-y-2">
+            <div className="mt-4 text-sm text-muted-foreground text-center space-y-2">
               <div>
                 {liveDisplayActive ? (
                   isPresenting ? (
@@ -1492,7 +1492,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 )}
               </div>
               {selectedItem && (
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-muted-foreground">
                   Slide {currentSlideIndex + 1} of {selectedItem.slides?.length || 0}
                 </div>
               )}
