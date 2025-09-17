@@ -9,14 +9,9 @@ import Homepage from "./pages/Homepage";
 import LivePresentationPage from "./pages/LivePresentationPage";
 import SongsPage from "./pages/SongsPage";
 import ScripturePage from "./pages/ScripturePage";
+import SettingsPage from "./pages/SettingsPage";
 
 
-const SettingsPage = () => (
-  <div className="p-8">
-    <h1 className="text-2xl font-bold mb-4">Settings</h1>
-    <p>Settings page coming soon...</p>
-  </div>
-);
 
 
 const AppRoutes = () => {
