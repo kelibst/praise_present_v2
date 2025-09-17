@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Music, BookOpen, Film, MessageCircle, Plus, Check } from 'lucide-react';
+import { X, Search, Music, BookOpen, Film, MessageCircle, Plus, Check, ChevronRight } from 'lucide-react';
 import { PlanItemSelectorProps, CreatePlanItemFormData, PlanItemType } from '../../types/plan';
 // Import sample data (will be replaced with database queries)
 import { sampleSongs } from '../../../data/sample-songs';
+// Import Bible service for rigid scripture browser
+import { bibleService, ScriptureVerse } from '../../lib/services/bibleService';
+import { Book as BibleBook, Version } from '../../lib/bibleSlice';
 
 interface SelectableItem {
   id: string;
@@ -20,6 +23,268 @@ const ITEM_TYPES: { key: PlanItemType; label: string; icon: React.ComponentType<
   { key: 'announcement', label: 'Announcements', icon: MessageCircle, color: 'text-yellow-400' }
 ];
 
+// Rigid Scripture Browser Component (EasyWorship style)
+interface RigidScriptureBrowserProps {
+  onVerseSelect: (verse: ScriptureVerse, isSelected: boolean) => void;
+  selectedVerses: Set<string>;
+  onVersePreview?: (verse: ScriptureVerse) => void;
+}
+
+const RigidScriptureBrowser: React.FC<RigidScriptureBrowserProps> = ({
+  onVerseSelect,
+  selectedVerses,
+  onVersePreview
+}) => {
+  // State for the three panels
+  const [books, setBooks] = useState<BibleBook[]>([]);
+  const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<number>(1);
+  const [chapters, setChapters] = useState<number[]>([]);
+  const [verses, setVerses] = useState<ScriptureVerse[]>([]);
+
+  // Loading states
+  const [loading, setLoading] = useState(true);
+  const [versesLoading, setVersesLoading] = useState(false);
+
+  // Bible version
+  const [currentVersion, setCurrentVersion] = useState<Version | null>(null);
+
+  // Initialize - Load books and default to Genesis 1
+  useEffect(() => {
+    initializeBrowser();
+  }, []);
+
+  const initializeBrowser = async () => {
+    try {
+      setLoading(true);
+
+      // Load books and default version
+      const [booksData, defaultVersion] = await Promise.all([
+        bibleService.getBooks(),
+        bibleService.getDefaultVersion()
+      ]);
+
+      setBooks(booksData);
+      setCurrentVersion(defaultVersion);
+
+      // Default to Genesis (first book)
+      if (booksData.length > 0) {
+        const genesis = booksData.find(b => b.name.toLowerCase() === 'genesis') || booksData[0];
+        setSelectedBookId(genesis.id);
+        setSelectedChapter(1);
+
+        // Generate chapter numbers for Genesis
+        const chapterNumbers = Array.from({ length: genesis.chapters }, (_, i) => i + 1);
+        setChapters(chapterNumbers);
+
+        // Load Genesis 1 verses
+        if (defaultVersion) {
+          await loadVerses(defaultVersion.id, genesis.id, 1);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to initialize scripture browser:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load verses for selected book/chapter
+  const loadVerses = async (versionId: string, bookId: number, chapter: number) => {
+    try {
+      setVersesLoading(true);
+      const versesData = await bibleService.getVerses(versionId, bookId, chapter);
+      setVerses(versesData);
+    } catch (error) {
+      console.error('Failed to load verses:', error);
+      setVerses([]);
+    } finally {
+      setVersesLoading(false);
+    }
+  };
+
+  // Handle book selection
+  const handleBookSelect = async (book: BibleBook) => {
+    setSelectedBookId(book.id);
+    setSelectedChapter(1);
+
+    // Generate chapter numbers
+    const chapterNumbers = Array.from({ length: book.chapters }, (_, i) => i + 1);
+    setChapters(chapterNumbers);
+
+    // Load first chapter verses
+    if (currentVersion) {
+      await loadVerses(currentVersion.id, book.id, 1);
+    }
+  };
+
+  // Handle chapter selection
+  const handleChapterSelect = async (chapter: number) => {
+    setSelectedChapter(chapter);
+
+    // Load chapter verses
+    if (currentVersion && selectedBookId) {
+      await loadVerses(currentVersion.id, selectedBookId, chapter);
+    }
+  };
+
+  // Handle verse selection (single click = select, double click could be preview)
+  const handleVerseClick = (verse: ScriptureVerse, event: React.MouseEvent) => {
+    const isCurrentlySelected = selectedVerses.has(verse.id);
+    onVerseSelect(verse, !isCurrentlySelected);
+
+    // Optional: Single click preview
+    if (onVersePreview && !isCurrentlySelected) {
+      onVersePreview(verse);
+    }
+  };
+
+  // Handle verse double click for immediate preview
+  const handleVerseDoubleClick = (verse: ScriptureVerse) => {
+    if (onVersePreview) {
+      onVersePreview(verse);
+    }
+  };
+
+  // Get current book name for display
+  const getCurrentBookName = () => {
+    return books.find(b => b.id === selectedBookId)?.name || '';
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96 text-gray-400">
+        <div className="text-center">
+          <div className="animate-spin w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full mx-auto mb-2"></div>
+          <p>Loading Scripture Browser...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-96 border border-gray-600 rounded-lg overflow-hidden bg-gray-900">
+      {/* Books Panel */}
+      <div className="w-48 border-r border-gray-600 bg-gray-800">
+        <div className="p-3 border-b border-gray-600 bg-gray-750">
+          <h3 className="text-sm font-medium text-green-400">Books</h3>
+        </div>
+        <div className="overflow-y-auto h-full">
+          {/* Old Testament */}
+          <div className="p-2">
+            <div className="text-xs text-gray-500 mb-2 font-semibold">Old Testament</div>
+            {books.filter(b => b.testament === 'OT').map((book) => (
+              <button
+                key={book.id}
+                onClick={() => handleBookSelect(book)}
+                className={`w-full text-left text-xs px-2 py-1 rounded hover:bg-gray-700 transition-colors ${
+                  selectedBookId === book.id
+                    ? 'bg-green-600 text-white'
+                    : 'text-gray-300'
+                }`}
+              >
+                {book.name}
+              </button>
+            ))}
+          </div>
+
+          {/* New Testament */}
+          <div className="p-2 border-t border-gray-600">
+            <div className="text-xs text-gray-500 mb-2 font-semibold">New Testament</div>
+            {books.filter(b => b.testament === 'NT').map((book) => (
+              <button
+                key={book.id}
+                onClick={() => handleBookSelect(book)}
+                className={`w-full text-left text-xs px-2 py-1 rounded hover:bg-gray-700 transition-colors ${
+                  selectedBookId === book.id
+                    ? 'bg-green-600 text-white'
+                    : 'text-gray-300'
+                }`}
+              >
+                {book.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Chapters Panel */}
+      <div className="w-32 border-r border-gray-600 bg-gray-800">
+        <div className="p-3 border-b border-gray-600 bg-gray-750">
+          <h3 className="text-sm font-medium text-green-400">Chapters</h3>
+        </div>
+        <div className="overflow-y-auto h-full p-2">
+          <div className="grid grid-cols-2 gap-1">
+            {chapters.map((chapter) => (
+              <button
+                key={chapter}
+                onClick={() => handleChapterSelect(chapter)}
+                className={`text-xs px-2 py-1 rounded hover:bg-gray-700 transition-colors ${
+                  selectedChapter === chapter
+                    ? 'bg-green-600 text-white'
+                    : 'text-gray-300'
+                }`}
+              >
+                {chapter}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Verses Panel */}
+      <div className="flex-1 bg-gray-800">
+        <div className="p-3 border-b border-gray-600 bg-gray-750">
+          <h3 className="text-sm font-medium text-green-400">
+            {getCurrentBookName()} {selectedChapter} ({currentVersion?.name})
+          </h3>
+        </div>
+        <div className="overflow-y-auto h-full">
+          {versesLoading ? (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              <div className="text-center">
+                <div className="animate-spin w-5 h-5 border-2 border-green-400 border-t-transparent rounded-full mx-auto mb-2"></div>
+                <p className="text-sm">Loading verses...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="p-2 space-y-1">
+              {verses.map((verse) => (
+                <div
+                  key={verse.id}
+                  onClick={(e) => handleVerseClick(verse, e)}
+                  onDoubleClick={() => handleVerseDoubleClick(verse)}
+                  className={`p-2 rounded cursor-pointer transition-colors border ${
+                    selectedVerses.has(verse.id)
+                      ? 'bg-green-600 text-white border-green-500'
+                      : 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-600'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="text-xs font-mono text-green-400 flex-shrink-0">
+                      {verse.verse}
+                    </span>
+                    <span className="text-sm flex-1 leading-relaxed">
+                      {verse.text}
+                    </span>
+                  </div>
+                </div>
+              ))}
+
+              {verses.length === 0 && !versesLoading && (
+                <div className="text-center py-8 text-gray-500">
+                  <BookOpen className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No verses available</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const PlanItemSelector: React.FC<PlanItemSelectorProps> = ({
   isOpen,
   onClose,
@@ -32,9 +297,39 @@ export const PlanItemSelector: React.FC<PlanItemSelectorProps> = ({
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [availableItems, setAvailableItems] = useState<SelectableItem[]>([]);
 
+  // State for rigid scripture browser
+  const [selectedScriptureVerses, setSelectedScriptureVerses] = useState<Set<string>>(new Set());
+  const [previewVerse, setPreviewVerse] = useState<ScriptureVerse | null>(null);
+
   // Load items based on active tab
   useEffect(() => {
     loadItemsForTab(activeTab);
+  }, [activeTab]);
+
+  // Handle scripture verse selection
+  const handleScriptureVerseSelect = (verse: ScriptureVerse, isSelected: boolean) => {
+    setSelectedScriptureVerses(prev => {
+      const newSet = new Set(prev);
+      if (isSelected) {
+        newSet.add(verse.id);
+      } else {
+        newSet.delete(verse.id);
+      }
+      return newSet;
+    });
+  };
+
+  // Handle verse preview
+  const handleVersePreview = (verse: ScriptureVerse) => {
+    setPreviewVerse(verse);
+  };
+
+  // Clear scripture selections when tab changes
+  useEffect(() => {
+    if (activeTab !== 'scripture') {
+      setSelectedScriptureVerses(new Set());
+      setPreviewVerse(null);
+    }
   }, [activeTab]);
 
   const loadItemsForTab = async (type: PlanItemType) => {
@@ -84,82 +379,9 @@ export const PlanItemSelector: React.FC<PlanItemSelectorProps> = ({
         break;
 
       case 'scripture':
-        try {
-          // Load popular verses from database
-          const popularVerses = [
-            { book: 'John', chapter: 3, verse: 16 },
-            { book: 'John', chapter: 3, verse: 17 },
-            { book: 'Romans', chapter: 3, verse: 23 },
-            { book: 'Romans', chapter: 6, verse: 23 },
-            { book: 'Romans', chapter: 10, verse: 9 },
-            { book: 'Romans', chapter: 10, verse: 10 },
-            { book: 'Ephesians', chapter: 2, verse: 8 },
-            { book: 'Ephesians', chapter: 2, verse: 9 },
-            { book: '1 John', chapter: 1, verse: 9 },
-            { book: 'Psalm', chapter: 23, verse: 1 },
-            { book: 'Psalm', chapter: 23, verse: 2 },
-            { book: 'Psalm', chapter: 23, verse: 3 },
-            { book: 'Psalm', chapter: 23, verse: 4 }
-          ];
-
-          // Load books first to get book IDs
-          const books = await window.electronAPI?.invoke('db:loadBooks');
-
-          if (books && books.length > 0) {
-            // Load verses for popular scripture references
-            const scriptureItems = [];
-
-            for (const ref of popularVerses) {
-              const book = books.find((b: any) => b.name === ref.book);
-              if (book) {
-                try {
-                  // Get default version first
-                  const versions = await window.electronAPI?.invoke('db:loadVersions');
-                  const defaultVersion = versions?.find((v: any) => v.isDefault) || versions?.[0];
-
-                  if (defaultVersion) {
-                    const verses = await window.electronAPI?.invoke('db:loadVerses', {
-                      versionId: defaultVersion.id,
-                      bookId: book.id,
-                      chapter: ref.chapter
-                    });
-
-                    const verse = verses?.find((v: any) => v.verse === ref.verse);
-                    if (verse) {
-                      scriptureItems.push({
-                        id: verse.id,
-                        type: 'scripture' as const,
-                        title: `${ref.book} ${ref.chapter}:${ref.verse}`,
-                        subtitle: verse.text.length > 50 ? verse.text.substring(0, 47) + '...' : verse.text,
-                        duration: 2,
-                        category: 'popular'
-                      });
-                    }
-                  }
-                } catch (err) {
-                  console.error('Error loading verse:', err);
-                }
-              }
-            }
-
-            items = scriptureItems;
-          } else {
-            // Fallback to sample data if database query fails
-            items = [
-              { id: 'john-3-16', type: 'scripture', title: 'John 3:16', subtitle: 'For God so loved the world...', duration: 2 },
-              { id: 'psalm-23', type: 'scripture', title: 'Psalm 23:1', subtitle: 'The Lord is my shepherd...', duration: 2 },
-              { id: 'romans-3-23', type: 'scripture', title: 'Romans 3:23', subtitle: 'For all have sinned...', duration: 2 }
-            ];
-          }
-        } catch (error) {
-          console.error('Error loading scriptures:', error);
-          // Fallback to sample data
-          items = [
-            { id: 'john-3-16', type: 'scripture', title: 'John 3:16', subtitle: 'For God so loved the world...', duration: 2 },
-            { id: 'psalm-23', type: 'scripture', title: 'Psalm 23:1', subtitle: 'The Lord is my shepherd...', duration: 2 },
-            { id: 'romans-3-23', type: 'scripture', title: 'Romans 3:23', subtitle: 'For all have sinned...', duration: 2 }
-          ];
-        }
+        // For scripture, we don't load items in the traditional way
+        // The RigidScriptureBrowser handles all the data loading
+        items = [];
         break;
 
       case 'presentation':
@@ -273,8 +495,23 @@ export const PlanItemSelector: React.FC<PlanItemSelectorProps> = ({
       }
     });
 
+    // Handle scripture verses from RigidScriptureBrowser
+    if (activeTab === 'scripture' && selectedScriptureVerses.size > 0) {
+      // Add selected scripture verses to the plan items
+      selectedScriptureVerses.forEach(verseId => {
+        const planItemData: CreatePlanItemFormData = {
+          type: 'scripture',
+          title: `Scripture Verse`, // This will be updated when the plan item is created
+          duration: 3, // Default scripture reading time
+          scriptureRef: verseId
+        };
+        selectedItemsData.push(planItemData);
+      });
+    }
+
     onSelectItems(selectedItemsData);
     setSelectedItems(new Set());
+    setSelectedScriptureVerses(new Set());
     onClose();
   };
 
@@ -374,63 +611,88 @@ export const PlanItemSelector: React.FC<PlanItemSelectorProps> = ({
             </div>
 
             {/* Items List */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {filteredItems.length === 0 ? (
-                <div className="text-center py-8 text-gray-400">
-                  <div className="w-8 h-8 mx-auto mb-2 opacity-50">
-                    {React.createElement(ITEM_TYPES.find(t => t.key === activeTab)?.icon || Music)}
-                  </div>
-                  {searchQuery ? 'No items match your search' : 'No items available'}
+            <div className="flex-1 overflow-y-auto">
+              {activeTab === 'scripture' ? (
+                <div className="p-4">
+                  <RigidScriptureBrowser
+                    onVerseSelect={handleScriptureVerseSelect}
+                    selectedVerses={selectedScriptureVerses}
+                    onVersePreview={handleVersePreview}
+                  />
+
+                  {/* Scripture Selection Preview */}
+                  {previewVerse && (
+                    <div className="mt-4 p-4 bg-gray-800 rounded-lg border border-gray-600">
+                      <h4 className="text-sm font-medium text-green-400 mb-2">Preview</h4>
+                      <div className="text-sm text-white">
+                        <span className="font-medium">{previewVerse.book} {previewVerse.chapter}:{previewVerse.verse}</span>
+                      </div>
+                      <div className="text-sm text-gray-300 mt-1">
+                        {previewVerse.text}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {filteredItems.map((item) => {
-                    const isSelected = selectedItems.has(item.id);
-                    const Icon = ITEM_TYPES.find(t => t.key === item.type)?.icon || Music;
-
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => toggleItemSelection(item.id)}
-                        className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                          isSelected
-                            ? 'border-blue-500 bg-blue-900/30'
-                            : 'border-gray-600 bg-gray-700 hover:bg-gray-600 hover:border-gray-500'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="flex-shrink-0">
-                            {isSelected ? (
-                              <div className="w-5 h-5 bg-blue-600 text-white rounded flex items-center justify-center">
-                                <Check className="w-3 h-3" />
-                              </div>
-                            ) : (
-                              <div className="w-5 h-5 border border-gray-500 rounded"></div>
-                            )}
-                          </div>
-
-                          <Icon className={`w-4 h-4 flex-shrink-0 ${ITEM_TYPES.find(t => t.key === item.type)?.color || 'text-gray-400'}`} />
-
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-white truncate">
-                              {item.title}
-                            </div>
-                            {item.subtitle && (
-                              <div className="text-sm text-gray-400 truncate">
-                                {item.subtitle}
-                              </div>
-                            )}
-                          </div>
-
-                          {item.duration && (
-                            <div className="text-sm text-gray-400 flex-shrink-0">
-                              {item.duration}m
-                            </div>
-                          )}
-                        </div>
+                <div className="p-4">
+                  {filteredItems.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400">
+                      <div className="w-8 h-8 mx-auto mb-2 opacity-50">
+                        {React.createElement(ITEM_TYPES.find(t => t.key === activeTab)?.icon || Music)}
                       </div>
-                    );
-                  })}
+                      {searchQuery ? 'No items match your search' : 'No items available'}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredItems.map((item) => {
+                        const isSelected = selectedItems.has(item.id);
+                        const Icon = ITEM_TYPES.find(t => t.key === item.type)?.icon || Music;
+
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => toggleItemSelection(item.id)}
+                            className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                              isSelected
+                                ? 'border-blue-500 bg-blue-900/30'
+                                : 'border-gray-600 bg-gray-700 hover:bg-gray-600 hover:border-gray-500'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex-shrink-0">
+                                {isSelected ? (
+                                  <div className="w-5 h-5 bg-blue-600 text-white rounded flex items-center justify-center">
+                                    <Check className="w-3 h-3" />
+                                  </div>
+                                ) : (
+                                  <div className="w-5 h-5 border border-gray-500 rounded"></div>
+                                )}
+                              </div>
+
+                              <Icon className={`w-4 h-4 flex-shrink-0 ${ITEM_TYPES.find(t => t.key === item.type)?.color || 'text-gray-400'}`} />
+
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-white truncate">
+                                  {item.title}
+                                </div>
+                                {item.subtitle && (
+                                  <div className="text-sm text-gray-400 truncate">
+                                    {item.subtitle}
+                                  </div>
+                                )}
+                              </div>
+
+                              {item.duration && (
+                                <div className="text-sm text-gray-400 flex-shrink-0">
+                                  {item.duration}m
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -441,8 +703,10 @@ export const PlanItemSelector: React.FC<PlanItemSelectorProps> = ({
         <div className="p-6 border-t border-gray-700">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-400">
-              {selectedItems.size} items selected
-              {totalDuration > 0 && ` • ${totalDuration} minutes total`}
+              {activeTab === 'scripture'
+                ? `${selectedScriptureVerses.size} verses selected`
+                : `${selectedItems.size} items selected${totalDuration > 0 ? ` • ${totalDuration} minutes total` : ''}`
+              }
             </div>
 
             <div className="flex items-center gap-3">
@@ -455,11 +719,11 @@ export const PlanItemSelector: React.FC<PlanItemSelectorProps> = ({
 
               <button
                 onClick={handleConfirmSelection}
-                disabled={selectedItems.size === 0}
+                disabled={activeTab === 'scripture' ? selectedScriptureVerses.size === 0 : selectedItems.size === 0}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus className="w-4 h-4" />
-                Add {selectedItems.size} Items
+                Add {activeTab === 'scripture' ? selectedScriptureVerses.size : selectedItems.size} {activeTab === 'scripture' ? 'Verses' : 'Items'}
               </button>
             </div>
           </div>

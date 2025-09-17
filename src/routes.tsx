@@ -7,21 +7,8 @@ import AppLayout from "./components/layout/AppLayout";
 // Page components
 import Homepage from "./pages/Homepage";
 import LivePresentationPage from "./pages/LivePresentationPage";
-
-// Placeholder components for missing routes
-const ScripturePage = () => (
-  <div className="p-8">
-    <h1 className="text-2xl font-bold mb-4">Scripture</h1>
-    <p>Scripture page coming soon...</p>
-  </div>
-);
-
-const SongsPage = () => (
-  <div className="p-8">
-    <h1 className="text-2xl font-bold mb-4">Songs</h1>
-    <p>Songs page coming soon...</p>
-  </div>
-);
+import SongsPage from "./pages/SongsPage";
+import ScripturePage from "./pages/ScripturePage";
 
 
 const SettingsPage = () => (

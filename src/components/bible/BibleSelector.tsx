@@ -1,367 +1,978 @@
-import React, { useState, useEffect } from 'react';
-import { Book, Search, ChevronDown } from 'lucide-react';
-
-// For now, we'll create a simplified version that works with our existing data
-// Later we'll integrate with the full database system
-
-interface ScriptureVerse {
-  id?: string;
-  book: string;
-  chapter: number;
-  verse: number;
-  text: string;
-  translation?: string;
-}
+import React, { useState, useEffect, useCallback } from 'react';
+import { Book, Search, ChevronDown, Loader2, BookOpen, Star, Clock, RefreshCw, AlertCircle, Bookmark, Heart, Lightbulb } from 'lucide-react';
+import { bibleService, ScriptureVerse, ScriptureSelection } from '../../lib/services/bibleService';
+import { Translation, Version, Book as BibleBook } from '../../lib/bibleSlice';
+import { SmartScriptureInput } from './SmartScriptureInput';
+import { ParsedReference } from './SmartScriptureInput/types';
+import { ChapterVerseList } from './ChapterVerseList';
 
 interface BibleSelectorProps {
   onVerseSelect?: (verses: ScriptureVerse[]) => void;
   className?: string;
+  defaultVersion?: string;
 }
 
-// Simplified bible books list
-const BIBLE_BOOKS = [
-  // Old Testament
-  { name: 'Genesis', testament: 'Old', chapters: 50 },
-  { name: 'Exodus', testament: 'Old', chapters: 40 },
-  { name: 'Leviticus', testament: 'Old', chapters: 27 },
-  { name: 'Numbers', testament: 'Old', chapters: 36 },
-  { name: 'Deuteronomy', testament: 'Old', chapters: 34 },
-  { name: 'Joshua', testament: 'Old', chapters: 24 },
-  { name: 'Judges', testament: 'Old', chapters: 21 },
-  { name: 'Ruth', testament: 'Old', chapters: 4 },
-  { name: '1 Samuel', testament: 'Old', chapters: 31 },
-  { name: '2 Samuel', testament: 'Old', chapters: 24 },
-  { name: '1 Kings', testament: 'Old', chapters: 22 },
-  { name: '2 Kings', testament: 'Old', chapters: 25 },
-  { name: '1 Chronicles', testament: 'Old', chapters: 29 },
-  { name: '2 Chronicles', testament: 'Old', chapters: 36 },
-  { name: 'Ezra', testament: 'Old', chapters: 10 },
-  { name: 'Nehemiah', testament: 'Old', chapters: 13 },
-  { name: 'Esther', testament: 'Old', chapters: 10 },
-  { name: 'Job', testament: 'Old', chapters: 42 },
-  { name: 'Psalms', testament: 'Old', chapters: 150 },
-  { name: 'Proverbs', testament: 'Old', chapters: 31 },
-  { name: 'Ecclesiastes', testament: 'Old', chapters: 12 },
-  { name: 'Song of Solomon', testament: 'Old', chapters: 8 },
-  { name: 'Isaiah', testament: 'Old', chapters: 66 },
-  { name: 'Jeremiah', testament: 'Old', chapters: 52 },
-  { name: 'Lamentations', testament: 'Old', chapters: 5 },
-  { name: 'Ezekiel', testament: 'Old', chapters: 48 },
-  { name: 'Daniel', testament: 'Old', chapters: 12 },
-  { name: 'Hosea', testament: 'Old', chapters: 14 },
-  { name: 'Joel', testament: 'Old', chapters: 3 },
-  { name: 'Amos', testament: 'Old', chapters: 9 },
-  { name: 'Obadiah', testament: 'Old', chapters: 1 },
-  { name: 'Jonah', testament: 'Old', chapters: 4 },
-  { name: 'Micah', testament: 'Old', chapters: 7 },
-  { name: 'Nahum', testament: 'Old', chapters: 3 },
-  { name: 'Habakkuk', testament: 'Old', chapters: 3 },
-  { name: 'Zephaniah', testament: 'Old', chapters: 3 },
-  { name: 'Haggai', testament: 'Old', chapters: 2 },
-  { name: 'Zechariah', testament: 'Old', chapters: 14 },
-  { name: 'Malachi', testament: 'Old', chapters: 4 },
+type TabType = 'reference' | 'search' | 'saved';
 
-  // New Testament
-  { name: 'Matthew', testament: 'New', chapters: 28 },
-  { name: 'Mark', testament: 'New', chapters: 16 },
-  { name: 'Luke', testament: 'New', chapters: 24 },
-  { name: 'John', testament: 'New', chapters: 21 },
-  { name: 'Acts', testament: 'New', chapters: 28 },
-  { name: 'Romans', testament: 'New', chapters: 16 },
-  { name: '1 Corinthians', testament: 'New', chapters: 16 },
-  { name: '2 Corinthians', testament: 'New', chapters: 13 },
-  { name: 'Galatians', testament: 'New', chapters: 6 },
-  { name: 'Ephesians', testament: 'New', chapters: 6 },
-  { name: 'Philippians', testament: 'New', chapters: 4 },
-  { name: 'Colossians', testament: 'New', chapters: 4 },
-  { name: '1 Thessalonians', testament: 'New', chapters: 5 },
-  { name: '2 Thessalonians', testament: 'New', chapters: 3 },
-  { name: '1 Timothy', testament: 'New', chapters: 6 },
-  { name: '2 Timothy', testament: 'New', chapters: 4 },
-  { name: 'Titus', testament: 'New', chapters: 3 },
-  { name: 'Philemon', testament: 'New', chapters: 1 },
-  { name: 'Hebrews', testament: 'New', chapters: 13 },
-  { name: 'James', testament: 'New', chapters: 5 },
-  { name: '1 Peter', testament: 'New', chapters: 5 },
-  { name: '2 Peter', testament: 'New', chapters: 3 },
-  { name: '1 John', testament: 'New', chapters: 5 },
-  { name: '2 John', testament: 'New', chapters: 1 },
-  { name: '3 John', testament: 'New', chapters: 1 },
-  { name: 'Jude', testament: 'New', chapters: 1 },
-  { name: 'Revelation', testament: 'New', chapters: 22 },
-];
+const BibleSelector: React.FC<BibleSelectorProps> = ({
+  onVerseSelect,
+  className = '',
+  defaultVersion
+}) => {
+  // State management
+  const [activeTab, setActiveTab] = useState<TabType>('reference');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
-const TRANSLATIONS = [
-  { id: 'KJV', name: 'King James Version', description: 'Traditional English translation' },
-  { id: 'NIV', name: 'New International Version', description: 'Modern English translation' },
-  { id: 'ESV', name: 'English Standard Version', description: 'Literary English translation' },
-  { id: 'NLT', name: 'New Living Translation', description: 'Easy-to-read modern translation' },
-];
+  // Data state
+  const [translations, setTranslations] = useState<Translation[]>([]);
+  const [versions, setVersions] = useState<Version[]>([]);
+  const [books, setBooks] = useState<BibleBook[]>([]);
 
-// Utility function to parse scripture references like "John 3:16" or "John 3:16-17"
-const parseScriptureReference = (input: string): { book: string; chapter: number; verses: number[] } | null => {
-  const cleaned = input.trim();
+  // Selection state
+  const [selectedVersion, setSelectedVersion] = useState<string>('');
+  const [selectedBook, setSelectedBook] = useState<number | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
+  const [verseStart, setVerseStart] = useState<number>(1);
+  const [verseEnd, setVerseEnd] = useState<number | null>(null);
 
-  // Pattern for "Book Chapter:Verse" or "Book Chapter:Verse-Verse"
-  const pattern = /^(\d?\s*[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+):(\d+)(?:-(\d+))?$/;
-  const match = cleaned.match(pattern);
+  // Input state
+  const [referenceInput, setReferenceInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  if (match) {
-    const bookName = match[1].trim();
-    const chapter = parseInt(match[2]);
-    const startVerse = parseInt(match[3]);
-    const endVerse = match[4] ? parseInt(match[4]) : startVerse;
+  // State for chapter verse list
+  const [currentParsedReference, setCurrentParsedReference] = useState<ParsedReference | null>(null);
+  const [selectedVersesFromList, setSelectedVersesFromList] = useState<number[]>([]);
 
-    const verses = [];
-    for (let i = startVerse; i <= endVerse; i++) {
-      verses.push(i);
+  // Results state
+  const [currentVerses, setCurrentVerses] = useState<ScriptureVerse[]>([]);
+  const [searchResults, setSearchResults] = useState<ScriptureVerse[]>([]);
+  const [popularVerses, setPopularVerses] = useState<ScriptureVerse[]>([]);
+  const [themeVerses, setThemeVerses] = useState<ScriptureVerse[]>([]);
+  const [bookmarks, setBookmarks] = useState<Array<{id: string; verse: ScriptureVerse; note?: string; createdAt: string}>>([]);
+  const [selectedTheme, setSelectedTheme] = useState<string>('popular');
+  const [savedSubTab, setSavedSubTab] = useState<'popular' | 'themes' | 'bookmarks'>('popular');
+  const [showVerseList, setShowVerseList] = useState<boolean>(true);
+  const [recentReferences, setRecentReferences] = useState<string[]>([]);
+
+  // Load verses on demand (used when clicking "Use This Scripture" with selections from ChapterVerseList)
+  const loadSelectedVerses = useCallback(async () => {
+    if (!currentParsedReference?.book || !currentParsedReference.chapter || !selectedVersion || selectedVersesFromList.length === 0) {
+      return [];
     }
 
-    return { book: bookName, chapter, verses };
+    try {
+      setLoading(true);
+      setError(null);
+
+      const scriptureVerses = await bibleService.getVerses(
+        selectedVersion,
+        currentParsedReference.book.id,
+        currentParsedReference.chapter,
+        selectedVersesFromList
+      );
+
+      setCurrentVerses(scriptureVerses);
+      return scriptureVerses;
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load selected verses');
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [currentParsedReference, selectedVersion, selectedVersesFromList]);
+
+  // Handle verse selection for presentation (defined early for use in useEffect)
+  const handleUseVerses = useCallback(async (verses: ScriptureVerse[]) => {
+    let versesToUse = verses;
+
+    // If we don't have verses but have selections from the list, load them
+    if (verses.length === 0 && selectedVersesFromList.length > 0) {
+      versesToUse = await loadSelectedVerses();
+    }
+
+    if (onVerseSelect && versesToUse.length > 0) {
+      onVerseSelect(versesToUse);
+    }
+  }, [onVerseSelect, selectedVersesFromList, loadSelectedVerses]);
+
+  // Initialize component
+  useEffect(() => {
+    initializeData();
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Escape to clear current selection
+      if (event.key === 'Escape') {
+        setCurrentVerses([]);
+        setSelectedVersesFromList([]);
+        setCurrentParsedReference(null);
+      }
+      // Ctrl/Cmd + Enter to use current verses
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        if (currentVerses.length > 0) {
+          handleUseVerses(currentVerses);
+        } else if (selectedVersesFromList.length > 0) {
+          handleUseVerses([]);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentVerses, selectedVersesFromList, handleUseVerses]);
+
+  const initializeData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('🔧 BibleSelector: Initializing...');
+
+      // Load basic data
+      const [translationsData, versionsData, booksData] = await Promise.all([
+        bibleService.getTranslations(),
+        bibleService.getVersions(),
+        bibleService.getBooks()
+      ]);
+
+      setTranslations(translationsData);
+      setVersions(versionsData);
+      setBooks(booksData);
+
+      // Set default version
+      let defaultVer = null;
+      if (defaultVersion) {
+        defaultVer = versionsData.find(v => v.id === defaultVersion);
+      }
+      if (!defaultVer) {
+        defaultVer = await bibleService.getDefaultVersion();
+      }
+
+      if (defaultVer) {
+        setSelectedVersion(defaultVer.id);
+        // Load popular verses for default version
+        loadPopularVerses(defaultVer.id);
+      }
+
+      // Load bookmarks
+      loadBookmarks();
+
+      setInitialized(true);
+      console.log('✅ BibleSelector: Initialized successfully');
+    } catch (err) {
+      console.error('❌ BibleSelector: Failed to initialize:', err);
+      setError(err instanceof Error ? err.message : 'Failed to initialize Bible data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load popular verses
+  const loadPopularVerses = async (versionId: string) => {
+    try {
+      const verses = await bibleService.getPopularVerses(versionId);
+      setPopularVerses(verses);
+    } catch (err) {
+      console.warn('Failed to load popular verses:', err);
+    }
+  };
+
+  // Load theme verses
+  const loadThemeVerses = async (theme: string, versionId: string) => {
+    try {
+      setLoading(true);
+      const verses = await bibleService.getVersesByTheme(theme, versionId);
+      setThemeVerses(verses);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load theme verses');
+      setThemeVerses([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load bookmarks
+  const loadBookmarks = () => {
+    try {
+      const bookmarksList = bibleService.getBookmarks();
+      setBookmarks(bookmarksList);
+    } catch (err) {
+      console.warn('Failed to load bookmarks:', err);
+    }
+  };
+
+  // Add bookmark
+  const addBookmark = (verse: ScriptureVerse, note?: string) => {
+    bibleService.saveBookmark(verse, note);
+    loadBookmarks();
+  };
+
+  // Remove bookmark
+  const removeBookmark = (bookmarkId: string) => {
+    bibleService.removeBookmark(bookmarkId);
+    loadBookmarks();
+  };
+
+  // Handle reference input
+  const handleReferenceInput = useCallback(async (input: string) => {
+    setReferenceInput(input);
+    setError(null);
+
+    if (!input.trim() || !selectedVersion) return;
+
+    try {
+      setLoading(true);
+      const scripture = await bibleService.getScriptureByReference(input, selectedVersion);
+      setCurrentVerses(scripture.verses);
+
+      // Update the manual selectors to match the reference
+      if (scripture.verses.length > 0) {
+        const firstVerse = scripture.verses[0];
+        const book = books.find(b => b.name === firstVerse.book);
+        if (book) {
+          setSelectedBook(book.id);
+          setSelectedChapter(firstVerse.chapter);
+          setVerseStart(Math.min(...scripture.verses.map(v => v.verse)));
+          const maxVerse = Math.max(...scripture.verses.map(v => v.verse));
+          setVerseEnd(maxVerse > verseStart ? maxVerse : null);
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid reference');
+      setCurrentVerses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedVersion, books, verseStart]);
+
+  // Handle manual selection (book/chapter/verse dropdowns)
+  const handleManualSelection = useCallback(async () => {
+    if (!selectedVersion || !selectedBook || !selectedChapter) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const verses: number[] = [];
+      if (verseEnd && verseEnd > verseStart) {
+        for (let i = verseStart; i <= verseEnd; i++) {
+          verses.push(i);
+        }
+      } else {
+        verses.push(verseStart);
+      }
+
+      const scriptureVerses = await bibleService.getVerses(
+        selectedVersion,
+        selectedBook,
+        selectedChapter,
+        verses
+      );
+
+      setCurrentVerses(scriptureVerses);
+
+      // Update reference input to match
+      const book = books.find(b => b.id === selectedBook);
+      if (book) {
+        const reference = bibleService.formatReference(book.name, selectedChapter, verses);
+        setReferenceInput(reference);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load verses');
+      setCurrentVerses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedVersion, selectedBook, selectedChapter, verseStart, verseEnd, books]);
+
+  // Handle search
+  const handleSearch = useCallback(async (query: string) => {
+    if (!query.trim() || !selectedVersion) {
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const results = await bibleService.searchVerses(query, selectedVersion);
+      setSearchResults(results);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Search failed');
+      setSearchResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedVersion]);
+
+  // Handle version change
+  const handleVersionChange = (newVersionId: string) => {
+    setSelectedVersion(newVersionId);
+    setCurrentVerses([]);
+    setSearchResults([]);
+    loadPopularVerses(newVersionId);
+
+    // Re-run current selection if we have one
+    if (referenceInput) {
+      handleReferenceInput(referenceInput);
+    } else if (selectedBook && selectedChapter) {
+      handleManualSelection();
+    }
+  };
+
+  // Add to recent references
+  const addToRecentReferences = useCallback((reference: string) => {
+    setRecentReferences(prev => {
+      const filtered = prev.filter(ref => ref !== reference);
+      return [reference, ...filtered].slice(0, 5); // Keep only 5 most recent
+    });
+  }, []);
+
+  // Handle smart reference selection
+  const handleSmartReferenceSelect = useCallback(async (reference: ParsedReference) => {
+    if (!reference.isValid || !reference.book || !selectedVersion) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const verses: number[] = [];
+      if (reference.verseEnd && reference.verseStart && reference.verseEnd > reference.verseStart) {
+        for (let i = reference.verseStart; i <= reference.verseEnd; i++) {
+          verses.push(i);
+        }
+      } else if (reference.verseStart) {
+        verses.push(reference.verseStart);
+      } else {
+        // If no verse specified, default to verse 1
+        verses.push(1);
+      }
+
+      const chapter = reference.chapter || 1;
+      const scriptureVerses = await bibleService.getVerses(
+        selectedVersion,
+        reference.book.id,
+        chapter,
+        verses
+      );
+
+      setCurrentVerses(scriptureVerses);
+
+      // Update manual selectors to match
+      setSelectedBook(reference.book.id);
+      setSelectedChapter(chapter);
+      setVerseStart(verses[0]);
+      setVerseEnd(verses.length > 1 ? verses[verses.length - 1] : null);
+
+      // Update reference input to match formatted version
+      const formattedReference = bibleService.formatReference(reference.book.name, chapter, verses);
+      setReferenceInput(formattedReference);
+
+      // Add to recent references
+      addToRecentReferences(formattedReference);
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load verses');
+      setCurrentVerses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedVersion, addToRecentReferences]);
+
+  // Handle reference change from smart input (for chapter verse list)
+  const handleReferenceChange = useCallback((reference: ParsedReference) => {
+    setCurrentParsedReference(reference);
+
+    // Auto-expand verse list when a valid reference is entered
+    if (reference.book && reference.chapter) {
+      setShowVerseList(true);
+    }
+
+    // Update selected verses if the reference includes specific verses
+    if (reference.isValid && reference.verseStart) {
+      const verses: number[] = [];
+      if (reference.verseEnd && reference.verseEnd > reference.verseStart) {
+        for (let i = reference.verseStart; i <= reference.verseEnd; i++) {
+          verses.push(i);
+        }
+      } else {
+        verses.push(reference.verseStart);
+      }
+      setSelectedVersesFromList(verses);
+    } else {
+      setSelectedVersesFromList([]);
+    }
+  }, []);
+
+  // Handle verse selection from chapter list
+  const handleVerseSelectionFromList = useCallback((verseNumbers: number[]) => {
+    if (!currentParsedReference?.book || !currentParsedReference.chapter || !selectedVersion) {
+      return;
+    }
+
+    setSelectedVersesFromList(verseNumbers);
+
+    // The ChapterVerseList already has all the verses loaded, we just need to filter them
+    // based on the selected verse numbers. We'll get the actual verse data when the user
+    // clicks "Use This Scripture". This avoids redundant API calls.
+
+    // Update the smart input to reflect the selection
+    const formattedReference = bibleService.formatReference(
+      currentParsedReference.book.name,
+      currentParsedReference.chapter,
+      verseNumbers
+    );
+    setReferenceInput(formattedReference);
+
+    // Update manual selectors to match
+    setSelectedBook(currentParsedReference.book.id);
+    setSelectedChapter(currentParsedReference.chapter);
+    setVerseStart(verseNumbers[0]);
+    setVerseEnd(verseNumbers.length > 1 ? verseNumbers[verseNumbers.length - 1] : null);
+
+    // Clear current verses since we're now in selection mode
+    setCurrentVerses([]);
+  }, [currentParsedReference]);
+
+  // Get current version name
+  const getCurrentVersion = () => {
+    return versions.find(v => v.id === selectedVersion);
+  };
+
+  // Get current book
+  const getCurrentBook = () => {
+    return books.find(b => b.id === selectedBook);
+  };
+
+  if (loading && !initialized) {
+    return (
+      <div className={`flex items-center justify-center p-8 ${className}`}>
+        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+        <span className="ml-2 text-gray-300">Loading Bible data...</span>
+      </div>
+    );
   }
 
-  return null;
-};
-
-const BibleSelector: React.FC<BibleSelectorProps> = ({ onVerseSelect, className = '' }) => {
-  const [selectedTranslation, setSelectedTranslation] = useState('KJV');
-  const [selectedBook, setSelectedBook] = useState('');
-  const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
-  const [selectedVerses, setSelectedVerses] = useState<number[]>([1]);
-  const [scriptureReference, setScriptureReference] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [searchResults, setSearchResults] = useState<ScriptureVerse[]>([]);
-
-  const currentBook = BIBLE_BOOKS.find(book => book.name === selectedBook);
-  const currentTranslation = TRANSLATIONS.find(t => t.id === selectedTranslation);
-
-  // Handle scripture reference input
-  const handleReferenceInput = (input: string) => {
-    setScriptureReference(input);
-
-    const parsed = parseScriptureReference(input);
-    if (parsed) {
-      setSelectedBook(parsed.book);
-      setSelectedChapter(parsed.chapter);
-      setSelectedVerses(parsed.verses);
-    }
-  };
-
-  // Generate sample verses (in production, this would come from database)
-  const generateSampleVerses = (): ScriptureVerse[] => {
-    if (!selectedBook || !selectedChapter || selectedVerses.length === 0) return [];
-
-    // This is mock data - in production it would come from the database
-    const mockVerses: ScriptureVerse[] = selectedVerses.map(verseNum => ({
-      id: `${selectedBook}-${selectedChapter}-${verseNum}`,
-      book: selectedBook,
-      chapter: selectedChapter!,
-      verse: verseNum,
-      text: `This is sample text for ${selectedBook} ${selectedChapter}:${verseNum}. In a production system, this would be the actual biblical text from the ${selectedTranslation} translation.`,
-      translation: selectedTranslation
-    }));
-
-    return mockVerses;
-  };
-
-  const currentVerses = generateSampleVerses();
-
-  const formatReference = () => {
-    if (!selectedBook || !selectedChapter || selectedVerses.length === 0) return '';
-
-    if (selectedVerses.length === 1) {
-      return `${selectedBook} ${selectedChapter}:${selectedVerses[0]}`;
-    } else {
-      const sortedVerses = [...selectedVerses].sort((a, b) => a - b);
-      const first = sortedVerses[0];
-      const last = sortedVerses[sortedVerses.length - 1];
-      return `${selectedBook} ${selectedChapter}:${first}-${last}`;
-    }
-  };
-
-  const handleUseScripture = () => {
-    if (onVerseSelect && currentVerses.length > 0) {
-      onVerseSelect(currentVerses);
-    }
-  };
+  if (error && !initialized) {
+    return (
+      <div className={`p-4 ${className}`}>
+        <div className="flex items-center text-red-400 mb-4">
+          <AlertCircle className="w-5 h-5 mr-2" />
+          <span>Failed to load Bible data</span>
+        </div>
+        <p className="text-sm text-gray-400 mb-4">{error}</p>
+        <button
+          onClick={initializeData}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className={`space-y-4 ${className}`}>
-      {/* Quick Reference Input */}
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Scripture Reference
-        </label>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={scriptureReference}
-            onChange={(e) => handleReferenceInput(e.target.value)}
-            placeholder="e.g., John 3:16 or Psalm 23:1-4"
-            className="flex-1 px-3 py-2 border border-gray-600 rounded-md bg-gray-800 text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none"
-          />
-          <button
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="px-3 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 flex items-center gap-2"
+      {/* Header with Version Selector */}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-white">Scripture Selector</h2>
+        <div className="flex items-center space-x-2">
+          <label className="text-sm text-gray-400">Version:</label>
+          <select
+            value={selectedVersion}
+            onChange={(e) => handleVersionChange(e.target.value)}
+            className="px-3 py-1 border border-gray-600 rounded-md bg-gray-800 text-white text-sm focus:border-blue-500 focus:outline-none"
           >
-            <Search className="w-4 h-4" />
-            {showAdvanced ? 'Simple' : 'Advanced'}
-          </button>
+            <option value="">Select Version</option>
+            {versions.map((version) => (
+              <option key={version.id} value={version.id}>
+                {version.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Advanced Selection */}
-      {showAdvanced && (
-        <div className="space-y-4 p-4 bg-gray-800 rounded-lg border border-gray-700">
-          {/* Translation Selector */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Translation
-            </label>
-            <select
-              value={selectedTranslation}
-              onChange={(e) => setSelectedTranslation(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-800 text-white"
-            >
-              {TRANSLATIONS.map((translation) => (
-                <option key={translation.id} value={translation.id}>
-                  {translation.name} ({translation.id})
-                </option>
+      {/* Tab Navigation */}
+      <div className="flex border-b border-gray-700">
+        {[
+          { key: 'reference', label: 'Scripture', icon: BookOpen },
+          { key: 'search', label: 'Search', icon: Search },
+          { key: 'saved', label: 'Saved', icon: Heart }
+        ].map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key as TabType)}
+            className={`flex-1 px-4 py-2 text-sm font-medium flex items-center justify-center gap-2 ${
+              activeTab === key
+                ? 'border-b-2 border-blue-500 text-blue-400'
+                : 'text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            <Icon className="w-4 h-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      <div className="min-h-[300px]">
+        {/* Scripture Reference Tab */}
+        {activeTab === 'reference' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+            {/* Left Panel - Scripture Input */}
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Scripture Reference
+                  </label>
+                  {recentReferences.length > 0 && (
+                    <div className="relative">
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            // Parse and handle recent reference selection
+                            handleReferenceInput(e.target.value);
+                            e.target.value = ''; // Reset dropdown
+                          }
+                        }}
+                        className="text-xs bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-300 focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="">Recent</option>
+                        {recentReferences.map((ref, index) => (
+                          <option key={index} value={ref}>
+                            {ref}
+                          </option>
+                        ))}
+                      </select>
+                      <Clock className="absolute right-1 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                    </div>
+                  )}
+                </div>
+                <SmartScriptureInput
+                  defaultReference="Genesis 1:1"
+                  onReferenceSelect={handleSmartReferenceSelect}
+                  onReferenceChange={handleReferenceChange}
+                  placeholder="Type scripture reference (e.g., John 3:16, gen 1:1)"
+                  showValidation={true}
+                  autoComplete={true}
+                  className="w-full"
+                  books={books}
+                  selectedVersionId={selectedVersion}
+                />
+              </div>
+
+              {/* Scripture Preview/Selection */}
+              {(currentVerses.length > 0 || selectedVersesFromList.length > 0) && (
+                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                  {currentVerses.length > 0 ? (
+                    <>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-sm font-medium text-white">
+                          {bibleService.formatReference(
+                            currentVerses[0].book,
+                            currentVerses[0].chapter,
+                            currentVerses.map(v => v.verse)
+                          )} ({getCurrentVersion()?.name})
+                        </div>
+                        <BookOpen className="w-4 h-4 text-gray-400" />
+                      </div>
+                      <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+                        {currentVerses.map((verse) => (
+                          <div key={verse.id} className="text-gray-300">
+                            <span className="text-xs text-gray-500 mr-2 font-mono">
+                              {verse.verse}
+                            </span>
+                            {verse.text}
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => handleUseVerses(currentVerses)}
+                        className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium flex items-center justify-center gap-2"
+                      >
+                        Add to Presentation
+                        <span className="text-xs opacity-70">(Ctrl+Enter)</span>
+                      </button>
+                    </>
+                  ) : selectedVersesFromList.length > 0 && currentParsedReference?.book && (
+                    <>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-sm font-medium text-white">
+                          {bibleService.formatReference(
+                            currentParsedReference.book.name,
+                            currentParsedReference.chapter || 1,
+                            selectedVersesFromList
+                          )} ({getCurrentVersion()?.name})
+                        </div>
+                        <BookOpen className="w-4 h-4 text-gray-400" />
+                      </div>
+                      <div className="text-gray-400 text-sm mb-4 text-center py-4">
+                        {selectedVersesFromList.length} verse{selectedVersesFromList.length !== 1 ? 's' : ''} selected
+                      </div>
+                      <button
+                        onClick={() => handleUseVerses([])}
+                        disabled={loading}
+                        className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm font-medium flex items-center justify-center gap-2"
+                      >
+                        {loading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Loading Verses...
+                          </>
+                        ) : (
+                          <>
+                            Add Selected Verses
+                            <span className="text-xs opacity-70">(Ctrl+Enter)</span>
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Right Panel - Chapter Verse List */}
+            <div className="flex flex-col min-h-0">
+              {currentParsedReference?.book && currentParsedReference?.chapter ? (
+                <>
+                  {/* Collapsible Header */}
+                  <div className="flex items-center justify-between p-3 bg-gray-800/50 rounded-t-lg border border-gray-700 border-b-0">
+                    <div className="flex items-center space-x-2">
+                      <BookOpen className="w-4 h-4 text-blue-400" />
+                      <span className="text-sm font-medium text-white">
+                        {currentParsedReference.book.name} {currentParsedReference.chapter}
+                      </span>
+                      {selectedVersesFromList.length > 0 && (
+                        <span className="text-xs text-blue-400 bg-blue-400/20 px-2 py-1 rounded">
+                          {selectedVersesFromList.length} selected
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setShowVerseList(!showVerseList)}
+                      className="p-1 rounded hover:bg-gray-700 transition-colors"
+                      title={showVerseList ? 'Hide verses' : 'Show verses'}
+                    >
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showVerseList ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+
+                  {/* Collapsible Content */}
+                  {showVerseList ? (
+                    <ChapterVerseList
+                      book={currentParsedReference.book}
+                      chapter={currentParsedReference.chapter}
+                      selectedVerses={selectedVersesFromList}
+                      versionId={selectedVersion || ''}
+                      versions={versions}
+                      onVerseSelection={handleVerseSelectionFromList}
+                      onVersionChange={() => {}} // Disabled - version controlled at top level
+                      className="flex-1 rounded-t-none border-t-0"
+                      loading={loading}
+                      error={error}
+                      hideVersionSelector={true}
+                    />
+                  ) : (
+                    <div className="flex-1 bg-gray-800/50 rounded-b-lg border border-gray-700 border-t-0 flex items-center justify-center py-8">
+                      <div className="text-center text-gray-400">
+                        <span className="text-sm">Verse list collapsed</span>
+                        <p className="text-xs text-gray-500 mt-1">Click to expand</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center bg-gray-800/50 rounded-lg border border-gray-700">
+                  <div className="text-center text-gray-400">
+                    <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p className="text-sm">Enter a scripture reference</p>
+                    <p className="text-xs text-gray-500 mt-1">Chapter verses will appear here</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+
+        {/* Search Tab */}
+        {activeTab === 'search' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Search Scripture
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search for words or phrases..."
+                  className="flex-1 px-3 py-2 border border-gray-600 rounded-md bg-gray-800 text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none"
+                />
+                <button
+                  onClick={() => handleSearch(searchQuery)}
+                  disabled={loading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  Search
+                </button>
+              </div>
+            </div>
+
+            {/* Search Results */}
+            {searchResults.length > 0 && (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {searchResults.map((verse) => (
+                  <div
+                    key={verse.id}
+                    className="bg-gray-800 p-3 rounded-lg border border-gray-700 hover:border-gray-600 cursor-pointer transition-colors"
+                    onClick={() => handleUseVerses([verse])}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm font-medium text-blue-400">
+                        {verse.book} {verse.chapter}:{verse.verse}
+                      </div>
+                    </div>
+                    <div className="text-gray-300 text-sm">
+                      {verse.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {searchQuery && searchResults.length === 0 && !loading && (
+              <div className="text-center py-8 text-gray-400">
+                <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No verses found matching your search.</p>
+                <p className="text-sm mt-2">Try different keywords or check your spelling.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Saved Tab - Combined Popular, Themes, and Bookmarks */}
+        {activeTab === 'saved' && (
+          <div className="space-y-6">
+            {/* Sub-tab navigation */}
+            <div className="flex space-x-1 bg-gray-700 p-1 rounded-lg">
+              {[
+                { key: 'popular', label: 'Popular', icon: Star },
+                { key: 'themes', label: 'Themes', icon: Lightbulb },
+                { key: 'bookmarks', label: 'Bookmarks', icon: Bookmark }
+              ].map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setSavedSubTab(key as 'popular' | 'themes' | 'bookmarks')}
+                  className={`flex-1 px-3 py-2 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-colors ${
+                    savedSubTab === key
+                      ? 'bg-gray-600 text-white'
+                      : 'text-gray-300 hover:text-white hover:bg-gray-600'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
               ))}
-            </select>
-          </div>
-
-          {/* Book Selector */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Book
-            </label>
-            <select
-              value={selectedBook}
-              onChange={(e) => setSelectedBook(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-800 text-white"
-            >
-              <option value="">Select Book</option>
-              <optgroup label="Old Testament">
-                {BIBLE_BOOKS.filter(book => book.testament === 'Old').map((book) => (
-                  <option key={book.name} value={book.name}>
-                    {book.name}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="New Testament">
-                {BIBLE_BOOKS.filter(book => book.testament === 'New').map((book) => (
-                  <option key={book.name} value={book.name}>
-                    {book.name}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-          </div>
-
-          {/* Chapter Selector */}
-          {currentBook && (
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Chapter
-              </label>
-              <select
-                value={selectedChapter || ''}
-                onChange={(e) => setSelectedChapter(parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-800 text-white"
-              >
-                <option value="">Select Chapter</option>
-                {Array.from({ length: currentBook.chapters }, (_, i) => i + 1).map((chapter) => (
-                  <option key={chapter} value={chapter}>
-                    Chapter {chapter}
-                  </option>
-                ))}
-              </select>
             </div>
-          )}
 
-          {/* Verse Selector */}
-          {selectedChapter && (
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Verses (typical ranges available)
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  min="1"
-                  max="176"
-                  value={selectedVerses[0] || 1}
-                  onChange={(e) => setSelectedVerses([parseInt(e.target.value)])}
-                  placeholder="Start verse"
-                  className="px-3 py-2 border border-gray-600 rounded-md bg-gray-800 text-white"
-                />
-                <input
-                  type="number"
-                  min={selectedVerses[0] || 1}
-                  max="176"
-                  value={selectedVerses[selectedVerses.length - 1] || ''}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      const start = selectedVerses[0] || 1;
-                      const end = parseInt(e.target.value);
-                      const range = [];
-                      for (let i = start; i <= end; i++) {
-                        range.push(i);
+            {/* Popular Verses */}
+            {savedSubTab === 'popular' && (
+              <div className="space-y-2">
+                {popularVerses.length > 0 ? (
+                  popularVerses.map((verse) => (
+                    <div
+                      key={verse.id}
+                      className="bg-gray-800 p-3 rounded-lg border border-gray-700 hover:border-gray-600 cursor-pointer transition-colors"
+                      onClick={() => handleUseVerses([verse])}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm font-medium text-yellow-400">
+                          {verse.book} {verse.chapter}:{verse.verse}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addBookmark(verse);
+                            }}
+                            className="p-1 rounded hover:bg-gray-700 transition-colors"
+                            title="Add bookmark"
+                          >
+                            <Bookmark className="w-3 h-3 text-gray-400 hover:text-yellow-400" />
+                          </button>
+                          <Star className="w-4 h-4 text-yellow-400" />
+                        </div>
+                      </div>
+                      <div className="text-gray-300 text-sm">
+                        {verse.text}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <Star className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>Loading popular verses...</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Themes */}
+            {savedSubTab === 'themes' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Select Theme
+                  </label>
+                  <select
+                    value={savedSubTab === 'themes' ? selectedTheme : ''}
+                    onChange={(e) => {
+                      const theme = e.target.value;
+                      setSelectedTheme(theme);
+                      if (theme && selectedVersion) {
+                        loadThemeVerses(theme, selectedVersion);
                       }
-                      setSelectedVerses(range);
-                    }
-                  }}
-                  placeholder="End verse (optional)"
-                  className="px-3 py-2 border border-gray-600 rounded-md bg-gray-800 text-white"
-                />
+                    }}
+                    className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-800 text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">Select a theme</option>
+                    {bibleService.getAvailableThemes().map((theme) => (
+                      <option key={theme} value={theme}>
+                        {theme.charAt(0).toUpperCase() + theme.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {themeVerses.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-blue-300 capitalize">
+                      {selectedTheme} Verses
+                    </h4>
+                    {themeVerses.map((verse) => (
+                      <div
+                        key={verse.id}
+                        className="bg-gray-800 p-3 rounded-lg border border-gray-700 hover:border-gray-600 cursor-pointer transition-colors"
+                        onClick={() => handleUseVerses([verse])}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-sm font-medium text-blue-400">
+                            {verse.book} {verse.chapter}:{verse.verse}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addBookmark(verse);
+                              }}
+                              className="p-1 rounded hover:bg-gray-700 transition-colors"
+                              title="Add bookmark"
+                            >
+                              <Bookmark className="w-3 h-3 text-gray-400 hover:text-yellow-400" />
+                            </button>
+                            <Lightbulb className="w-4 h-4 text-blue-400" />
+                          </div>
+                        </div>
+                        <div className="text-gray-300 text-sm">
+                          {verse.text}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {selectedTheme && savedSubTab === 'themes' && themeVerses.length === 0 && !loading && (
+                  <div className="text-center py-8 text-gray-400">
+                    <Lightbulb className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>No verses found for this theme.</p>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )}
+
+            {/* Bookmarks */}
+            {savedSubTab === 'bookmarks' && (
+              <div className="space-y-2">
+                {bookmarks.length > 0 ? (
+                  bookmarks.map((bookmark) => (
+                    <div
+                      key={bookmark.id}
+                      className="bg-gray-800 p-3 rounded-lg border border-gray-700 hover:border-gray-600 cursor-pointer transition-colors"
+                      onClick={() => handleUseVerses([bookmark.verse])}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm font-medium text-purple-400">
+                          {bookmark.verse.book} {bookmark.verse.chapter}:{bookmark.verse.verse}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeBookmark(bookmark.id);
+                            }}
+                            className="p-1 rounded hover:bg-gray-700 transition-colors"
+                            title="Remove bookmark"
+                          >
+                            <Bookmark className="w-3 h-3 text-purple-400 hover:text-red-400 fill-current" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-gray-300 text-sm mb-2">
+                        {bookmark.verse.text}
+                      </div>
+                      {bookmark.note && (
+                        <div className="text-xs text-gray-500 italic">
+                          Note: {bookmark.note}
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-600 mt-2">
+                        Saved: {new Date(bookmark.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <Bookmark className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>No bookmarks yet.</p>
+                    <p className="text-sm mt-2">Click the bookmark icon on any verse to save it.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-900/20 border border-red-600/30 rounded-lg p-3">
+          <div className="flex items-center text-red-400">
+            <AlertCircle className="w-4 h-4 mr-2" />
+            <span className="text-sm">{error}</span>
+          </div>
         </div>
       )}
 
-      {/* Selected Translation Display */}
-      {currentTranslation && (
-        <div className="bg-blue-900/30 p-3 rounded-lg border border-blue-600">
-          <div className="text-sm font-medium text-blue-300">
-            Translation: {currentTranslation.name}
-          </div>
-          <div className="text-xs text-blue-400">
-            {currentTranslation.description}
-          </div>
+      {/* Loading Indicator */}
+      {loading && (
+        <div className="flex items-center justify-center py-4">
+          <Loader2 className="w-5 h-5 animate-spin text-blue-400 mr-2" />
+          <span className="text-sm text-gray-300">Loading...</span>
         </div>
       )}
 
-      {/* Scripture Display */}
-      {currentVerses.length > 0 && (
-        <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-medium text-white">
-              {formatReference()} ({currentTranslation?.id})
-            </div>
-            <Book className="w-4 h-4 text-gray-400" />
-          </div>
-          <div className="space-y-2 mb-4">
-            {currentVerses.map((verse) => (
-              <div key={verse.id} className="text-gray-300">
-                <span className="text-xs text-gray-500 mr-2">
-                  {verse.verse}
-                </span>
-                {verse.text}
-              </div>
-            ))}
-          </div>
-          {onVerseSelect && (
-            <button
-              onClick={handleUseScripture}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
-            >
-              Use This Scripture
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 };

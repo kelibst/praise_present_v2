@@ -27,6 +27,9 @@
   "author": "Keli Booster",
   "license": "MIT",
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@prisma/client": "^6.16.1",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -43,6 +46,8 @@
     "react-dom": "^18.2.0",
     "react-icons": "^5.5.0",
     "react-redux": "^9.2.0",
+    "react-resizable-panels": "^3.0.6",
+    "react-rnd": "^10.5.2",
     "react-router-dom": "^7.9.1",
     "sqlite3": "^5.1.7",
     "tailwind-merge": "^3.3.1",

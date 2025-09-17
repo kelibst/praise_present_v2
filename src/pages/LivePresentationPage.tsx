@@ -1,23 +1,46 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Monitor, MonitorSpeaker, SkipBack, SkipForward, Eye, Settings, Save, Palette, AlignLeft, AlignCenter, AlignRight, Calendar, Plus } from 'lucide-react';
+import { Play, MonitorSpeaker, SkipBack, SkipForward, Settings, Calendar, ChevronLeft, ChevronRight, Minimize2, Maximize2, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-// Import data (using real database connections)
-import { sampleSongs } from '../../data/sample-songs'; // Keep for song library until database integration
+// Import drag and drop utilities
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable';
+
+// Import resizable panels
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 // Import template system
 import { ScriptureTemplate, SongTemplate, SlideGenerator, Shape } from '../rendering';
-import { TemplateManager, ensureTemplateManagerReady } from '../rendering/templates/TemplateManager';
+import { ensureTemplateManagerReady } from '../rendering/templates/TemplateManager';
 import { DEFAULT_SLIDE_SIZE } from '../rendering/templates/templateUtils';
-import BibleSelector from '../components/bible/BibleSelector';
-import SongLibrary from '../components/songs/SongLibrary';
 
 // Import editable preview component
 import { EditableSlidePreview } from '../components/EditableSlidePreview';
-import { GeneratedSlide } from '../rendering/SlideGenerator';
 
 // Import plan components
 import { PlanManager } from '../components/plans/PlanManager';
-import { PlanWithItems, PlanItemWithContent } from '../types/plan';
+import { PlanWithItems } from '../types/plan';
+import { usePlanIntegration, PlanStats } from '../components/plans/PlanServiceIntegration';
+
+// Import service components
+import { SortableServiceItem, ServiceItem } from '../components/service/ServiceItem';
+
+// Import slide components
+import { SlidePropertyPanel, SlideProperties } from '../components/slides/SlidePropertyPanel';
+
+// Import live display components
+import { useLiveDisplay, LiveDisplayControls } from '../components/live/LiveDisplayManager';
 
 // Define Slide interface
 interface Slide {
@@ -30,26 +53,14 @@ interface Slide {
   duration?: number;
 }
 
-// Unified service item interface that replaces both PresentationItem and ServiceItem
-interface ServiceItem {
-  id: string;
-  type: 'scripture' | 'song' | 'announcement' | 'media' | 'sermon';
-  title: string;
-  content: any;
-  slides?: Slide[];
-  duration?: number;
-  order?: number;
-  notes?: string;
-  // Plan-specific fields (when item comes from a plan)
-  planId?: string;
-  planItemId?: string;
-}
-
 interface LivePresentationPageProps {}
 
 export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
+  // Navigation
+  const navigate = useNavigate();
+
   // State management
-  const [activeTab, setActiveTab] = useState<'plan' | 'plans' | 'scriptures' | 'songs'>('plan');
+  const [activeTab, setActiveTab] = useState<'plan' | 'plans'>('plan');
   const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<ServiceItem | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -57,16 +68,40 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
   const [presentationMode, setPresentationMode] = useState<'preview' | 'live'>('preview');
 
-  // Live display state (using standardized pattern)
-  const [liveDisplayActive, setLiveDisplayActive] = useState(false);
-  const [liveDisplayStatus, setLiveDisplayStatus] = useState('Disconnected');
+  // Live display management
+  const {
+    liveDisplayActive,
+    liveDisplayStatus,
+    createLiveDisplay,
+    closeLiveDisplay,
+    sendSlideToLive,
+    clearLiveDisplay,
+    showBlackScreen,
+  } = useLiveDisplay();
+
+  // Plan integration management
+  const { handlePlanSelect, handlePlanCreate } = usePlanIntegration({
+    onPlanLoaded: (serviceItems, plan) => {
+      setSelectedPlan(plan);
+      setServiceItems(serviceItems);
+
+      // Auto-switch to Current Service tab and select first item
+      setActiveTab('plan');
+      if (serviceItems.length > 0) {
+        generateSlidesForItem(serviceItems[0]);
+      }
+    },
+    onPlanCreated: (plan) => {
+      console.log('Plan created in LivePresentationPage:', plan.name);
+    }
+  });
 
   // Editable slide state
   const [editableSlideContent, setEditableSlideContent] = useState<any>(null);
-  const [slideProperties, setSlideProperties] = useState({
+  const [slideProperties, setSlideProperties] = useState<SlideProperties>({
     backgroundColor: '#1a1a1a',
     fontSize: 48,
-    textAlign: 'center' as 'left' | 'center' | 'right',
+    textAlign: 'center',
     fontFamily: 'Arial, sans-serif',
     textColor: '#ffffff'
   });
@@ -75,10 +110,26 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Plan-related state (simplified)
   const [selectedPlan, setSelectedPlan] = useState<PlanWithItems | null>(null);
-  const [currentPlanItemIndex, setCurrentPlanItemIndex] = useState(0);
 
-  // Service item management
-  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  // Panel visibility and layout state
+  const [panelVisibility, setPanelVisibility] = useState({
+    leftPanel: true,
+    middlePanel: true,
+    rightPanel: true
+  });
+  const [panelSizes, setPanelSizes] = useState([30, 45, 25]); // Default sizes as percentages
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px of movement required before drag starts
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Template system with enhanced initialization
   const [templateManager] = useState(() => {
@@ -115,24 +166,52 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   });
   const [slideGenerator] = useState(() => new SlideGenerator());
 
-  // Initialize with empty service items - users should create plans or add items manually
+  // Initialize with empty service items and check for pending items from other pages
   useEffect(() => {
     setServiceItems([]);
-  }, []);
 
-  // Check live display status on mount
-  useEffect(() => {
-    const checkStatus = async () => {
-      if (window.electronAPI) {
-        const status = await window.electronAPI.invoke('live-display:getStatus');
-        if (status?.hasWindow && status?.isVisible) {
-          setLiveDisplayActive(true);
-          setLiveDisplayStatus('Active');
+    // Check for pending service items from other pages (like SongsPage)
+    const checkPendingItems = () => {
+      const pendingItems = localStorage.getItem('pendingServiceItems');
+      if (pendingItems) {
+        try {
+          const items = JSON.parse(pendingItems);
+          if (Array.isArray(items) && items.length > 0) {
+            setServiceItems(prev => [...prev, ...items]);
+            localStorage.removeItem('pendingServiceItems'); // Clear after loading
+
+            // Auto-select the first added item
+            if (items.length > 0) {
+              generateSlidesForItem(items[0]);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading pending service items:', error);
+          localStorage.removeItem('pendingServiceItems'); // Clear invalid data
         }
       }
     };
-    checkStatus();
+
+    checkPendingItems();
+
+    // Set up listener for storage events (when SongsPage adds items)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'pendingServiceItems' && e.newValue) {
+        checkPendingItems();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // Also check periodically in case storage events don't work (same-window updates)
+    const interval = setInterval(checkPendingItems, 1000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
   }, []);
+
 
   // Keyboard shortcuts for presentation control
   useEffect(() => {
@@ -205,175 +284,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     };
   }, [selectedItem, currentSlideIndex, presentationMode, liveDisplayActive]);
 
-  // Live display functions (standardized pattern)
-  const createLiveDisplay = async () => {
-    try {
-      const result = await window.electronAPI?.invoke('live-display:create', {});
-      if (result?.success) {
-        setLiveDisplayActive(true);
-        setLiveDisplayStatus('Active');
-      }
-    } catch (error) {
-      console.error('Failed to create live display:', error);
-      setLiveDisplayStatus('Error');
-    }
-  };
-
-  const closeLiveDisplay = async () => {
-    try {
-      await window.electronAPI?.invoke('live-display:close');
-      setLiveDisplayActive(false);
-      setLiveDisplayStatus('Disconnected');
-    } catch (error) {
-      console.error('Failed to close live display:', error);
-    }
-  };
-
-  const sendSlideToLive = async (slide: Slide, item: PresentationItem, slideIndex?: number) => {
-    if (!liveDisplayActive) return;
-
-    try {
-      // Determine the slide index - either passed in or find it in the slides array
-      let actualSlideIndex = slideIndex ?? 0;
-      if (slideIndex === undefined && item.slides) {
-        actualSlideIndex = item.slides.findIndex(s => s.id === slide.id);
-        if (actualSlideIndex === -1) actualSlideIndex = currentSlideIndex;
-      }
-
-      // Enhanced shape serialization with responsive properties preservation
-      const serializeShape = (shape: any) => {
-        const baseProps = {
-          id: shape.id,
-          type: shape.type,
-          position: shape.position || { x: 0, y: 0 },
-          size: shape.size || { width: 100, height: 50 },
-          rotation: shape.rotation || 0,
-          opacity: shape.opacity !== undefined ? shape.opacity : 1.0,
-          zIndex: shape.zIndex || 0,
-          visible: shape.visible !== undefined ? shape.visible : true,
-          transform: shape.transform,
-          style: shape.style
-        };
-
-        // Responsive properties (if shape is responsive)
-        const responsiveProps: any = {};
-        if (shape.responsive !== undefined) {
-          responsiveProps.responsive = shape.responsive;
-        }
-        if (shape.flexiblePosition) {
-          responsiveProps.flexiblePosition = shape.flexiblePosition;
-        }
-        if (shape.flexibleSize) {
-          responsiveProps.flexibleSize = shape.flexibleSize;
-        }
-        if (shape.layoutConfig) {
-          responsiveProps.layoutConfig = shape.layoutConfig;
-        }
-        if (shape.typography) {
-          responsiveProps.typography = shape.typography;
-        }
-        if (shape.maintainAspectRatio !== undefined) {
-          responsiveProps.maintainAspectRatio = shape.maintainAspectRatio;
-        }
-
-        // Text-specific properties with comprehensive serialization
-        if (shape.type === 'text') {
-          const textProps = {
-            text: shape.text || '',
-            textStyle: {
-              fontFamily: shape.textStyle?.fontFamily || 'Arial, sans-serif',
-              fontSize: shape.textStyle?.fontSize || 24,
-              fontWeight: shape.textStyle?.fontWeight || 'normal',
-              fontStyle: shape.textStyle?.fontStyle || 'normal',
-              color: shape.textStyle?.color || { r: 255, g: 255, b: 255, a: 1 },
-              textAlign: shape.textStyle?.textAlign || 'left',
-              verticalAlign: shape.textStyle?.verticalAlign || 'top',
-              lineHeight: shape.textStyle?.lineHeight || 1.2,
-              letterSpacing: shape.textStyle?.letterSpacing || 0,
-              textDecoration: shape.textStyle?.textDecoration || 'none',
-              textTransform: shape.textStyle?.textTransform || 'none',
-              textShadow: shape.textStyle?.textShadow,
-              shadowColor: shape.textStyle?.shadowColor,
-              shadowBlur: shape.textStyle?.shadowBlur,
-              shadowOffsetX: shape.textStyle?.shadowOffsetX,
-              shadowOffsetY: shape.textStyle?.shadowOffsetY
-            },
-            autoSize: shape.autoSize !== false,
-            wordWrap: shape.wordWrap !== false,
-            maxLines: shape.maxLines || 0,
-            // Responsive text-specific properties
-            optimizeReadability: shape.optimizeReadability !== false,
-            scaleMode: shape.scaleMode || 'fluid'
-          };
-
-          return {
-            ...baseProps,
-            ...responsiveProps,
-            ...textProps
-          };
-        }
-
-        // Background-specific properties
-        if (shape.type === 'background') {
-          return {
-            ...baseProps,
-            ...responsiveProps,
-            backgroundStyle: shape.backgroundStyle
-          };
-        }
-
-        // Rectangle-specific properties
-        if (shape.type === 'rectangle') {
-          return {
-            ...baseProps,
-            ...responsiveProps,
-            fillColor: shape.fillColor,
-            strokeColor: shape.strokeColor,
-            strokeWidth: shape.strokeWidth,
-            borderRadius: shape.borderRadius,
-            fill: shape.fill,
-            stroke: shape.stroke
-          };
-        }
-
-        return {
-          ...baseProps,
-          ...responsiveProps
-        };
-      };
-
-      const serializedSlide = {
-        id: slide.id,
-        shapes: slide.shapes.map(serializeShape),
-        background: slide.background
-      };
-
-      const content = {
-        type: 'template-slide',
-        title: `${item.title} - Slide ${actualSlideIndex + 1}`,
-        slide: serializedSlide,
-        metadata: {
-          itemType: item.type,
-          slideIndex: actualSlideIndex,
-          totalSlides: item.slides?.length || 1
-        }
-      };
-
-      await window.electronAPI?.invoke('live-display:sendContent', content);
-    } catch (error) {
-      console.error('Failed to send slide to live display:', error);
-    }
-  };
-
-  const clearLiveDisplay = async () => {
-    if (!liveDisplayActive) return;
-    await window.electronAPI?.invoke('live-display:clearContent');
-  };
-
-  const showBlackScreen = async () => {
-    if (!liveDisplayActive) return;
-    await window.electronAPI?.invoke('live-display:showBlack');
-  };
 
   // Generate slides for selected item
   const generateSlidesForItem = async (item: ServiceItem, autoPresent = false) => {
@@ -385,27 +295,57 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
       if (item.type === 'scripture' && item.content.verses) {
         const scriptureTemplate = new ScriptureTemplate(DEFAULT_SLIDE_SIZE);
-        for (const verse of item.content.verses) {
-          // Create content structure for ScriptureTemplate
-          const scriptureContent = {
-            verse: verse.text || 'Sample verse text',
-            reference: `${verse.book} ${verse.chapter}:${verse.verse}`,
-            translation: verse.translation || 'KJV',
-            book: verse.book,
-            chapter: verse.chapter,
-            verseNumber: verse.verse,
-            theme: 'reading' as const,
-            showTranslation: true,
-            emphasizeReference: true
-          };
 
-          // Generate shapes and create slide
-          const shapes = scriptureTemplate.generateSlide(scriptureContent);
-          slides.push({
-            id: `scripture-${verse.id || Date.now()}`,
-            shapes: shapes,
-            background: { type: 'color', value: '#1a1a1a' }
-          });
+        // Group consecutive verses into single slides for better readability
+        const groupedVerses = groupConsecutiveVerses(item.content.verses);
+
+        for (const group of groupedVerses) {
+          if (group.length === 1) {
+            // Single verse slide
+            const verse = group[0];
+            const scriptureContent = {
+              verse: verse.text || 'Loading verse...',
+              reference: `${verse.book} ${verse.chapter}:${verse.verse}`,
+              translation: verse.translation || 'KJV',
+              book: verse.book,
+              chapter: verse.chapter,
+              verseNumber: verse.verse,
+              theme: 'reading' as const,
+              showTranslation: true,
+              emphasizeReference: true
+            };
+
+            const shapes = scriptureTemplate.generateSlide(scriptureContent);
+            slides.push({
+              id: `scripture-${verse.id || Date.now()}`,
+              shapes: shapes,
+              background: { type: 'color', value: '#1a1a1a' }
+            });
+          } else {
+            // Multiple consecutive verses on one slide
+            const firstVerse = group[0];
+            const lastVerse = group[group.length - 1];
+            const combinedText = group.map(v => `${v.verse} ${v.text}`).join(' ');
+
+            const scriptureContent = {
+              verse: combinedText,
+              reference: `${firstVerse.book} ${firstVerse.chapter}:${firstVerse.verse}-${lastVerse.verse}`,
+              translation: firstVerse.translation || 'KJV',
+              book: firstVerse.book,
+              chapter: firstVerse.chapter,
+              verseNumber: firstVerse.verse,
+              theme: 'reading' as const,
+              showTranslation: true,
+              emphasizeReference: true
+            };
+
+            const shapes = scriptureTemplate.generateSlide(scriptureContent);
+            slides.push({
+              id: `scripture-group-${firstVerse.id}-${lastVerse.id}`,
+              shapes: shapes,
+              background: { type: 'color', value: '#1a1a1a' }
+            });
+          }
         }
       } else if (item.type === 'song' && item.content.lyrics) {
         const songTemplate = new SongTemplate(DEFAULT_SLIDE_SIZE);
@@ -656,32 +596,107 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     setServiceItems(prev => [...prev, newItem]);
   };
 
-  const removeServiceItem = (itemId: string) => {
-    setServiceItems(prev => prev.filter(item => item.id !== itemId));
-    // Clear selection if removed item was selected
-    if (selectedItem?.id === itemId) {
-      setSelectedItem(null);
+
+  // Handle drag end for service item reordering
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
     }
-  };
 
-  const moveServiceItem = (itemId: string, direction: 'up' | 'down') => {
-    setServiceItems(prev => {
-      const currentIndex = prev.findIndex(item => item.id === itemId);
-      if (currentIndex === -1) return prev;
+    setServiceItems((items) => {
+      const oldIndex = items.findIndex((item) => item.id === active.id);
+      const newIndex = items.findIndex((item) => item.id === over.id);
 
-      const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-      if (newIndex < 0 || newIndex >= prev.length) return prev;
-
-      const newItems = [...prev];
-      [newItems[currentIndex], newItems[newIndex]] = [newItems[newIndex], newItems[currentIndex]];
+      const reorderedItems = arrayMove(items, oldIndex, newIndex);
 
       // Update order numbers
-      return newItems.map((item, index) => ({
+      return reorderedItems.map((item, index) => ({
         ...item,
         order: index + 1
       }));
     });
   };
+
+  // Panel management functions
+  const togglePanel = (panel: 'leftPanel' | 'middlePanel' | 'rightPanel') => {
+    setPanelVisibility(prev => {
+      const newVisibility = {
+        ...prev,
+        [panel]: !prev[panel]
+      };
+      // Save to localStorage
+      localStorage.setItem('live-presentation-panel-visibility', JSON.stringify(newVisibility));
+      return newVisibility;
+    });
+  };
+
+  const handlePanelResize = (sizes: number[]) => {
+    setPanelSizes(sizes);
+    // Save to localStorage for persistence
+    localStorage.setItem('live-presentation-panel-sizes', JSON.stringify(sizes));
+  };
+
+  // Load saved panel sizes and visibility on mount
+  useEffect(() => {
+    // Load panel sizes
+    const savedSizes = localStorage.getItem('live-presentation-panel-sizes');
+    if (savedSizes) {
+      try {
+        const parsedSizes = JSON.parse(savedSizes);
+        if (Array.isArray(parsedSizes) && parsedSizes.length === 3) {
+          setPanelSizes(parsedSizes);
+        }
+      } catch (error) {
+        console.warn('Failed to parse saved panel sizes:', error);
+      }
+    }
+
+    // Load panel visibility
+    const savedVisibility = localStorage.getItem('live-presentation-panel-visibility');
+    if (savedVisibility) {
+      try {
+        const parsedVisibility = JSON.parse(savedVisibility);
+        if (parsedVisibility && typeof parsedVisibility === 'object') {
+          setPanelVisibility(prev => ({
+            ...prev,
+            ...parsedVisibility
+          }));
+        }
+      } catch (error) {
+        console.warn('Failed to parse saved panel visibility:', error);
+      }
+    }
+  }, []);
+
+  // Keyboard shortcuts for panel toggles
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check if Ctrl is pressed and prevent default browser shortcuts
+      if (event.ctrlKey) {
+        switch (event.key) {
+          case '1':
+            event.preventDefault();
+            togglePanel('leftPanel');
+            break;
+          case '2':
+            event.preventDefault();
+            togglePanel('middlePanel');
+            break;
+          case '3':
+            event.preventDefault();
+            togglePanel('rightPanel');
+            break;
+          default:
+            break;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const quickAddAnnouncement = () => {
     const announcement: ServiceItem = {
@@ -746,72 +761,91 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
           {/* Live Display Controls */}
           {window.electronAPI && (
-            <div className="flex items-center space-x-4">
-              <div className="text-sm text-muted-foreground">
-                Live Display: <span className={
-                  liveDisplayStatus === 'Active' ? 'text-green-400' :
-                  liveDisplayStatus === 'Error' ? 'text-red-400' : 'text-yellow-400'
-                }>{liveDisplayStatus}</span>
-              </div>
-              <div className="flex gap-2">
-                {!liveDisplayActive ? (
-                  <button
-                    onClick={createLiveDisplay}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 flex items-center gap-2"
-                  >
-                    <Monitor className="w-4 h-4" />
-                    Create Live Display
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      onClick={clearLiveDisplay}
-                      className="px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 border border-orange-600 hover:border-orange-700"
-                    >
-                      Clear
-                    </button>
-                    <button
-                      onClick={showBlackScreen}
-                      className="px-3 py-1 bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 rounded text-sm hover:bg-gray-800 dark:hover:bg-gray-200 border border-gray-900 dark:border-gray-100"
-                    >
-                      Black
-                    </button>
-                    <button
-                      onClick={closeLiveDisplay}
-                      className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 border border-red-600 hover:border-red-700"
-                    >
-                      Close
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
+            <LiveDisplayControls
+              liveDisplayActive={liveDisplayActive}
+              liveDisplayStatus={liveDisplayStatus}
+              onCreateDisplay={createLiveDisplay}
+              onCloseDisplay={closeLiveDisplay}
+              onClearDisplay={clearLiveDisplay}
+              onShowBlack={showBlackScreen}
+            />
           )}
         </div>
       </div>
 
-      {/* Keyboard Shortcuts Help */}
+      {/* Keyboard Shortcuts Help & Panel Controls */}
       <div className="bg-card border-b border-border px-4 py-2">
-        <div className="text-xs text-muted-foreground text-center">
-          <span className="font-medium text-foreground">Keyboard Shortcuts:</span>
-          <span className="mx-2">Space/Enter/→ Next</span>
-          <span className="mx-2">Backspace/← Prev</span>
-          <span className="mx-2">F Present</span>
-          <span className="mx-2">B Black</span>
-          <span className="mx-2">Esc Clear</span>
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Keyboard Shortcuts:</span>
+            <span className="mx-2">Space/Enter/→ Next</span>
+            <span className="mx-2">Backspace/← Prev</span>
+            <span className="mx-2">F Present</span>
+            <span className="mx-2">B Black</span>
+            <span className="mx-2">Esc Clear</span>
+            <span className="mx-2 text-primary">Ctrl+1/2/3 Toggle Panels</span>
+          </div>
+
+          {/* Panel Toggle Buttons (when collapsed) */}
+          <div className="flex items-center gap-1">
+            {!panelVisibility.leftPanel && (
+              <button
+                onClick={() => togglePanel('leftPanel')}
+                className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                title="Show left panel"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+            {!panelVisibility.middlePanel && (
+              <button
+                onClick={() => togglePanel('middlePanel')}
+                className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                title="Show middle panel"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+            )}
+            {!panelVisibility.rightPanel && (
+              <button
+                onClick={() => togglePanel('rightPanel')}
+                className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                title="Show right panel"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="flex h-[calc(100vh-120px)]">
+      <PanelGroup
+        direction="horizontal"
+        autoSaveId="live-presentation-layout"
+        onLayout={handlePanelResize}
+        className="h-[calc(100vh-120px)]"
+      >
         {/* Left Panel - Tabs and Content */}
-        <div className="w-1/3 bg-card border-r border-border">
+        {panelVisibility.leftPanel && (
+          <Panel defaultSize={panelSizes[0]} minSize={20} maxSize={50}>
+            <div className="bg-card border-r border-border h-full transition-all duration-300 ease-in-out animate-in slide-in-from-left-5">
+          {/* Panel Header with Collapse Button */}
+          <div className="flex items-center justify-between px-2 py-2 border-b border-border bg-secondary/50">
+            <div className="text-sm font-medium text-foreground">Content Library</div>
+            <button
+              onClick={() => togglePanel('leftPanel')}
+              className="p-1 rounded hover:bg-muted transition-colors"
+              title="Collapse left panel"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          </div>
+
           {/* Tab Navigation */}
           <div className="flex border-b border-border">
             {[
               { key: 'plan', label: 'Current Service', icon: Settings },
-              { key: 'plans', label: 'Plan Manager', icon: Calendar },
-              { key: 'scriptures', label: 'Scripture Library', icon: Eye },
-              { key: 'songs', label: 'Song Library', icon: Play }
+              { key: 'plans', label: 'Plan Manager', icon: Calendar }
             ].map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -867,6 +901,14 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                       </button>
                     )}
                     <button
+                      onClick={() => navigate('/songs')}
+                      className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors flex items-center gap-1"
+                      title="Go to song library"
+                    >
+                      ♪ Songs
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                    <button
                       onClick={quickAddAnnouncement}
                       className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
                       title="Quick add announcement"
@@ -895,14 +937,14 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                       </button>
                       <div className="grid grid-cols-2 gap-3">
                         <button
-                          onClick={() => setActiveTab('scriptures')}
+                          onClick={() => navigate('/scripture')}
                           className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
                         >
                           <span className="text-lg">📖</span>
                           Scripture
                         </button>
                         <button
-                          onClick={() => setActiveTab('songs')}
+                          onClick={() => navigate('/songs')}
                           className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
                         >
                           <span className="text-lg">♪</span>
@@ -920,149 +962,34 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   </div>
                 ) : null}
 
-                {serviceItems.map((item, index) => {
-                  const isSelected = selectedItem?.id === item.id;
-                  const isLoading = isGeneratingSlides && isSelected;
-                  const isPresentingThis = isPresenting && isSelected && presentationMode === 'live';
+                <DndContext
+                  sensors={sensors}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext items={serviceItems.map(item => item.id)}>
+                    {serviceItems.map((item, index) => {
+                      const isSelected = selectedItem?.id === item.id;
+                      const isLoading = isGeneratingSlides && isSelected;
+                      const isPresentingThis = isPresenting && isSelected && presentationMode === 'live';
 
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={(e) => handleServiceItemSelect(item, e)}
-                      onDoubleClick={(e) => handleServiceItemPresent(item, e)}
-                      className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
-                        isSelected
-                          ? isPresentingThis
-                            ? 'border-green-500 bg-green-500/10 dark:bg-green-900/30 shadow-lg'
-                            : 'border-primary bg-primary/10 dark:bg-blue-900/30 shadow-md'
-                          : 'border-border bg-secondary hover:bg-secondary/80 hover:border-border'
-                      } ${isLoading ? 'animate-pulse' : ''}`}
-                      title={`Single click to preview • Double click to present live`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded">
-                              {index + 1}
-                            </div>
-                            {/* Type icon */}
-                            {item.type === 'song' && <div className="text-blue-400">♪</div>}
-                            {item.type === 'scripture' && <div className="text-purple-400">📖</div>}
-                            {item.type === 'announcement' && <div className="text-yellow-400">📢</div>}
-                            {item.type === 'sermon' && <div className="text-green-400">🎯</div>}
-
-                            <div className="font-medium text-white">{item.title}</div>
-
-                            {isLoading && (
-                              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                            )}
-                            {isPresentingThis && (
-                              <div className="px-2 py-1 bg-green-600 text-white text-xs rounded-full font-medium animate-pulse">
-                                LIVE
-                              </div>
-                            )}
-                            {item.planId && (
-                              <div className="px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 text-xs rounded border border-purple-300 dark:border-purple-600/30">
-                                Plan Item
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="text-sm text-muted-foreground flex items-center gap-2">
-                            <span className="capitalize">{item.type}</span>
-                            {item.slides && <span>• {item.slides.length} slides</span>}
-                            {item.duration && <span>• {item.duration}s</span>}
-                            {item.notes && <span>• Has notes</span>}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col items-end gap-1">
-                          {isSelected && (
-                            <div className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary dark:bg-blue-900/50 dark:text-blue-300 border border-primary dark:border-blue-600/30">
-                              {presentationMode === 'live' ? 'Live Mode' : 'Preview'}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      return (
+                        <SortableServiceItem
+                          key={item.id}
+                          item={item}
+                          index={index}
+                          isSelected={isSelected}
+                          isLoading={isLoading}
+                          isPresentingThis={isPresentingThis}
+                          onSelect={handleServiceItemSelect}
+                          onPresent={handleServiceItemPresent}
+                        />
+                      );
+                    })}
+                  </SortableContext>
+                </DndContext>
               </div>
             )}
 
-            {activeTab === 'scriptures' && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold mb-4">Select Scripture</h3>
-                <BibleSelector
-                  onVerseSelect={(verses) => {
-                    if (verses.length > 0) {
-                      // Create scripture reference from verses
-                      const firstVerse = verses[0];
-                      const lastVerse = verses[verses.length - 1];
-                      let title = `${firstVerse.book} ${firstVerse.chapter}:${firstVerse.verse}`;
-                      if (verses.length > 1 && lastVerse.verse !== firstVerse.verse) {
-                        title += `-${lastVerse.verse}`;
-                      }
-
-                      const scriptureItem: ServiceItem = {
-                        id: `scripture-${Date.now()}`,
-                        type: 'scripture',
-                        title,
-                        content: { verses: verses.map(v => ({ ...v, id: v.id || `verse-${v.book}-${v.chapter}-${v.verse}` })) }
-                      };
-                      generateSlidesForItem(scriptureItem);
-                    }
-                  }}
-                  className="h-full"
-                />
-
-                {/* Quick Scripture Selection */}
-                <div className="border-t border-border pt-4">
-                  <h4 className="text-sm font-medium text-foreground mb-2">Popular Verses</h4>
-                  <div className="space-y-2">
-                    {[
-                      { ref: 'John 3:16', text: 'For God so loved the world...' },
-                      { ref: 'Psalm 23:1', text: 'The Lord is my shepherd...' },
-                      { ref: 'Romans 3:23', text: 'For all have sinned...' },
-                      { ref: 'Romans 6:23', text: 'For the wages of sin...' },
-                    ].map((verse, index) => (
-                      <button
-                        key={index}
-                        onClick={() => {
-                          // Parse the reference and create scripture item
-                          const parts = verse.ref.split(' ');
-                          const book = parts[0];
-                          const chapterVerse = parts[1].split(':');
-                          const chapter = parseInt(chapterVerse[0]);
-                          const verseNum = parseInt(chapterVerse[1]);
-
-                          const scriptureItem: ServiceItem = {
-                            id: `quick-scripture-${index}`,
-                            type: 'scripture',
-                            title: verse.ref,
-                            content: {
-                              verses: [{
-                                id: `${book}-${chapter}-${verseNum}`,
-                                book,
-                                chapter,
-                                verse: verseNum,
-                                text: verse.text + ' (Sample text - full verse would be loaded from database)',
-                                translation: 'KJV'
-                              }]
-                            }
-                          };
-                          generateSlidesForItem(scriptureItem);
-                        }}
-                        className="w-full text-left p-2 rounded border border-border bg-card hover:bg-card/80 text-sm"
-                      >
-                        <div className="font-medium text-blue-400">{verse.ref}</div>
-                        <div className="text-muted-foreground text-xs">{verse.text}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
 
             {activeTab === 'plans' && (
               <div className="space-y-4">
@@ -1079,55 +1006,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   <div className="p-4">
                     <PlanManager
                       serviceId={undefined} // Remove service dependency
-                      onPlanSelect={(plan) => {
-                        setSelectedPlan(plan);
-                        setCurrentPlanItemIndex(0);
-
-                        // Convert plan items to service items
-                        const planServiceItems: ServiceItem[] = plan.planItems.map((planItem: any) => ({
-                          id: planItem.id,
-                          type: planItem.type as 'scripture' | 'song' | 'announcement',
-                          title: planItem.title,
-                          content: {
-                            // Map content based on type
-                            ...(planItem.type === 'song' && planItem.song ? {
-                              title: planItem.song.title,
-                              artist: planItem.song.artist || planItem.song.artist,
-                              lyrics: planItem.song.lyrics || 'Lyrics not available'
-                            } : {}),
-                            ...(planItem.type === 'scripture' && planItem.scriptureRef ? {
-                              scriptureRef: planItem.scriptureRef,
-                              verses: [{
-                                id: planItem.id,
-                                text: 'Sample verse text',
-                                book: 'Sample Book',
-                                chapter: 1,
-                                verse: 1,
-                                translation: 'KJV'
-                              }]
-                            } : {}),
-                            ...(planItem.type === 'announcement' ? {
-                              text: planItem.title,
-                              description: planItem.notes || ''
-                            } : {})
-                          },
-                          duration: planItem.duration,
-                          order: planItem.order,
-                          notes: planItem.notes,
-                          planId: plan.id,
-                          planItemId: planItem.id
-                        }));
-
-                        setServiceItems(planServiceItems);
-
-                        // Auto-switch to Current Service tab and select first item
-                        setActiveTab('plan');
-                        if (planServiceItems.length > 0) {
-                          generateSlidesForItem(planServiceItems[0]);
-                        }
-                      }}
+                      onPlanSelect={handlePlanSelect}
                       onPlanCreate={(plan) => {
-                        console.log('Plan created:', plan.name);
+                        handlePlanCreate(plan);
                         setSelectedPlan(plan);
                       }}
                       onPlanUpdate={(plan) => {
@@ -1146,6 +1027,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                       }}
                       className=""
                     />
+
+                    {/* Plan Statistics */}
+                    <PlanStats plan={selectedPlan} serviceItems={serviceItems} />
                   </div>
                 </div>
 
@@ -1173,25 +1057,31 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   <h4 className="text-sm font-medium text-foreground mb-3">Quick Actions</h4>
                   <div className="grid grid-cols-1 gap-2">
                     <button
-                      onClick={() => setActiveTab('scriptures')}
+                      onClick={() => navigate('/scripture')}
                       className="p-3 bg-secondary rounded-lg text-left hover:bg-secondary/80 transition-colors border border-border hover:border-border"
                     >
                       <div className="flex items-center gap-3">
                         <div className="text-purple-400 text-xl">📖</div>
                         <div>
-                          <div className="text-sm font-medium text-white">Add Scripture</div>
+                          <div className="text-sm font-medium text-white flex items-center gap-2">
+                            Add Scripture
+                            <ExternalLink className="w-3 h-3" />
+                          </div>
                           <div className="text-xs text-muted-foreground">Browse and select Bible verses</div>
                         </div>
                       </div>
                     </button>
                     <button
-                      onClick={() => setActiveTab('songs')}
+                      onClick={() => navigate('/songs')}
                       className="p-3 bg-secondary rounded-lg text-left hover:bg-secondary/80 transition-colors border border-border hover:border-border"
                     >
                       <div className="flex items-center gap-3">
                         <div className="text-blue-400 text-xl">♪</div>
                         <div>
-                          <div className="text-sm font-medium text-white">Add Song</div>
+                          <div className="text-sm font-medium text-white flex items-center gap-2">
+                            Add Song
+                            <ExternalLink className="w-3 h-3" />
+                          </div>
                           <div className="text-xs text-muted-foreground">Browse song library</div>
                         </div>
                       </div>
@@ -1213,33 +1103,37 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               </div>
             )}
 
-            {activeTab === 'songs' && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold mb-4">Song Library</h3>
-                <SongLibrary
-                  songs={sampleSongs}
-                  onSongSelect={(song) => {
-                    const songItem: ServiceItem = {
-                      id: `song-${song.id}`,
-                      type: 'song',
-                      title: song.title,
-                      content: song
-                    };
-                    generateSlidesForItem(songItem);
-                  }}
-                  className="h-full"
-                />
-              </div>
-            )}
           </div>
-        </div>
+            </div>
+          </Panel>
+        )}
+
+        {panelVisibility.leftPanel && (
+          <PanelResizeHandle className="w-2 bg-border hover:bg-primary/50 transition-all duration-200 group relative">
+            <div className="absolute inset-y-0 left-0 w-full bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="w-1 h-8 bg-primary/60 rounded-full" />
+            </div>
+          </PanelResizeHandle>
+        )}
 
         {/* Center Panel - Editable Preview */}
-        <div className="flex-1 bg-background p-4">
+        {panelVisibility.middlePanel && (
+          <Panel defaultSize={panelSizes[1]} minSize={30}>
+            <div className="bg-background p-4 h-full transition-all duration-300 ease-in-out animate-in fade-in-0 zoom-in-95">
           <div className="h-full flex flex-col">
             {/* Header with title and controls */}
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Editable Preview</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold">Editable Preview</h3>
+                <button
+                  onClick={() => togglePanel('middlePanel')}
+                  className="p-1 rounded hover:bg-muted transition-colors"
+                  title="Collapse middle panel"
+                >
+                  <Minimize2 className="w-4 h-4" />
+                </button>
+              </div>
               <div className="flex items-center gap-4">
                 {selectedItem && (
                   <div className="text-sm text-muted-foreground">
@@ -1258,87 +1152,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
             {/* Property Panel */}
             {showPropertyPanel && (
-              <div className="bg-card rounded-lg p-4 mb-4 border border-border">
-                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <Palette className="w-4 h-4" />
-                  Slide Properties
-                </h4>
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Background Color */}
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Background</label>
-                    <input
-                      type="color"
-                      value={slideProperties.backgroundColor}
-                      onChange={(e) => updateSlideProperty('backgroundColor', e.target.value)}
-                      className="w-full h-8 rounded border border-border bg-input"
-                    />
-                  </div>
-
-                  {/* Font Size */}
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Font Size</label>
-                    <input
-                      type="range"
-                      min="16"
-                      max="120"
-                      value={slideProperties.fontSize}
-                      onChange={(e) => updateSlideProperty('fontSize', parseInt(e.target.value))}
-                      className="w-full"
-                    />
-                    <div className="text-xs text-muted-foreground text-center">{slideProperties.fontSize}px</div>
-                  </div>
-
-                  {/* Text Alignment */}
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Text Align</label>
-                    <div className="flex gap-1">
-                      {(['left', 'center', 'right'] as const).map((align) => (
-                        <button
-                          key={align}
-                          onClick={() => updateSlideProperty('textAlign', align)}
-                          className={`p-2 rounded ${
-                            slideProperties.textAlign === align
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                          }`}
-                        >
-                          {align === 'left' && <AlignLeft className="w-4 h-4" />}
-                          {align === 'center' && <AlignCenter className="w-4 h-4" />}
-                          {align === 'right' && <AlignRight className="w-4 h-4" />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Text Color */}
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Text Color</label>
-                    <input
-                      type="color"
-                      value={slideProperties.textColor}
-                      onChange={(e) => updateSlideProperty('textColor', e.target.value)}
-                      className="w-full h-8 rounded border border-border bg-input"
-                    />
-                  </div>
-                </div>
-
-                {/* Save Button */}
-                <div className="flex justify-end mt-4">
-                  <button
-                    onClick={saveSlideChanges}
-                    disabled={!hasUnsavedChanges}
-                    className={`px-4 py-2 rounded flex items-center gap-2 ${
-                      hasUnsavedChanges
-                        ? 'bg-green-600 text-white hover:bg-green-700'
-                        : 'bg-secondary text-muted-foreground cursor-not-allowed'
-                    }`}
-                  >
-                    <Save className="w-4 h-4" />
-                    {hasUnsavedChanges ? 'Save Changes' : 'No Changes'}
-                  </button>
-                </div>
-              </div>
+              <SlidePropertyPanel
+                properties={slideProperties}
+                hasUnsavedChanges={hasUnsavedChanges}
+                onPropertyChange={updateSlideProperty}
+                onSave={saveSlideChanges}
+              />
             )}
 
             {/* Editable Preview Screen */}
@@ -1430,13 +1249,35 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               </div>
             )}
           </div>
-        </div>
+            </div>
+          </Panel>
+        )}
+
+        {panelVisibility.middlePanel && (
+          <PanelResizeHandle className="w-2 bg-border hover:bg-primary/50 transition-all duration-200 group relative">
+            <div className="absolute inset-y-0 left-0 w-full bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="w-1 h-8 bg-primary/60 rounded-full" />
+            </div>
+          </PanelResizeHandle>
+        )}
 
         {/* Right Panel - Live Display Preview */}
-        <div className="w-1/3 bg-card border-l border-border p-4">
+        {panelVisibility.rightPanel && (
+          <Panel defaultSize={panelSizes[2]} minSize={20} maxSize={40}>
+            <div className="bg-card border-l border-border p-4 h-full transition-all duration-300 ease-in-out animate-in slide-in-from-right-5">
           <div className="h-full flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Live Display</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold">Live Display</h3>
+                <button
+                  onClick={() => togglePanel('rightPanel')}
+                  className="p-1 rounded hover:bg-muted transition-colors"
+                  title="Collapse right panel"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
               <div className={`px-2 py-1 rounded text-xs ${
                 liveDisplayActive ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
               }`}>
@@ -1498,10 +1339,46 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               )}
             </div>
           </div>
-        </div>
-      </div>
+            </div>
+          </Panel>
+        )}
+      </PanelGroup>
     </div>
   );
+};
+
+// Helper function to group consecutive verses for better slide layout
+const groupConsecutiveVerses = (verses: any[]): any[][] => {
+  if (!verses || verses.length === 0) return [];
+
+  // Sort verses by verse number
+  const sortedVerses = [...verses].sort((a, b) => a.verse - b.verse);
+
+  const groups: any[][] = [];
+  let currentGroup: any[] = [sortedVerses[0]];
+
+  for (let i = 1; i < sortedVerses.length; i++) {
+    const prevVerse = sortedVerses[i - 1];
+    const currentVerse = sortedVerses[i];
+
+    // If verses are consecutive and from the same chapter, add to current group
+    if (
+      currentVerse.verse === prevVerse.verse + 1 &&
+      currentVerse.chapter === prevVerse.chapter &&
+      currentVerse.book === prevVerse.book
+    ) {
+      currentGroup.push(currentVerse);
+    } else {
+      // Start new group
+      groups.push(currentGroup);
+      currentGroup = [currentVerse];
+    }
+  }
+
+  // Add the last group
+  groups.push(currentGroup);
+
+  return groups;
 };
 
 export default LivePresentationPage;
