@@ -342,14 +342,14 @@ export class ShapeFactory {
       }
     });
 
-    // Log summary of reconstruction results
+    // Log summary of reconstruction results (reduced frequency)
     if (errors.length > 0) {
       console.warn(`ShapeFactory: Successfully reconstructed ${results.length}/${serializedShapes.length} shapes. ${errors.length} failed.`, {
         successfulShapes: results.length,
         totalShapes: serializedShapes.length,
         errors: errors.map(e => ({ index: e.index, error: e.error }))
       });
-    } else if (results.length > 0) {
+    } else if (results.length > 0 && Math.random() < 0.05) { // Only log 5% of successful reconstructions
       console.log(`ShapeFactory: Successfully reconstructed all ${results.length} shapes.`);
     }
 

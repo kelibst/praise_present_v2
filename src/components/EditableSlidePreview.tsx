@@ -80,6 +80,7 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
   className = ''
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<ResponsiveRenderingEngine | null>(null);
   const slideRendererRef = useRef<SlideRenderer | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +91,7 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
   const [activeEditId, setActiveEditId] = useState<string | null>(null);
   const [editPosition, setEditPosition] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actualDimensions, setActualDimensions] = useState({ width, height });
 
   // Responsive controls configuration
   const [responsiveConfig, setResponsiveConfig] = useState<ResponsiveControlConfig>(DEFAULT_RESPONSIVE_CONFIG);
@@ -97,6 +99,64 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
 
   // Sync manager for real-time updates
   const syncManagerRef = useRef<PreviewSyncManager | null>(null);
+
+  // Ref to track current dimensions and prevent unnecessary updates
+  const currentDimensionsRef = useRef({ width, height });
+
+  // Dynamic sizing effect (when width/height are 0, auto-detect container size)
+  useEffect(() => {
+    if (width === 0 || height === 0) {
+      const updateDimensions = () => {
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          const aspectRatio = targetResolution.width / targetResolution.height;
+
+          let newWidth = width === 0 ? rect.width : width;
+          let newHeight = height === 0 ? rect.height : height;
+
+          // If both are 0, maintain aspect ratio
+          if (width === 0 && height === 0) {
+            if (rect.width / aspectRatio <= rect.height) {
+              newHeight = rect.width / aspectRatio;
+            } else {
+              newWidth = rect.height * aspectRatio;
+            }
+          }
+
+          const finalDimensions = {
+            width: Math.floor(newWidth),
+            height: Math.floor(newHeight)
+          };
+
+          // Only update if dimensions actually changed to prevent infinite loops
+          if (finalDimensions.width !== currentDimensionsRef.current.width ||
+              finalDimensions.height !== currentDimensionsRef.current.height) {
+            currentDimensionsRef.current = finalDimensions;
+            setActualDimensions(finalDimensions);
+          }
+        }
+      };
+
+      // Initial size calculation
+      updateDimensions();
+
+      // Set up resize observer for dynamic resizing
+      const resizeObserver = new ResizeObserver(updateDimensions);
+      if (containerRef.current) {
+        resizeObserver.observe(containerRef.current);
+      }
+
+      return () => resizeObserver.disconnect();
+    } else {
+      const fixedDimensions = { width, height };
+      // Only update if dimensions actually changed
+      if (fixedDimensions.width !== currentDimensionsRef.current.width ||
+          fixedDimensions.height !== currentDimensionsRef.current.height) {
+        currentDimensionsRef.current = fixedDimensions;
+        setActualDimensions(fixedDimensions);
+      }
+    }
+  }, [width, height, targetResolution]);
 
   // Initialize rendering engine and slide renderer
   useEffect(() => {
@@ -255,13 +315,14 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
 
       // Set canvas to actual container size for responsive rendering
       if (canvasRef.current) {
-        canvasRef.current.width = width;
-        canvasRef.current.height = height;
-        canvasRef.current.style.width = `${width}px`;
-        canvasRef.current.style.height = `${height}px`;
+        canvasRef.current.width = actualDimensions.width;
+        canvasRef.current.height = actualDimensions.height;
+        canvasRef.current.style.width = `${actualDimensions.width}px`;
+        canvasRef.current.style.height = `${actualDimensions.height}px`;
 
         console.log('🔧 EditableSlidePreview: Canvas configured for responsive rendering', {
-          containerSize: `${width}x${height}`,
+          actualDimensions: `${actualDimensions.width}x${actualDimensions.height}`,
+          propDimensions: `${width}x${height}`,
           targetResolution: `${targetResolution.width}x${targetResolution.height}`
         });
       }
@@ -313,13 +374,29 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
 
       console.log(`EditableSlidePreview: Cleaned up resources for ${resourceId}`);
     };
-  }, [width, height, targetResolution.width, targetResolution.height]);
+  }, [actualDimensions.width, actualDimensions.height, targetResolution.width, targetResolution.height]);
 
   // Render content when it changes - optimized for stability
   const contentId = React.useMemo(() => {
     if (!content) return null;
     return `${content.type}-${content.slide?.id || Date.now()}`;
   }, [content?.type, content?.slide?.id]);
+
+  // Use ref to store the last slide ID to prevent infinite loops
+  const lastSlideIdRef = React.useRef<string | null>(null);
+
+  // Store the callback in a ref to prevent dependencies on changing functions
+  const onSlideGeneratedRef = React.useRef(onSlideGenerated);
+  onSlideGeneratedRef.current = onSlideGenerated;
+
+  // Stable callback ref to prevent infinite loops
+  const stableOnSlideGenerated = React.useCallback((slide: GeneratedSlide) => {
+    // Only call the callback if it exists and if this is a meaningful change
+    if (onSlideGeneratedRef.current && slide.id !== lastSlideIdRef.current) {
+      lastSlideIdRef.current = slide.id;
+      onSlideGeneratedRef.current(slide);
+    }
+  }, []); // No dependencies - fully stable
 
   useEffect(() => {
     console.log('🔍 EditableSlidePreview: useEffect triggered', {
@@ -356,7 +433,7 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
           console.log('🚀 EditableSlidePreview: Using responsive slide rendering');
 
           // Convert regular shapes to responsive shapes for better scaling
-          const responsiveShapes = content.slide.shapes.map((shape: any, index: number) => {
+          const responsiveShapes = content.slide.shapes.map((shape: any) => {
             if (shape.type === 'text') {
               return new ResponsiveTextShape({
                 text: shape.text || '',
@@ -384,7 +461,7 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
           // Add responsive shapes to the engine
           console.log('🎯 EditableSlidePreview: Adding responsive shapes to engine');
           engineRef.current?.clearShapes();
-          responsiveShapes.forEach(shape => {
+          responsiveShapes.forEach((shape: Shape) => {
             if (shape instanceof ResponsiveTextShape) {
               engineRef.current?.addResponsiveShape(shape);
             } else {
@@ -425,8 +502,10 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
       setCurrentSlide(slide);
       setError(null);
 
-      // Notify parent of slide generation - use callback ref for stability
-      onSlideGenerated?.(slide);
+      // Notify parent of slide generation only if it's a new slide
+      setTimeout(() => {
+        stableOnSlideGenerated(slide);
+      }, 0);
 
       console.log('🎉 EditableSlidePreview: Rendering completed successfully');
 
@@ -434,7 +513,7 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
       console.error('❌ EditableSlidePreview: Error rendering content:', err);
       setError(`Rendering error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
-  }, [contentId, isInitialized]); // Simplified dependencies
+  }, [contentId, isInitialized]); // Remove callback dependency since it's now stable
 
   // Update editable shapes after rendering
   const updateEditableShapes = useCallback(() => {
@@ -501,8 +580,8 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
     // Scale the click coordinates to match the target resolution (1920x1080)
     // Since ResponsiveRenderingEngine handles scaling internally, we need to convert
     // canvas coordinates to target resolution coordinates
-    const scaleX = targetResolution.width / width;
-    const scaleY = targetResolution.height / height;
+    const scaleX = targetResolution.width / actualDimensions.width;
+    const scaleY = targetResolution.height / actualDimensions.height;
 
     const targetPoint = {
       x: canvasPoint.x * scaleX,
@@ -513,7 +592,7 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
       canvas: canvasPoint,
       target: targetPoint,
       scale: { x: scaleX, y: scaleY },
-      canvasSize: { width, height },
+      actualDimensions,
       targetResolution
     });
 
@@ -556,7 +635,7 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
       // Cancel any active editing
       cancelEditing();
     }
-  }, [editable, editableShapes, cancelEditing, width, height, targetResolution]);
+  }, [editable, editableShapes, cancelEditing, actualDimensions, targetResolution]);
 
   // Save text changes
   const saveTextEdit = useCallback((shapeId: string, newText: string) => {
@@ -839,22 +918,22 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
     }
   }, [activeEditId, saveTextEdit]);
 
-  // Export current slide for live display
-  const exportForLiveDisplay = useCallback(() => {
-    if (!currentSlide) return null;
+  // Export current slide for live display (available for future use)
+  // const exportForLiveDisplay = useCallback(() => {
+  //   if (!currentSlide) return null;
 
-    return {
-      type: 'template-slide',
-      slide: {
-        id: currentSlide.id,
-        shapes: currentSlide.shapes,
-        background: {
-          type: 'color',
-          value: backgroundColor
-        }
-      }
-    };
-  }, [currentSlide, backgroundColor]);
+  //   return {
+  //     type: 'template-slide',
+  //     slide: {
+  //       id: currentSlide.id,
+  //       shapes: currentSlide.shapes,
+  //       background: {
+  //         type: 'color',
+  //         value: backgroundColor
+  //       }
+  //     }
+  //   };
+  // }, [currentSlide, backgroundColor]);
 
   // Get current editing text
   const getCurrentEditText = () => {
@@ -883,10 +962,11 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
 
       {/* Preview Canvas */}
       <div
+        ref={containerRef}
         className="relative bg-black rounded-lg border border-gray-700 flex items-center justify-center"
         style={{
-          width: `${width}px`,
-          height: `${height}px`
+          width: width === 0 ? '100%' : `${width}px`,
+          height: height === 0 ? '100%' : `${height}px`
         }}
       >
         <canvas

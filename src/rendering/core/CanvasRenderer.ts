@@ -298,6 +298,25 @@ export class CanvasRenderer {
     return this.renderMode;
   }
 
+  public setCanvas(newCanvas: HTMLCanvasElement): void {
+    if (this.canvas === newCanvas) {
+      return; // No change needed
+    }
+
+    // Store current settings to apply to new canvas
+    const currentSettings = { ...this.settings };
+
+    this.canvas = newCanvas;
+    this.settings = currentSettings;
+
+    // Reinitialize with the new canvas
+    this.initialize();
+
+    if (this.settings.debugMode) {
+      console.log('CanvasRenderer: Canvas changed and reinitialized');
+    }
+  }
+
   public getCanvas(): HTMLCanvasElement {
     return this.canvas;
   }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, MonitorSpeaker, SkipBack, SkipForward, Settings, Calendar, ChevronLeft, ChevronRight, Minimize2, Maximize2, ExternalLink } from 'lucide-react';
+import { Play, MonitorSpeaker, SkipBack, SkipForward, Settings, Calendar, ChevronLeft, ChevronRight, Maximize2, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // Import drag and drop utilities
@@ -27,6 +27,9 @@ import { DEFAULT_SLIDE_SIZE } from '../rendering/templates/templateUtils';
 
 // Import editable preview component
 import { EditableSlidePreview } from '../components/EditableSlidePreview';
+
+// Import window components
+import { PreviewWindow } from '../components/windows/PreviewWindow';
 
 // Import plan components
 import { PlanManager } from '../components/plans/PlanManager';
@@ -1117,138 +1120,115 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           </PanelResizeHandle>
         )}
 
-        {/* Center Panel - Editable Preview */}
+        {/* Center Panel - Preview Window */}
         {panelVisibility.middlePanel && (
           <Panel defaultSize={panelSizes[1]} minSize={30}>
-            <div className="bg-background p-4 h-full transition-all duration-300 ease-in-out animate-in fade-in-0 zoom-in-95">
-          <div className="h-full flex flex-col">
-            {/* Header with title and controls */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold">Editable Preview</h3>
-                <button
-                  onClick={() => togglePanel('middlePanel')}
-                  className="p-1 rounded hover:bg-muted transition-colors"
-                  title="Collapse middle panel"
-                >
-                  <Minimize2 className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex items-center gap-4">
-                {selectedItem && (
-                  <div className="text-sm text-muted-foreground">
-                    {selectedItem.title} - Slide {currentSlideIndex + 1} of {selectedItem.slides?.length || 0}
-                  </div>
-                )}
-                <button
-                  onClick={() => setShowPropertyPanel(!showPropertyPanel)}
-                  className="p-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 flex items-center gap-2"
-                  title="Toggle Properties Panel"
-                >
-                  <Settings className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Property Panel */}
-            {showPropertyPanel && (
-              <SlidePropertyPanel
-                properties={slideProperties}
-                hasUnsavedChanges={hasUnsavedChanges}
-                onPropertyChange={updateSlideProperty}
-                onSave={saveSlideChanges}
-              />
-            )}
-
-            {/* Editable Preview Screen */}
-            <div className="flex-1 min-h-0">
-              {getPreviewContent ? (
-                <div className="h-full flex flex-col">
-                  {/* Debug info - remove after testing */}
-                  <div className="flex-1 min-h-0">
-                    <EditableSlidePreview
-                      content={getPreviewContent}
-                      width={800}
-                      height={450}
-                      editable={true}
-                      onContentChange={handleSlideContentChange}
-                      backgroundColor={slideProperties.backgroundColor}
-                      showControls={true}
-                      className="h-full"
+            <div className="bg-background h-full transition-all duration-300 ease-in-out animate-in fade-in-0 zoom-in-95">
+              <div className="h-full flex flex-col">
+                {/* Property Panel (when shown) */}
+                {showPropertyPanel && (
+                  <div className="border-b border-border p-3">
+                    <SlidePropertyPanel
+                      properties={slideProperties}
+                      hasUnsavedChanges={hasUnsavedChanges}
+                      onPropertyChange={updateSlideProperty}
+                      onSave={saveSlideChanges}
                     />
                   </div>
-                </div>
-              ) : (
-                <div className="h-full bg-black rounded-lg border border-border flex items-center justify-center">
-                  <div className="text-gray-300">
-                    Select an item to preview and edit slides
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
 
-            {/* Navigation Controls */}
-            {selectedItem?.slides && (
-              <div className="space-y-4 mt-4">
-                <div className="flex items-center justify-center gap-4">
-                  <button
-                    onClick={goToPreviousSlide}
-                    disabled={currentSlideIndex === 0}
-                    className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                {/* Preview Window */}
+                <div className="flex-1 min-h-0">
+                  <PreviewWindow
+                    title={selectedItem ? `${selectedItem.title} - Slide ${currentSlideIndex + 1}/${selectedItem.slides?.length || 0}` : "Preview Window"}
+                    type="preview"
+                    showControls={true}
+                    contentResolution={{ width: 1920, height: 1080 }}
+                    renderResolution={{ width: 1920, height: 1080 }}
+                    isEditable={true}
+                    connectionStatus="connected"
+                    onToggleControls={() => setShowPropertyPanel(!showPropertyPanel)}
+                    className="h-full"
                   >
-                    <SkipBack className="w-4 h-4" />
-                    Previous
-                  </button>
-
-                  <button
-                    onClick={presentCurrentSlide}
-                    disabled={!liveDisplayActive}
-                    className={`px-6 py-2 rounded flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                      presentationMode === 'live'
-                        ? 'bg-green-600 text-white hover:bg-green-700'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
-                  >
-                    <Play className="w-4 h-4" />
-                    {presentationMode === 'live' ? 'Update Live' : 'Present Live'}
-                  </button>
-
-                  <button
-                    onClick={goToNextSlide}
-                    disabled={currentSlideIndex >= (selectedItem.slides?.length || 1) - 1}
-                    className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    Next
-                    <SkipForward className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Presentation Mode Indicator */}
-                <div className="text-center">
-                  <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm ${
-                    presentationMode === 'live'
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300 border border-green-300 dark:border-green-600'
-                      : 'bg-primary/10 text-primary dark:bg-blue-900/50 dark:text-blue-300 border border-primary dark:border-blue-600'
-                  }`}>
-                    {presentationMode === 'live' ? (
-                      <>Live Mode - Changes go directly to display</>
+                    {getPreviewContent ? (
+                      <EditableSlidePreview
+                        content={getPreviewContent}
+                        width={0} // Let PreviewWindow handle sizing
+                        height={0} // Let PreviewWindow handle sizing
+                        editable={true}
+                        onContentChange={handleSlideContentChange}
+                        backgroundColor={slideProperties.backgroundColor}
+                        showControls={false} // PreviewWindow provides controls
+                        className="w-full h-full"
+                      />
                     ) : (
-                      <>Preview Mode - Click 'Present Live' to display</>
+                      <div className="w-full h-full flex items-center justify-center text-gray-400">
+                        <div className="text-center">
+                          <div className="text-4xl mb-2">🎯</div>
+                          <div>Select an item to preview</div>
+                        </div>
+                      </div>
                     )}
-                  </div>
+                  </PreviewWindow>
                 </div>
 
-                {/* Unsaved Changes Indicator */}
-                {hasUnsavedChanges && (
-                  <div className="text-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-600">
-                      Unsaved changes - Click save to apply
+                {/* Navigation Controls */}
+                {selectedItem?.slides && (
+                  <div className="border-t border-border bg-card p-3">
+                    <div className="flex items-center justify-center gap-4 mb-3">
+                      <button
+                        onClick={goToPreviousSlide}
+                        disabled={currentSlideIndex === 0}
+                        className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        <SkipBack className="w-4 h-4" />
+                        Previous
+                      </button>
+
+                      <button
+                        onClick={presentCurrentSlide}
+                        disabled={!liveDisplayActive}
+                        className={`px-6 py-2 rounded flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          presentationMode === 'live'
+                            ? 'bg-green-600 text-white hover:bg-green-700'
+                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
+                      >
+                        <Play className="w-4 h-4" />
+                        {presentationMode === 'live' ? 'Update Live' : 'Present Live'}
+                      </button>
+
+                      <button
+                        onClick={goToNextSlide}
+                        disabled={currentSlideIndex >= (selectedItem.slides?.length || 1) - 1}
+                        className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        Next
+                        <SkipForward className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Status Indicators */}
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <div className={`flex items-center gap-2 ${
+                        presentationMode === 'live' ? 'text-green-400' : 'text-blue-400'
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full ${
+                          presentationMode === 'live' ? 'bg-green-400' : 'bg-blue-400'
+                        } animate-pulse`} />
+                        {presentationMode === 'live' ? 'LIVE MODE' : 'PREVIEW MODE'}
+                      </div>
+
+                      {hasUnsavedChanges && (
+                        <div className="flex items-center gap-2 text-yellow-400">
+                          <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                          UNSAVED CHANGES
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
-            )}
-          </div>
             </div>
           </Panel>
         )}
@@ -1262,83 +1242,54 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           </PanelResizeHandle>
         )}
 
-        {/* Right Panel - Live Display Preview */}
+        {/* Right Panel - Live Display Monitor */}
         {panelVisibility.rightPanel && (
           <Panel defaultSize={panelSizes[2]} minSize={20} maxSize={40}>
-            <div className="bg-card border-l border-border p-4 h-full transition-all duration-300 ease-in-out animate-in slide-in-from-right-5">
-          <div className="h-full flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold">Live Display</h3>
-                <button
-                  onClick={() => togglePanel('rightPanel')}
-                  className="p-1 rounded hover:bg-muted transition-colors"
-                  title="Collapse right panel"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-              <div className={`px-2 py-1 rounded text-xs ${
-                liveDisplayActive ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
-              }`}>
-                {liveDisplayActive ? 'LIVE' : 'OFF'}
-              </div>
-            </div>
-
-            {/* Live Display Preview */}
-            <div className="flex-1 bg-black rounded-lg border border-border flex items-center justify-center relative overflow-hidden">
-              {liveDisplayActive && isPresenting && currentSlide ? (
-                <div className="w-full h-full relative">
-                  {/* Background rendering */}
-                  {currentSlide.background && currentSlide.background.type === 'color' && (
-                    <div
-                      className="absolute inset-0"
-                      style={{ backgroundColor: currentSlide.background.value }}
-                    />
-                  )}
-
-                  {/* Use EditableSlidePreview for consistent rendering */}
+            <div className="bg-background h-full transition-all duration-300 ease-in-out animate-in slide-in-from-right-5">
+              <PreviewWindow
+                title="Live Display Monitor"
+                type="live-display"
+                showControls={true}
+                contentResolution={{ width: 1920, height: 1080 }}
+                renderResolution={{ width: 1920, height: 1080 }}
+                isLiveActive={liveDisplayActive}
+                connectionStatus={liveDisplayActive ? "connected" : "disconnected"}
+                className="h-full"
+              >
+                {liveDisplayActive && isPresenting && currentSlide ? (
                   <EditableSlidePreview
                     content={{
                       type: 'template-slide',
                       title: `${selectedItem?.title} - Slide ${currentSlideIndex + 1}`,
                       slide: currentSlide
                     }}
-                    width={300} // Smaller width for right panel
-                    height={169} // Maintain 16:9 aspect ratio (300*9/16 = 169)
+                    width={0} // Let PreviewWindow handle sizing
+                    height={0} // Let PreviewWindow handle sizing
                     editable={false}
                     showControls={false}
                     backgroundColor={currentSlide.background?.value || '#1a1a1a'}
                     className="w-full h-full"
                   />
-                </div>
-              ) : (
-                <div className="text-muted-foreground text-center">
-                  {liveDisplayActive ? 'Ready for presentation' : 'Create live display to see preview'}
-                </div>
-              )}
-            </div>
-
-            {/* Live Status */}
-            <div className="mt-4 text-sm text-muted-foreground text-center space-y-2">
-              <div>
-                {liveDisplayActive ? (
-                  isPresenting ? (
-                    <span className="text-green-400">Currently presenting: {selectedItem?.title}</span>
-                  ) : (
-                    'Live display ready'
-                  )
                 ) : (
-                  'Live display not active'
+                  <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    <div className="text-center">
+                      {liveDisplayActive ? (
+                        <>
+                          <div className="text-4xl mb-2">📺</div>
+                          <div className="text-sm">Ready for presentation</div>
+                          <div className="text-xs mt-1 text-gray-500">Click "Present Live" to display content</div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-4xl mb-2 opacity-50">📺</div>
+                          <div className="text-sm">Live Display Off</div>
+                          <div className="text-xs mt-1 text-gray-500">Create live display to see preview</div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 )}
-              </div>
-              {selectedItem && (
-                <div className="text-xs text-muted-foreground">
-                  Slide {currentSlideIndex + 1} of {selectedItem.slides?.length || 0}
-                </div>
-              )}
-            </div>
-          </div>
+              </PreviewWindow>
             </div>
           </Panel>
         )}

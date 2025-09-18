@@ -146,6 +146,16 @@ export class RenderingEngine {
     this.requestRender();
   }
 
+  public setCanvas(canvas: HTMLCanvasElement): void {
+    this.renderer.setCanvas(canvas);
+
+    // Update viewport info for the new canvas
+    this.viewport = this.createViewportInfo(canvas);
+    this.renderer.setViewport(this.viewport);
+
+    this.requestRender();
+  }
+
   public resize(width: number, height: number): void {
     // Ensure minimum dimensions
     const minWidth = Math.max(width, 1);

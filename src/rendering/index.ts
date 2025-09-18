@@ -37,3 +37,30 @@ export {
   AdvancedLayoutManager,
   ADVANCED_LAYOUT_CONFIGS
 } from './layout/AdvancedLayoutModes';
+
+// Shared rendering context
+export { SharedRenderingContext, type ViewportConfig, type RenderingMetrics } from './context/SharedRenderingContext';
+
+// Coordinate transformation system
+export {
+  CoordinateTransform,
+  CoordinateTransformFactory,
+  CoordinateNormalizer,
+  CoordinateHelpers,
+  COORDINATE_SYSTEMS,
+  type Point,
+  type Bounds,
+  type CoordinateSystem,
+  type ViewportInfo,
+  type TransformMatrix
+} from './utils/CoordinateTransform';
+
+// Shape serialization system
+export {
+  ShapeSerializer,
+  OptimizedShapeSerializer,
+  type SerializedShape,
+  type SerializedSlide,
+  type SerializedTextStyle,
+  type SerializedColor
+} from './serialization/ShapeSerializer';

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Monitor } from 'lucide-react';
+import { CoordinateNormalizer, COORDINATE_SYSTEMS, Point, Bounds } from '../../rendering/utils/CoordinateTransform';
+import { ShapeSerializer, SerializedSlide } from '../../rendering/serialization/ShapeSerializer';
 
 // Types
 interface Slide {
@@ -72,119 +74,23 @@ export const useLiveDisplay = () => {
         if (actualSlideIndex === -1) actualSlideIndex = currentSlideIndex || 0;
       }
 
-      // Enhanced shape serialization with responsive properties preservation
-      const serializeShape = (shape: any) => {
-        const baseProps = {
-          id: shape.id,
-          type: shape.type,
-          position: shape.position || { x: 0, y: 0 },
-          size: shape.size || { width: 100, height: 50 },
-          rotation: shape.rotation || 0,
-          opacity: shape.opacity !== undefined ? shape.opacity : 1.0,
-          zIndex: shape.zIndex || 0,
-          visible: shape.visible !== undefined ? shape.visible : true,
-          transform: shape.transform,
-          style: shape.style
-        };
-
-        // Responsive properties (if shape is responsive)
-        const responsiveProps: any = {};
-        if (shape.responsive !== undefined) {
-          responsiveProps.responsive = shape.responsive;
-        }
-        if (shape.flexiblePosition) {
-          responsiveProps.flexiblePosition = shape.flexiblePosition;
-        }
-        if (shape.flexibleSize) {
-          responsiveProps.flexibleSize = shape.flexibleSize;
-        }
-        if (shape.layoutConfig) {
-          responsiveProps.layoutConfig = shape.layoutConfig;
-        }
-        if (shape.typography) {
-          responsiveProps.typography = shape.typography;
-        }
-        if (shape.maintainAspectRatio !== undefined) {
-          responsiveProps.maintainAspectRatio = shape.maintainAspectRatio;
-        }
-
-        // Text-specific properties with comprehensive serialization
-        if (shape.type === 'text') {
-          const textProps = {
-            text: shape.text || '',
-            textStyle: {
-              fontFamily: shape.textStyle?.fontFamily || 'Arial, sans-serif',
-              fontSize: shape.textStyle?.fontSize || 24,
-              fontWeight: shape.textStyle?.fontWeight || 'normal',
-              fontStyle: shape.textStyle?.fontStyle || 'normal',
-              color: shape.textStyle?.color || { r: 255, g: 255, b: 255, a: 1 },
-              textAlign: shape.textStyle?.textAlign || 'left',
-              verticalAlign: shape.textStyle?.verticalAlign || 'top',
-              lineHeight: shape.textStyle?.lineHeight || 1.2,
-              letterSpacing: shape.textStyle?.letterSpacing || 0,
-              textDecoration: shape.textStyle?.textDecoration || 'none',
-              textTransform: shape.textStyle?.textTransform || 'none',
-              textShadow: shape.textStyle?.textShadow,
-              shadowColor: shape.textStyle?.shadowColor,
-              shadowBlur: shape.textStyle?.shadowBlur,
-              shadowOffsetX: shape.textStyle?.shadowOffsetX,
-              shadowOffsetY: shape.textStyle?.shadowOffsetY
-            },
-            autoSize: shape.autoSize !== false,
-            wordWrap: shape.wordWrap !== false,
-            maxLines: shape.maxLines || 0,
-            // Responsive text-specific properties
-            optimizeReadability: shape.optimizeReadability !== false,
-            scaleMode: shape.scaleMode || 'fluid'
-          };
-
-          return {
-            ...baseProps,
-            ...responsiveProps,
-            ...textProps
-          };
-        }
-
-        // Background-specific properties
-        if (shape.type === 'background') {
-          return {
-            ...baseProps,
-            ...responsiveProps,
-            backgroundStyle: shape.backgroundStyle
-          };
-        }
-
-        // Rectangle-specific properties
-        if (shape.type === 'rectangle') {
-          return {
-            ...baseProps,
-            ...responsiveProps,
-            fillColor: shape.fillColor,
-            strokeColor: shape.strokeColor,
-            strokeWidth: shape.strokeWidth,
-            borderRadius: shape.borderRadius,
-            fill: shape.fill,
-            stroke: shape.stroke
-          };
-        }
-
-        return {
-          ...baseProps,
-          ...responsiveProps
-        };
-      };
-
-      const serializedSlide = {
+      // Use simplified serializer with standardized coordinates
+      const serializedSlide: SerializedSlide = ShapeSerializer.serializeSlide({
         id: slide.id,
-        shapes: slide.shapes.map(serializeShape),
+        shapes: slide.shapes,
         background: slide.background
-      };
+      });
+
+      // Log serialization summary for debugging
+      const summary = ShapeSerializer.createSerializationSummary(slide.shapes);
+      console.log(`📤 LiveDisplayManager: Serializing slide with ${summary.totalShapes} shapes (${summary.totalSize} bytes)`, summary);
 
       const content = {
         type: 'template-slide',
         title: `${item.title} - Slide ${actualSlideIndex + 1}`,
         slide: serializedSlide,
         metadata: {
+          ...serializedSlide.metadata,
           itemType: item.type,
           slideIndex: actualSlideIndex,
           totalSlides: item.slides?.length || 1

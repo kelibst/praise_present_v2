@@ -87,6 +87,11 @@ export interface ContainerInfo {
   aspectRatio: number;
   pixelRatio: number;
   fontSize: number; // Base font size for rem/em calculations
+  scaleInfo?: {
+    isPreview: boolean;
+    scaleFactor: number;
+    actualCanvasSize: { width: number; height: number };
+  };
 }
 
 /**

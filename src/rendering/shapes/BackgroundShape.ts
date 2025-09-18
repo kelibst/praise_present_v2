@@ -45,7 +45,10 @@ export class BackgroundShape extends Shape {
 
   public render(context: RenderContext): void {
     if (!(context.context instanceof CanvasRenderingContext2D)) {
-      console.warn('BackgroundShape requires Canvas 2D context');
+      // Reduce warning frequency to prevent console spam
+      if (Math.random() < 0.01) {
+        console.warn('BackgroundShape requires Canvas 2D context');
+      }
       return;
     }
 

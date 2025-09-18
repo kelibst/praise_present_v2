@@ -111,7 +111,10 @@ export class ResponsiveTextShape extends ResponsiveShape {
    */
   public render(context: RenderContext): void {
     if (!(context.context instanceof CanvasRenderingContext2D)) {
-      console.warn('ResponsiveTextShape requires Canvas 2D context');
+      // Reduce warning frequency to prevent console spam
+      if (Math.random() < 0.01) {
+        console.warn('ResponsiveTextShape requires Canvas 2D context');
+      }
       return;
     }
 
@@ -179,6 +182,17 @@ export class ResponsiveTextShape extends ResponsiveShape {
   ): ResponsiveTextMetrics {
     let metrics: ResponsiveTextMetrics;
 
+    // Debug logging (reduced verbosity)
+    if (Math.random() < 0.1) { // Only log 10% of the time to reduce spam
+      console.log('🔍 ResponsiveTextShape: calculateInitialMetrics called', {
+        shapeId: this.id,
+        containerSize: `${containerInfo?.width || this.size.width}x${containerInfo?.height || this.size.height}`,
+        isPreview: containerInfo?.scaleInfo?.isPreview,
+        scaleFactor: containerInfo?.scaleInfo?.scaleFactor,
+        textLength: this.text.length
+      });
+    }
+
     if (this.enableSmartScaling && this.smartTextScaler && this.text.trim().length > 0) {
         // Use smart scaling for optimal size based on content
         console.log('🎯 ResponsiveTextShape: Using smart scaling for content analysis');
@@ -195,7 +209,9 @@ export class ResponsiveTextShape extends ResponsiveShape {
           confidence: smartResult.confidence,
           wordCount: smartResult.metrics.wordCount,
           complexity: smartResult.metrics.complexity.toFixed(2),
-          reasons: smartResult.adjustmentReason
+          reasons: smartResult.adjustmentReason,
+          originalTypographyBaseSize: this.typography?.baseSize,
+          containerUsed: containerInfo
         });
 
       metrics = {
@@ -209,11 +225,22 @@ export class ResponsiveTextShape extends ResponsiveShape {
       };
     } else if (this.optimizeReadability) {
       // Optimize for readability
+      console.log('📖 ResponsiveTextShape: Using readability optimization');
+
       const optimization = this.typographyScaler.optimizeForReadability(
         this.typography,
         containerInfo,
         this.text
       );
+
+      console.log('📈 Readability optimization result:', {
+        fontSize: optimization.fontSize,
+        lineHeight: optimization.lineHeight,
+        charactersPerLine: optimization.metrics.charactersPerLine,
+        readabilityScore: optimization.metrics.readabilityScore,
+        containerInfo,
+        typography: this.typography
+      });
 
       metrics = {
         fontSize: optimization.fontSize,
@@ -226,6 +253,8 @@ export class ResponsiveTextShape extends ResponsiveShape {
       };
     } else {
       // Use basic responsive scaling
+      console.log('⚙️ ResponsiveTextShape: Using basic responsive scaling');
+
       const fontSize = this.typographyScaler.calculateFontSize(
         this.typography,
         containerInfo,
@@ -238,13 +267,42 @@ export class ResponsiveTextShape extends ResponsiveShape {
         containerInfo
       );
 
-      metrics = {
+      // Apply preview scaling if this is a preview container
+      let adjustedFontSize = fontSize;
+      let adjustedLineHeight = lineHeight;
+
+      if (containerInfo?.scaleInfo?.isPreview) {
+        // For preview containers, scale the calculated font size appropriately
+        const scaleFactor = containerInfo.scaleInfo.scaleFactor;
+        adjustedFontSize = fontSize * scaleFactor;
+        adjustedLineHeight = lineHeight * scaleFactor;
+
+        console.log('📏 ResponsiveTextShape: Applied preview scaling', {
+          originalFontSize: fontSize,
+          adjustedFontSize,
+          scaleFactor,
+          actualCanvasSize: containerInfo.scaleInfo.actualCanvasSize
+        });
+      }
+
+      console.log('🔧 Basic scaling result:', {
         fontSize,
+        adjustedFontSize,
         lineHeight,
+        adjustedLineHeight,
+        containerInfo,
+        typography: this.typography,
+        textLength: this.text.length,
+        calculatedCharsPerLine: Math.floor(Math.max(this.size.width, adjustedFontSize * 2) / (adjustedFontSize * 0.6))
+      });
+
+      metrics = {
+        fontSize: adjustedFontSize,
+        lineHeight: adjustedLineHeight,
         actualWidth: 0,
         actualHeight: 0,
-        lines: this.wrapText(this.text, fontSize, context?.context as CanvasRenderingContext2D),
-        charactersPerLine: Math.floor(Math.max(this.size.width, fontSize * 2) / (fontSize * 0.6)),
+        lines: this.wrapText(this.text, adjustedFontSize, context?.context as CanvasRenderingContext2D),
+        charactersPerLine: Math.floor(Math.max(this.size.width, adjustedFontSize * 2) / (adjustedFontSize * 0.6)),
         readabilityScore: 1.0
       };
     }
@@ -291,12 +349,25 @@ export class ResponsiveTextShape extends ResponsiveShape {
     ctx?: CanvasRenderingContext2D
   ): ResponsiveTextMetrics {
     if (!ctx || !this.size.width || !this.size.height) {
+      console.log('⚠️ ResponsiveTextShape: Skipping overflow protection - missing context or container size');
       return metrics; // Can't measure without context or container
     }
+
+    console.log('🛡️ ResponsiveTextShape: Starting overflow protection', {
+      initialMetrics: {
+        fontSize: metrics.fontSize,
+        lineHeight: metrics.lineHeight,
+        linesCount: metrics.lines.length,
+        estimatedHeight: metrics.lines.length * metrics.lineHeight
+      },
+      containerSize: this.size,
+      shapeId: this.id
+    });
 
     const maxIterations = 10;
     let currentMetrics = { ...metrics };
     let iteration = 0;
+    let adjustmentsMade = [];
 
     while (iteration < maxIterations) {
       // Check if current metrics fit in container
@@ -305,10 +376,12 @@ export class ResponsiveTextShape extends ResponsiveShape {
       // Check vertical overflow
       if (estimatedHeight > this.size.height) {
         // Reduce font size by 10%
+        const oldFontSize = currentMetrics.fontSize;
         const newFontSize = Math.max(currentMetrics.fontSize * 0.9, 8); // Minimum 8px
         const newLineHeight = newFontSize * (currentMetrics.lineHeight / currentMetrics.fontSize);
 
         if (newFontSize === currentMetrics.fontSize) {
+          console.log('🔒 ResponsiveTextShape: Hit minimum font size, stopping overflow protection');
           break; // Can't reduce further
         }
 
@@ -319,7 +392,16 @@ export class ResponsiveTextShape extends ResponsiveShape {
           lines: this.wrapText(this.text, newFontSize, ctx)
         };
 
-        console.log(`🔧 ResponsiveTextShape: Reduced font size to ${newFontSize}px for overflow protection`);
+        adjustmentsMade.push({
+          iteration,
+          reason: 'vertical_overflow',
+          oldFontSize,
+          newFontSize,
+          estimatedHeight,
+          containerHeight: this.size.height
+        });
+
+        console.log(`🔧 ResponsiveTextShape: Reduced font size ${oldFontSize}px → ${newFontSize}px for vertical overflow (${estimatedHeight}px > ${this.size.height}px)`);
       } else {
         // Check horizontal overflow for each line
         let hasHorizontalOverflow = false;
@@ -341,8 +423,16 @@ export class ResponsiveTextShape extends ResponsiveShape {
             ...currentMetrics,
             lines: this.wrapText(this.text, currentMetrics.fontSize, ctx)
           };
+          adjustmentsMade.push({
+            iteration,
+            reason: 'horizontal_overflow_rewrap',
+            fontSize: currentMetrics.fontSize,
+            linesCount: currentMetrics.lines.length
+          });
+          console.log(`🔄 ResponsiveTextShape: Re-wrapped text for horizontal overflow at ${currentMetrics.fontSize}px`);
         } else {
           // Text fits, we're done
+          console.log('✅ ResponsiveTextShape: Text fits within container, overflow protection complete');
           break;
         }
       }
@@ -361,6 +451,19 @@ export class ResponsiveTextShape extends ResponsiveShape {
       currentMetrics.actualWidth = dimensions.width;
       currentMetrics.actualHeight = dimensions.height;
     }
+
+    // Log final overflow protection summary
+    console.log('🔚 ResponsiveTextShape: Overflow protection complete', {
+      initialFontSize: metrics.fontSize,
+      finalFontSize: currentMetrics.fontSize,
+      adjustmentsMade: adjustmentsMade,
+      iterations: iteration,
+      finalDimensions: {
+        width: currentMetrics.actualWidth,
+        height: currentMetrics.actualHeight
+      },
+      containerSize: this.size
+    });
 
     return currentMetrics;
   }

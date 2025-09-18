@@ -30,6 +30,7 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
   private enableResponsive: boolean;
   private currentAdvancedLayoutMode: AdvancedLayoutMode | null = null;
   private lastContainerSize: { width: number; height: number } | null = null;
+  private loggedPreviewSizes?: Set<string>;
 
   constructor(options: ResponsiveRenderingEngineOptions) {
     super(options);
@@ -166,7 +167,10 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
    * Intelligently mark responsive shapes as dirty when container changes
    */
   private markResponsiveShapesDirty(reason: string): void {
-    console.log('🔄 ResponsiveRenderingEngine: Marking responsive shapes dirty', { reason });
+    // Only log shape marking occasionally to reduce spam
+    if (Math.random() < 0.2) {
+      console.log('🔄 ResponsiveRenderingEngine: Marking responsive shapes dirty', { reason });
+    }
 
     const allShapes = this.getAllShapes();
     let responsiveShapesMarked = 0;
@@ -178,7 +182,10 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
       }
     });
 
-    console.log(`✅ ResponsiveRenderingEngine: Marked ${responsiveShapesMarked} responsive shapes as dirty`);
+    // Only log completion if we marked many shapes or occasionally
+    if (responsiveShapesMarked > 3 || Math.random() < 0.2) {
+      console.log(`✅ ResponsiveRenderingEngine: Marked ${responsiveShapesMarked} responsive shapes as dirty`);
+    }
   }
 
   /**
@@ -341,15 +348,53 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
    * Create container info from canvas and options
    */
   private createContainerInfo(canvas: HTMLCanvasElement, baseFontSize: number = 16): ContainerInfo {
-    const width = canvas.clientWidth || canvas.width || 800;
-    const height = canvas.clientHeight || canvas.height || 600;
+    const canvasWidth = canvas.clientWidth || canvas.width || 800;
+    const canvasHeight = canvas.clientHeight || canvas.height || 600;
+
+    // For small preview containers, use presentation coordinate scaling
+    // instead of actual canvas size to ensure proper text sizing
+    let width = canvasWidth;
+    let height = canvasHeight;
+    let scaleFactor = 1;
+
+    // Detect if this is a preview container based on size
+    const isSmallPreview = canvasWidth < 600 || canvasHeight < 400;
+    const PRESENTATION_WIDTH = 1920;
+    const PRESENTATION_HEIGHT = 1080;
+
+    if (isSmallPreview) {
+      // Use presentation dimensions for font calculation, but track the scale
+      scaleFactor = Math.min(canvasWidth / PRESENTATION_WIDTH, canvasHeight / PRESENTATION_HEIGHT);
+      width = PRESENTATION_WIDTH;
+      height = PRESENTATION_HEIGHT;
+
+      // Only log preview detection once per size to reduce spam
+      const sizeKey = `${canvasWidth}x${canvasHeight}`;
+      if (!this.loggedPreviewSizes?.has(sizeKey)) {
+        if (!this.loggedPreviewSizes) this.loggedPreviewSizes = new Set();
+        this.loggedPreviewSizes.add(sizeKey);
+
+        console.log('🎯 ResponsiveRenderingEngine: Detected preview container, using presentation scaling', {
+          canvasSize: { width: canvasWidth, height: canvasHeight },
+          presentationSize: { width, height },
+          scaleFactor,
+          baseFontSize
+        });
+      }
+    }
 
     return {
       width,
       height,
       aspectRatio: width / height,
       pixelRatio: window.devicePixelRatio || 1,
-      fontSize: baseFontSize
+      fontSize: baseFontSize,
+      // Add scale information for responsive shapes to use
+      scaleInfo: {
+        isPreview: isSmallPreview,
+        scaleFactor,
+        actualCanvasSize: { width: canvasWidth, height: canvasHeight }
+      }
     };
   }
 
@@ -422,13 +467,27 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
       height: canvas.clientHeight || canvas.height
     };
 
-    if (!this.lastContainerSize ||
-        this.lastContainerSize.width !== currentSize.width ||
-        this.lastContainerSize.height !== currentSize.height) {
+    // Add tolerance for minor size changes to prevent flickering
+    const tolerance = 2; // 2px tolerance
+    const sizeChanged = !this.lastContainerSize ||
+        Math.abs(this.lastContainerSize.width - currentSize.width) > tolerance ||
+        Math.abs(this.lastContainerSize.height - currentSize.height) > tolerance;
+
+    if (sizeChanged) {
+      console.log('📏 ResponsiveRenderingEngine: Container size changed', {
+        oldSize: this.lastContainerSize,
+        newSize: currentSize,
+        tolerance
+      });
 
       const containerInfo = this.createContainerInfo(canvas);
-      this.layoutManager.updateContainer(containerInfo);
-      this.lastContainerSize = currentSize;
+      const needsRecalculation = this.layoutManager.updateContainer(containerInfo);
+      this.lastContainerSize = { ...currentSize };
+
+      // Only mark shapes dirty if layout manager says recalculation is needed
+      if (needsRecalculation) {
+        this.markResponsiveShapesDirty('container-resize');
+      }
     }
   }
 

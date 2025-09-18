@@ -53,7 +53,10 @@ export class SlideRenderer {
       // Notify callbacks
       this.notifyRenderCallbacks();
 
-      console.log(`SlideRenderer: Rendered slide with ${slide.shapes.length} shapes (${slide.contentId})`);
+      // Reduce logging frequency to prevent console spam
+      if (Math.random() < 0.05) {
+        console.log(`SlideRenderer: Rendered slide with ${slide.shapes.length} shapes (${slide.contentId})`);
+      }
 
       return slide;
 
