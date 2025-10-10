@@ -74,32 +74,59 @@ export const useLiveDisplay = () => {
         if (actualSlideIndex === -1) actualSlideIndex = currentSlideIndex || 0;
       }
 
-      // Use simplified serializer with standardized coordinates
-      const serializedSlide: SerializedSlide = ShapeSerializer.serializeSlide({
-        id: slide.id,
-        shapes: slide.shapes,
-        background: slide.background
-      });
-
-      // Log serialization summary for debugging
-      const summary = ShapeSerializer.createSerializationSummary(slide.shapes);
-      console.log(`📤 LiveDisplayManager: Serializing slide with ${summary.totalShapes} shapes (${summary.totalSize} bytes)`, summary);
-
+      // CRITICAL FIX: Send raw slide data to maintain rendering consistency
+      // Instead of serializing, send the slide directly and let the live display
+      // use the same rendering engine as preview
       const content = {
         type: 'template-slide',
         title: `${item.title} - Slide ${actualSlideIndex + 1}`,
-        slide: serializedSlide,
+        slide: {
+          id: slide.id,
+          shapes: slide.shapes, // Send raw shape objects
+          background: slide.background
+        },
         metadata: {
-          ...serializedSlide.metadata,
           itemType: item.type,
           slideIndex: actualSlideIndex,
-          totalSlides: item.slides?.length || 1
+          totalSlides: item.slides?.length || 1,
+          renderingMode: 'unified', // Flag to indicate unified rendering path
+          timestamp: Date.now()
         }
       };
+
+      // Minimal logging to prevent console spam during presentations
+      if (Math.random() < 0.1) { // Log only 10% of the time
+        console.log(`📤 LiveDisplayManager: Sending slide ${actualSlideIndex + 1} with ${slide.shapes?.length || 0} shapes`);
+      }
 
       await window.electronAPI?.invoke('live-display:sendContent', content);
     } catch (error) {
       console.error('Failed to send slide to live display:', error);
+      // Try fallback serialization approach if direct sending fails
+      try {
+        const serializedSlide: SerializedSlide = ShapeSerializer.serializeSlide({
+          id: slide.id,
+          shapes: slide.shapes,
+          background: slide.background
+        });
+
+        const fallbackContent = {
+          type: 'template-slide',
+          title: `${item.title} - Slide ${actualSlideIndex + 1}`,
+          slide: serializedSlide,
+          metadata: {
+            itemType: item.type,
+            slideIndex: actualSlideIndex,
+            totalSlides: item.slides?.length || 1,
+            renderingMode: 'fallback'
+          }
+        };
+
+        await window.electronAPI?.invoke('live-display:sendContent', fallbackContent);
+        console.warn('LiveDisplayManager: Used fallback serialization due to initial failure');
+      } catch (fallbackError) {
+        console.error('LiveDisplayManager: Both unified and fallback rendering failed:', fallbackError);
+      }
     }
   };
 

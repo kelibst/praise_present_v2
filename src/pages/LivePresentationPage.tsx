@@ -71,6 +71,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
   const [presentationMode, setPresentationMode] = useState<'preview' | 'live'>('preview');
 
+  // Service management for plan functionality
+  const [currentServiceId, setCurrentServiceId] = useState<string | null>(null);
+  const [isLoadingService, setIsLoadingService] = useState(true);
+
   // Live display management
   const {
     liveDisplayActive,
@@ -82,11 +86,17 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     showBlackScreen,
   } = useLiveDisplay();
 
+  // Plan loading state
+  const [isPlanLoading, setIsPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+
   // Plan integration management
   const { handlePlanSelect, handlePlanCreate } = usePlanIntegration({
     onPlanLoaded: (serviceItems, plan) => {
       setSelectedPlan(plan);
       setServiceItems(serviceItems);
+      setIsPlanLoading(false);
+      setPlanError(null);
 
       // Auto-switch to Current Service tab and select first item
       setActiveTab('plan');
@@ -98,6 +108,20 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       console.log('Plan created in LivePresentationPage:', plan.name);
     }
   });
+
+  // Wrap handlePlanSelect to add loading state and error handling
+  const handlePlanSelectWithLoading = async (plan: any) => {
+    setIsPlanLoading(true);
+    setPlanError(null);
+
+    try {
+      await handlePlanSelect(plan);
+    } catch (error) {
+      console.error('Error loading plan:', error);
+      setPlanError(error instanceof Error ? error.message : 'Failed to load plan content');
+      setIsPlanLoading(false);
+    }
+  };
 
   // Editable slide state
   const [editableSlideContent, setEditableSlideContent] = useState<any>(null);
@@ -215,6 +239,67 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     };
   }, []);
 
+  // Initialize service for plan functionality
+  useEffect(() => {
+    const initializeService = async () => {
+      try {
+        setIsLoadingService(true);
+
+        // Check if there's a stored current service ID
+        const storedServiceId = localStorage.getItem('currentServiceId');
+
+        if (storedServiceId && window.electronAPI) {
+          // Verify the stored service still exists
+          try {
+            const service = await window.electronAPI.invoke('db:getService', storedServiceId);
+            if (service) {
+              setCurrentServiceId(storedServiceId);
+              console.log('✅ Using existing service:', service.name);
+              return;
+            }
+          } catch (error) {
+            console.warn('Stored service no longer exists, creating new one');
+            localStorage.removeItem('currentServiceId');
+          }
+        }
+
+        // Create or get default service for live presentation
+        if (window.electronAPI) {
+          try {
+            // Try to get an existing default service
+            const services = await window.electronAPI.invoke('db:getServices', 50);
+            let defaultService = services.find((s: any) => s.name === 'Live Presentation Service');
+
+            if (!defaultService) {
+              // Create default service
+              defaultService = await window.electronAPI.invoke('db:createService', {
+                name: 'Live Presentation Service',
+                description: 'Default service for live presentation plans',
+                date: new Date().toISOString(),
+                startTime: '10:00',
+                endTime: '11:30'
+              });
+              console.log('📝 Created default service for live presentation');
+            }
+
+            setCurrentServiceId(defaultService.id);
+            localStorage.setItem('currentServiceId', defaultService.id);
+            console.log('✅ Initialized service:', defaultService.name);
+
+          } catch (error) {
+            console.error('Failed to initialize service:', error);
+            // Continue without service - plan manager will show appropriate message
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing service:', error);
+      } finally {
+        setIsLoadingService(false);
+      }
+    };
+
+    initializeService();
+  }, []);
 
   // Keyboard shortcuts for presentation control
   useEffect(() => {
@@ -1007,32 +1092,67 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   </div>
 
                   <div className="p-4">
-                    <PlanManager
-                      serviceId={undefined} // Remove service dependency
-                      onPlanSelect={handlePlanSelect}
-                      onPlanCreate={(plan) => {
-                        handlePlanCreate(plan);
-                        setSelectedPlan(plan);
-                      }}
-                      onPlanUpdate={(plan) => {
-                        console.log('Plan updated:', plan.name);
-                        if (selectedPlan?.id === plan.id) {
-                          setSelectedPlan(plan);
-                        }
-                      }}
-                      onPlanDelete={(planId) => {
-                        console.log('Plan deleted:', planId);
-                        if (selectedPlan?.id === planId) {
-                          setSelectedPlan(null);
-                          setServiceItems([]);
-                          setSelectedItem(null);
-                        }
-                      }}
-                      className=""
-                    />
+                    {isLoadingService ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="text-gray-400">Initializing service for plans...</div>
+                      </div>
+                    ) : (
+                      <>
+                        <PlanManager
+                          serviceId={currentServiceId}
+                          onPlanSelect={handlePlanSelectWithLoading}
+                          onPlanCreate={(plan) => {
+                            handlePlanCreate(plan);
+                            setSelectedPlan(plan);
+                          }}
+                          onPlanUpdate={(plan) => {
+                            console.log('Plan updated:', plan.name);
+                            if (selectedPlan?.id === plan.id) {
+                              setSelectedPlan(plan);
+                            }
+                          }}
+                          onPlanDelete={(planId) => {
+                            console.log('Plan deleted:', planId);
+                            if (selectedPlan?.id === planId) {
+                              setSelectedPlan(null);
+                              setServiceItems([]);
+                              setSelectedItem(null);
+                            }
+                          }}
+                          className=""
+                        />
 
-                    {/* Plan Statistics */}
-                    <PlanStats plan={selectedPlan} serviceItems={serviceItems} />
+                        {/* Plan Error Display */}
+                        {planError && (
+                        <div className="bg-red-900/50 border border-red-600 rounded-lg p-4 mb-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="text-sm font-semibold text-red-300 mb-1">Plan Loading Error</h4>
+                              <p className="text-sm text-red-200">{planError}</p>
+                            </div>
+                            <button
+                              onClick={() => setPlanError(null)}
+                              className="text-red-300 hover:text-red-100 ml-2"
+                              title="Dismiss error"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                        {/* Plan Statistics */}
+                        {isPlanLoading ? (
+                          <div className="bg-card rounded-lg border border-border p-4 mb-4">
+                            <div className="flex items-center justify-center py-4">
+                              <div className="text-gray-400">Loading plan content...</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <PlanStats plan={selectedPlan} serviceItems={serviceItems} />
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
 

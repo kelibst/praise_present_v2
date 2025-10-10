@@ -144,10 +144,47 @@ export class PlanService {
       throw new Error('Electron API not available');
     }
 
-    // Validate content references before creating plan item
-    await this.validateContentReferences(data);
+    try {
+      // Enhanced validation and logging
+      console.log('🔄 Creating plan item:', data);
 
-    return await window.electronAPI.invoke('db:createPlanItem', data);
+      // Validate required fields
+      if (!data.planId) {
+        throw new Error('Plan ID is required');
+      }
+      if (!data.type) {
+        throw new Error('Item type is required');
+      }
+      if (!data.title) {
+        throw new Error('Item title is required');
+      }
+
+      // Validate content references before creating plan item
+      await this.validateContentReferences(data);
+
+      const result = await window.electronAPI.invoke('db:createPlanItem', data);
+      console.log('✅ Plan item created successfully:', result);
+      return result;
+
+    } catch (error) {
+      console.error('❌ Failed to create plan item:', error);
+      console.error('Plan item data:', data);
+
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('Song with ID')) {
+          throw new Error(`Song not found: ${data.songId}. Please verify the song exists in the database.`);
+        } else if (error.message.includes('Presentation with ID')) {
+          throw new Error(`Presentation not found: ${data.presentationId}. Please verify the presentation exists.`);
+        } else if (error.message.includes('planId')) {
+          throw new Error(`Invalid plan: ${data.planId}. Please verify the plan exists.`);
+        } else {
+          throw new Error(`Plan item creation failed: ${error.message}`);
+        }
+      }
+
+      throw error;
+    }
   }
 
   // Validate that referenced content exists
@@ -157,24 +194,45 @@ export class PlanService {
     }
 
     try {
+      console.log('🔍 Validating content references:', {
+        songId: data.songId,
+        presentationId: data.presentationId,
+        scriptureRef: data.scriptureRef
+      });
+
       // Validate song reference
       if (data.songId) {
-        const song = await window.electronAPI.invoke('db:getSong', data.songId);
-        if (!song) {
-          throw new Error(`Song with ID '${data.songId}' not found`);
+        console.log(`🎵 Validating song ID: ${data.songId}`);
+        try {
+          const song = await window.electronAPI.invoke('db:getSong', data.songId);
+          if (!song) {
+            throw new Error(`Song with ID '${data.songId}' not found`);
+          }
+          console.log(`✅ Song validated: ${song.title}`);
+        } catch (error) {
+          console.error(`❌ Song validation failed for ID ${data.songId}:`, error);
+          throw new Error(`Song with ID '${data.songId}' not found or inaccessible`);
         }
       }
 
       // Validate presentation reference
       if (data.presentationId) {
-        const presentation = await window.electronAPI.invoke('db:getPresentation', data.presentationId);
-        if (!presentation) {
-          throw new Error(`Presentation with ID '${data.presentationId}' not found`);
+        console.log(`📊 Validating presentation ID: ${data.presentationId}`);
+        try {
+          const presentation = await window.electronAPI.invoke('db:getPresentation', data.presentationId);
+          if (!presentation) {
+            throw new Error(`Presentation with ID '${data.presentationId}' not found`);
+          }
+          console.log(`✅ Presentation validated: ${presentation.title}`);
+        } catch (error) {
+          console.error(`❌ Presentation validation failed for ID ${data.presentationId}:`, error);
+          throw new Error(`Presentation with ID '${data.presentationId}' not found or inaccessible`);
         }
       }
 
       // Validate scripture reference (verse ID)
       if (data.scriptureRef) {
+        console.log(`📖 Validating scripture reference: ${data.scriptureRef}`);
         // Try to find the verse by ID if it looks like a verse ID
         if (data.scriptureRef.length > 10) { // Assume verse IDs are longer than simple references
           try {
@@ -183,14 +241,22 @@ export class PlanService {
               query: data.scriptureRef
             });
             if (!searchResults || searchResults.length === 0) {
-              console.warn(`Scripture reference '${data.scriptureRef}' could not be validated`);
+              console.warn(`⚠️ Scripture reference '${data.scriptureRef}' could not be validated`);
+            } else {
+              console.log(`✅ Scripture reference validated, found ${searchResults.length} verses`);
             }
           } catch (err) {
-            console.warn('Could not validate scripture reference:', err);
+            console.warn('⚠️ Could not validate scripture reference:', err);
           }
+        } else {
+          console.log(`✅ Scripture reference accepted (simple format): ${data.scriptureRef}`);
         }
       }
+
+      console.log('✅ Content validation completed successfully');
+
     } catch (error) {
+      console.error('❌ Content validation failed:', error);
       throw new Error(`Content validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

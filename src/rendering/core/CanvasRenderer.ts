@@ -77,7 +77,39 @@ export class CanvasRenderer {
     // Scale back down using CSS
     this.canvas.style.width = displayWidth + 'px';
     this.canvas.style.height = displayHeight + 'px';
+
+    // Set up context loss/restore event listeners
+    this.setupContextEventHandlers();
   }
+
+  private setupContextEventHandlers(): void {
+    // Remove existing listeners to prevent duplicates
+    this.canvas.removeEventListener('webglcontextlost', this.handleContextLost);
+    this.canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);
+
+    // Add context loss/restore handlers
+    this.canvas.addEventListener('webglcontextlost', this.handleContextLost.bind(this), false);
+    this.canvas.addEventListener('webglcontextrestored', this.handleContextRestored.bind(this), false);
+
+    // For 2D context, we need to detect context loss differently
+    // Canvas 2D doesn't have built-in context loss events like WebGL
+  }
+
+  private handleContextLost = (event: Event) => {
+    if (this.settings.debugMode) {
+      console.warn('CanvasRenderer: Context lost event detected');
+    }
+    event.preventDefault(); // Prevent default context restoration
+    this.ctx = null;
+  };
+
+  private handleContextRestored = (event: Event) => {
+    if (this.settings.debugMode) {
+      console.log('CanvasRenderer: Context restored event detected');
+    }
+    // Recreate the rendering context
+    this.createRenderingContext();
+  };
 
   private createRenderingContext(): void {
     if (this.settings.debugMode) {
@@ -257,12 +289,32 @@ export class CanvasRenderer {
     const minWidth = Math.max(width, 1);
     const minHeight = Math.max(height, 1);
 
+    // Check if resize is actually needed
+    const currentWidth = parseInt(this.canvas.style.width) || this.canvas.clientWidth;
+    const currentHeight = parseInt(this.canvas.style.height) || this.canvas.clientHeight;
+
+    if (currentWidth === minWidth && currentHeight === minHeight) {
+      return; // No resize needed
+    }
+
+    // Store current context settings before resize
+    const contextSettings = this.preserveContextSettings();
+
     this.canvas.style.width = minWidth + 'px';
     this.canvas.style.height = minHeight + 'px';
     this.setupCanvas();
 
-    // Always recreate the context after canvas size change
-    this.createRenderingContext();
+    // Only recreate context if it was lost or if critical dimension change
+    if (!this.ctx || this.isContextLost()) {
+      this.createRenderingContext();
+    } else {
+      // Restore context settings and scale for new canvas size
+      this.restoreContextSettings(contextSettings);
+      const pixelRatio = this.getPixelRatio();
+      if (this.ctx) {
+        this.ctx.scale(pixelRatio, pixelRatio);
+      }
+    }
   }
 
   public getStats(): RenderStats {
@@ -338,7 +390,98 @@ export class CanvasRenderer {
   }
 
   public dispose(): void {
+    // Clean up event listeners
+    this.canvas.removeEventListener('webglcontextlost', this.handleContextLost);
+    this.canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);
+
     this.ctx = null;
+  }
+
+  // Context preservation and recovery methods
+  private preserveContextSettings(): any {
+    if (!this.ctx || !(this.ctx instanceof CanvasRenderingContext2D)) {
+      return null;
+    }
+
+    // Store critical context properties
+    return {
+      fillStyle: this.ctx.fillStyle,
+      strokeStyle: this.ctx.strokeStyle,
+      lineWidth: this.ctx.lineWidth,
+      lineCap: this.ctx.lineCap,
+      lineJoin: this.ctx.lineJoin,
+      globalAlpha: this.ctx.globalAlpha,
+      globalCompositeOperation: this.ctx.globalCompositeOperation,
+      imageSmoothingEnabled: this.ctx.imageSmoothingEnabled,
+      imageSmoothingQuality: this.ctx.imageSmoothingQuality,
+      shadowColor: this.ctx.shadowColor,
+      shadowBlur: this.ctx.shadowBlur,
+      shadowOffsetX: this.ctx.shadowOffsetX,
+      shadowOffsetY: this.ctx.shadowOffsetY,
+      font: this.ctx.font,
+      textAlign: this.ctx.textAlign,
+      textBaseline: this.ctx.textBaseline
+    };
+  }
+
+  private restoreContextSettings(settings: any): void {
+    if (!this.ctx || !(this.ctx instanceof CanvasRenderingContext2D) || !settings) {
+      return;
+    }
+
+    try {
+      // Restore context properties
+      this.ctx.fillStyle = settings.fillStyle;
+      this.ctx.strokeStyle = settings.strokeStyle;
+      this.ctx.lineWidth = settings.lineWidth;
+      this.ctx.lineCap = settings.lineCap;
+      this.ctx.lineJoin = settings.lineJoin;
+      this.ctx.globalAlpha = settings.globalAlpha;
+      this.ctx.globalCompositeOperation = settings.globalCompositeOperation;
+      this.ctx.imageSmoothingEnabled = settings.imageSmoothingEnabled;
+      this.ctx.imageSmoothingQuality = settings.imageSmoothingQuality;
+      this.ctx.shadowColor = settings.shadowColor;
+      this.ctx.shadowBlur = settings.shadowBlur;
+      this.ctx.shadowOffsetX = settings.shadowOffsetX;
+      this.ctx.shadowOffsetY = settings.shadowOffsetY;
+      this.ctx.font = settings.font;
+      this.ctx.textAlign = settings.textAlign;
+      this.ctx.textBaseline = settings.textBaseline;
+
+      // Re-apply render settings
+      this.setupRenderingSettings();
+    } catch (error) {
+      if (this.settings.debugMode) {
+        console.warn('CanvasRenderer: Failed to restore context settings:', error);
+      }
+      // If restoration fails, recreate the context
+      this.createRenderingContext();
+    }
+  }
+
+  private isContextLost(): boolean {
+    if (!this.ctx) return true;
+
+    // Try to perform a simple operation to detect context loss
+    try {
+      if (this.ctx instanceof CanvasRenderingContext2D) {
+        // Save current state
+        const currentFillStyle = this.ctx.fillStyle;
+
+        // Try to change and restore a property
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillStyle = currentFillStyle;
+
+        return false; // Context is working
+      }
+    } catch (error) {
+      if (this.settings.debugMode) {
+        console.warn('CanvasRenderer: Context loss detected:', error);
+      }
+      return true;
+    }
+
+    return true; // Assume lost if we can't verify
   }
 
   // Performance monitoring helpers

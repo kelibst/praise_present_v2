@@ -8,59 +8,185 @@ export interface PlanIntegrationProps {
   onPlanCreated?: (plan: PlanWithItems) => void;
 }
 
-// Utility function to convert plan items to service items
-export const convertPlanToServiceItems = (plan: PlanWithItems): ServiceItem[] => {
-  return plan.planItems.map((planItem: any) => ({
-    id: planItem.id,
-    type: planItem.type as 'scripture' | 'song' | 'announcement',
-    title: planItem.title,
-    content: {
-      // Map content based on type
-      ...(planItem.type === 'song' && planItem.song ? {
-        title: planItem.song.title,
-        artist: planItem.song.artist || planItem.song.artist,
-        lyrics: planItem.song.lyrics || 'Lyrics not available'
-      } : {}),
-      ...(planItem.type === 'scripture' && planItem.scriptureRef ? {
-        scriptureRef: planItem.scriptureRef,
-        verses: [{
-          id: planItem.id,
-          text: 'Sample verse text',
-          book: 'Sample Book',
-          chapter: 1,
-          verse: 1,
-          translation: 'KJV'
-        }]
-      } : {}),
-      ...(planItem.type === 'announcement' ? {
-        text: planItem.title,
-        description: planItem.notes || ''
-      } : {})
-    },
-    duration: planItem.duration,
-    order: planItem.order,
-    notes: planItem.notes,
-    planId: plan.id,
-    planItemId: planItem.id
-  }));
+// Enhanced utility function to convert plan items to service items with real content
+export const convertPlanToServiceItems = async (plan: PlanWithItems): Promise<ServiceItem[]> => {
+  const serviceItems: ServiceItem[] = [];
+
+  for (const planItem of plan.planItems) {
+    let content: any = {};
+
+    try {
+      // Fetch real content based on item type
+      if (planItem.type === 'song' && planItem.songId) {
+        // Fetch actual song content
+        if (window.electronAPI) {
+          const song = await window.electronAPI.invoke('db:getSong', planItem.songId);
+          if (song) {
+            content = {
+              title: song.title,
+              artist: song.artist || song.author,
+              lyrics: song.lyrics || 'Lyrics not available',
+              ccli: song.ccli,
+              copyright: song.copyright,
+              key: song.key,
+              tempo: song.tempo
+            };
+          } else {
+            // Fallback if song not found
+            content = {
+              title: planItem.title,
+              lyrics: 'Song content not found',
+              artist: 'Unknown'
+            };
+          }
+        }
+      } else if (planItem.type === 'scripture' && planItem.scriptureRef) {
+        // Fetch actual scripture content
+        if (window.electronAPI) {
+          try {
+            // Try to search for the scripture reference
+            const searchResults = await window.electronAPI.invoke('db:searchVerses', {
+              query: planItem.scriptureRef,
+              limit: 20
+            });
+
+            if (searchResults && searchResults.length > 0) {
+              content = {
+                scriptureRef: planItem.scriptureRef,
+                verses: searchResults.map((verse: any) => ({
+                  id: verse.id,
+                  text: verse.text,
+                  book: verse.book,
+                  chapter: verse.chapter,
+                  verse: verse.verse,
+                  translation: verse.translation || 'KJV'
+                }))
+              };
+            } else {
+              // Fallback for scripture not found
+              content = {
+                scriptureRef: planItem.scriptureRef,
+                verses: [{
+                  id: planItem.id,
+                  text: `Scripture not found: ${planItem.scriptureRef}`,
+                  book: 'Unknown',
+                  chapter: 0,
+                  verse: 0,
+                  translation: 'KJV'
+                }]
+              };
+            }
+          } catch (error) {
+            console.warn('Error fetching scripture:', error);
+            // Fallback content
+            content = {
+              scriptureRef: planItem.scriptureRef,
+              verses: [{
+                id: planItem.id,
+                text: `Error loading scripture: ${planItem.scriptureRef}`,
+                book: 'Error',
+                chapter: 0,
+                verse: 0,
+                translation: 'KJV'
+              }]
+            };
+          }
+        }
+      } else if (planItem.type === 'announcement') {
+        // Announcement content is straightforward
+        content = {
+          text: planItem.title,
+          description: planItem.notes || ''
+        };
+      } else {
+        // Default content for any other types or missing references
+        content = {
+          text: planItem.title,
+          description: planItem.notes || 'Content not available'
+        };
+      }
+
+      // Create service item with real content
+      const serviceItem: ServiceItem = {
+        id: planItem.id,
+        type: planItem.type as 'scripture' | 'song' | 'announcement',
+        title: planItem.title,
+        content,
+        duration: planItem.duration,
+        order: planItem.order,
+        notes: planItem.notes,
+        planId: plan.id,
+        planItemId: planItem.id
+      };
+
+      serviceItems.push(serviceItem);
+
+    } catch (error) {
+      console.error(`Error processing plan item ${planItem.id}:`, error);
+
+      // Add fallback service item for failed items
+      const fallbackItem: ServiceItem = {
+        id: planItem.id,
+        type: planItem.type as 'scripture' | 'song' | 'announcement',
+        title: `Error: ${planItem.title}`,
+        content: {
+          text: 'Failed to load content',
+          description: `Error loading content for ${planItem.type}: ${planItem.title}`
+        },
+        duration: planItem.duration,
+        order: planItem.order,
+        notes: planItem.notes,
+        planId: plan.id,
+        planItemId: planItem.id
+      };
+
+      serviceItems.push(fallbackItem);
+    }
+  }
+
+  return serviceItems;
 };
 
 // Hook for plan integration logic
 export const usePlanIntegration = ({ onPlanLoaded, onPlanCreated }: PlanIntegrationProps) => {
-  const handlePlanSelect = (plan: PlanWithItems) => {
+  const handlePlanSelect = async (plan: PlanWithItems) => {
     console.log('🔄 Converting plan to service items:', plan.name);
 
-    // Convert plan items to service items
-    const serviceItems = convertPlanToServiceItems(plan);
+    try {
+      // Convert plan items to service items with real content
+      const serviceItems = await convertPlanToServiceItems(plan);
 
-    console.log('✅ Plan converted:', {
-      planName: plan.name,
-      itemCount: serviceItems.length,
-      items: serviceItems.map(item => ({ id: item.id, title: item.title, type: item.type }))
-    });
+      console.log('✅ Plan converted:', {
+        planName: plan.name,
+        itemCount: serviceItems.length,
+        items: serviceItems.map(item => ({ id: item.id, title: item.title, type: item.type }))
+      });
 
-    // Notify parent component
-    onPlanLoaded(serviceItems, plan);
+      // Notify parent component
+      onPlanLoaded(serviceItems, plan);
+
+    } catch (error) {
+      console.error('Failed to convert plan to service items:', error);
+
+      // Create fallback service items for the plan
+      const fallbackItems: ServiceItem[] = plan.planItems.map((planItem: any) => ({
+        id: planItem.id,
+        type: planItem.type as 'scripture' | 'song' | 'announcement',
+        title: `Error: ${planItem.title}`,
+        content: {
+          text: 'Failed to load content',
+          description: `Error loading ${planItem.type} content`
+        },
+        duration: planItem.duration,
+        order: planItem.order,
+        notes: planItem.notes,
+        planId: plan.id,
+        planItemId: planItem.id
+      }));
+
+      // Notify with fallback items
+      onPlanLoaded(fallbackItems, plan);
+    }
   };
 
   const handlePlanCreate = (plan: PlanWithItems) => {

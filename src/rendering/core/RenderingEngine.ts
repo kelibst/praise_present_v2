@@ -19,6 +19,11 @@ export class RenderingEngine {
   private enableDebug: boolean;
   private renderCallback?: () => void;
   private performanceMetrics: PerformanceMetrics;
+  private errorCallback?: (error: Error, context: string) => void;
+  private consecutiveErrors: number = 0;
+  private maxConsecutiveErrors: number = 5;
+  private lastErrorTime: number = 0;
+  private errorRecoveryAttempts: number = 0;
 
   constructor(options: RenderingEngineOptions) {
     this.enableDebug = options.enableDebug || false;
@@ -199,9 +204,11 @@ export class RenderingEngine {
         this.renderDebugInfo(renderContext);
       }
 
+      // Reset error tracking on successful render
+      this.resetErrorTracking();
+
     } catch (error) {
-      console.error('Rendering error:', error);
-      this.stopRenderLoop();
+      this.handleRenderingError(error as Error, 'main_render');
     }
   }
 
@@ -218,7 +225,7 @@ export class RenderingEngine {
       this.renderer.incrementVisibleShapeCount();
       this.renderer.incrementDrawCallCount();
     } catch (error) {
-      console.error(`Error rendering shape ${shape.id}:`, error);
+      this.handleShapeRenderingError(shape, error as Error);
       this.renderer.restoreState();
     }
   }
@@ -321,6 +328,137 @@ export class RenderingEngine {
 
   public setRenderCallback(callback: () => void): void {
     this.renderCallback = callback;
+  }
+
+  public setErrorCallback(callback: (error: Error, context: string) => void): void {
+    this.errorCallback = callback;
+  }
+
+  // Enhanced error handling and recovery methods
+  private handleRenderingError(error: Error, context: string): void {
+    const now = performance.now();
+    this.consecutiveErrors++;
+    this.lastErrorTime = now;
+
+    console.error(`RenderingEngine: Error in ${context}:`, error);
+
+    // Try to recover from rendering errors
+    if (this.consecutiveErrors <= this.maxConsecutiveErrors) {
+      this.attemptErrorRecovery(error, context);
+    } else {
+      // Too many consecutive errors - stop rendering to prevent crash
+      console.error(`RenderingEngine: Too many consecutive errors (${this.consecutiveErrors}), stopping render loop`);
+      this.stopRenderLoop();
+
+      // Notify error callback if set
+      if (this.errorCallback) {
+        this.errorCallback(error, `Critical: ${this.consecutiveErrors} consecutive errors in ${context}`);
+      }
+    }
+  }
+
+  private handleShapeRenderingError(shape: Shape, error: Error): void {
+    console.warn(`RenderingEngine: Failed to render shape ${shape.id} (type: ${shape.type}):`, error);
+
+    // Mark shape as problematic but continue rendering other shapes
+    try {
+      shape.hide(); // Hide the problematic shape
+    } catch (hideError) {
+      console.warn(`RenderingEngine: Failed to hide problematic shape ${shape.id}:`, hideError);
+    }
+
+    // If this is a Text shape, try to render a fallback
+    if (shape.type === 'text') {
+      this.renderFallbackTextShape(shape);
+    }
+  }
+
+  private attemptErrorRecovery(error: Error, context: string): void {
+    this.errorRecoveryAttempts++;
+
+    console.log(`RenderingEngine: Attempting error recovery #${this.errorRecoveryAttempts} for ${context}`);
+
+    try {
+      // Try to recover based on error type and context
+      if (context === 'main_render') {
+        // Main render error - try to clear and restart
+        this.renderer.clear();
+
+        // Try to recreate canvas context if needed
+        const canvas = this.renderer.getCanvas();
+        if (canvas) {
+          this.renderer.setCanvas(canvas);
+        }
+
+        // Continue rendering with a simple retry
+        setTimeout(() => {
+          if (this.isRendering) {
+            this.render();
+          }
+        }, 16); // Try again next frame
+      }
+
+      // Reset consecutive error count if we haven't had errors for a while
+      if (performance.now() - this.lastErrorTime > 5000) { // 5 seconds
+        this.consecutiveErrors = 0;
+        this.errorRecoveryAttempts = 0;
+      }
+
+    } catch (recoveryError) {
+      console.error(`RenderingEngine: Error recovery failed:`, recoveryError);
+      this.consecutiveErrors++; // Count recovery failures as additional errors
+    }
+  }
+
+  private renderFallbackTextShape(originalShape: Shape): void {
+    try {
+      // Create a simple fallback rectangle for failed text shapes
+      const bounds = originalShape.getBounds();
+      const ctx = this.renderer.getContext();
+
+      if (ctx && ctx instanceof CanvasRenderingContext2D) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(200, 100, 100, 0.3)'; // Light red background
+        ctx.strokeStyle = 'rgba(200, 100, 100, 0.8)'; // Red border
+        ctx.lineWidth = 1;
+
+        ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+        ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+
+        // Add error text if space allows
+        if (bounds.width > 60 && bounds.height > 20) {
+          ctx.fillStyle = 'rgba(100, 0, 0, 0.8)';
+          ctx.font = '12px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('TEXT ERROR', bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+        }
+
+        ctx.restore();
+      }
+    } catch (fallbackError) {
+      console.warn('RenderingEngine: Fallback text rendering also failed:', fallbackError);
+    }
+  }
+
+  // Reset error tracking when rendering is successful
+  private resetErrorTracking(): void {
+    this.consecutiveErrors = 0;
+    this.errorRecoveryAttempts = 0;
+  }
+
+  public getErrorStatus(): {
+    consecutiveErrors: number;
+    recoveryAttempts: number;
+    lastErrorTime: number;
+    isHealthy: boolean;
+  } {
+    return {
+      consecutiveErrors: this.consecutiveErrors,
+      recoveryAttempts: this.errorRecoveryAttempts,
+      lastErrorTime: this.lastErrorTime,
+      isHealthy: this.consecutiveErrors === 0
+    };
   }
 
   public getPerformanceMetrics(): PerformanceMetrics {

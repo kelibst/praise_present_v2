@@ -52,23 +52,73 @@ export class TextShape extends Shape {
 
     const ctx = context.context;
 
+    // Single save/restore to reduce state management overhead
     ctx.save();
+
+    try {
+      // Apply all transformations and styles in one go
+      this.applyAllStyles(ctx);
+
+      const metrics = this.getTextMetrics(ctx);
+
+      // Auto-size the shape if enabled (only when necessary)
+      if (this.autoSize) {
+        const newWidth = Math.max(this.size.width, metrics.actualBounds.width);
+        const newHeight = Math.max(this.size.height, metrics.actualBounds.height);
+
+        // Only update if dimensions actually changed
+        if (newWidth !== this.size.width || newHeight !== this.size.height) {
+          this.size.width = newWidth;
+          this.size.height = newHeight;
+        }
+      }
+
+      this.renderText(ctx, metrics);
+
+    } catch (error) {
+      console.warn(`TextShape ${this.id}: Render error:`, error);
+      // Continue with restore to prevent context corruption
+    } finally {
+      ctx.restore(); // Always restore, even on error
+    }
+  }
+
+  // Optimized style application that combines all style operations
+  private applyAllStyles(ctx: CanvasRenderingContext2D): void {
+    // Apply transformation
     this.applyTransformation(ctx);
-    this.applyStyle(ctx);
-    this.applyTextStyle(ctx);
 
-    const metrics = this.getTextMetrics(ctx);
-
-    // Auto-size the shape if enabled
-    if (this.autoSize) {
-      this.size.width = Math.max(this.size.width, metrics.actualBounds.width);
-      this.size.height = Math.max(this.size.height, metrics.actualBounds.height);
+    // Apply shape-level styles (opacity, shadows, etc.)
+    if (this.style.opacity !== undefined) {
+      ctx.globalAlpha = this.style.opacity * this.opacity;
+    } else {
+      ctx.globalAlpha = this.opacity;
     }
 
-    this.renderText(ctx, metrics);
+    // Apply shadow if specified
+    if (this.style.shadowColor) {
+      ctx.shadowColor = `rgba(${this.style.shadowColor.r}, ${this.style.shadowColor.g}, ${this.style.shadowColor.b}, ${this.style.shadowColor.a || 1})`;
+      ctx.shadowBlur = this.style.shadowBlur || 0;
+      ctx.shadowOffsetX = this.style.shadowOffsetX || 0;
+      ctx.shadowOffsetY = this.style.shadowOffsetY || 0;
+    }
 
-    this.resetStyle(ctx);
-    ctx.restore();
+    // Apply text-specific styles
+    const style = this.textStyle;
+    const fontStyle = style.fontStyle || 'normal';
+    const fontWeight = style.fontWeight || 'normal';
+    const fontSize = style.fontSize || 16;
+    const fontFamily = style.fontFamily || 'Arial, sans-serif';
+
+    // Set font (most expensive operation) only once
+    ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
+    ctx.textAlign = style.textAlign || 'left';
+    ctx.textBaseline = style.verticalAlign === 'middle' ? 'middle' :
+                      style.verticalAlign === 'bottom' ? 'bottom' : 'top';
+
+    if (style.color) {
+      ctx.fillStyle = colorToString(style.color);
+    }
   }
 
   private applyTextStyle(ctx: CanvasRenderingContext2D): void {
@@ -93,13 +143,23 @@ export class TextShape extends Shape {
   }
 
   private getTextMetrics(ctx: CanvasRenderingContext2D): TextMetrics {
+    // Use cached metrics if available and not stale
+    if (this.cachedMetrics) {
+      return this.cachedMetrics;
+    }
+
     const cacheKey = this.getCacheKey();
 
     if (this.metricsCache.has(cacheKey)) {
-      return this.metricsCache.get(cacheKey)!;
+      const metrics = this.metricsCache.get(cacheKey)!;
+      this.cachedMetrics = metrics; // Store as immediate cache
+      return metrics;
     }
 
     const metrics = this.measureText(ctx);
+
+    // Store in both immediate cache and LRU cache
+    this.cachedMetrics = metrics;
 
     // Implement LRU-style cache eviction
     if (this.metricsCache.size >= this.MAX_CACHE_SIZE) {
@@ -115,13 +175,9 @@ export class TextShape extends Shape {
   }
 
   private getCacheKey(): string {
-    return JSON.stringify({
-      text: this.text,
-      font: this.textStyle,
-      width: this.size.width,
-      wordWrap: this.wordWrap,
-      maxLines: this.maxLines
-    });
+    // Optimized cache key generation - avoid JSON.stringify overhead
+    const style = this.textStyle;
+    return `${this.text}|${style.fontSize || 16}|${style.fontFamily || 'Arial'}|${style.fontWeight || 'normal'}|${this.size.width}|${this.wordWrap}|${this.maxLines}`;
   }
 
   private measureText(ctx: CanvasRenderingContext2D): TextMetrics {
