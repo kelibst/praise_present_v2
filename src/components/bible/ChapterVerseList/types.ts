@@ -12,11 +12,13 @@ export interface ChapterVerseListProps {
   versionId: string;
   versions: Version[];
   onVerseSelection: (verses: number[]) => void;
+  onVerseDoubleClick?: (verses: number[]) => void;
   onVersionChange: (versionId: string) => void;
   className?: string;
   loading?: boolean;
   error?: string | null;
   hideVersionSelector?: boolean;
+  hideHeader?: boolean;
 }
 
 export interface VerseDisplayItem {

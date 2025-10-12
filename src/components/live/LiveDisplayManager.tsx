@@ -30,11 +30,26 @@ export const useLiveDisplay = () => {
   useEffect(() => {
     const checkStatus = async () => {
       if (window.electronAPI) {
-        const status = await window.electronAPI.invoke('live-display:getStatus');
-        if (status?.hasWindow && status?.isVisible) {
-          setLiveDisplayActive(true);
-          setLiveDisplayStatus('Active');
+        console.log('🔍 LiveDisplayManager: Checking initial live display status...');
+        try {
+          const status = await window.electronAPI.invoke('live-display:getStatus');
+          console.log('🔍 LiveDisplayManager: Status received:', status);
+          if (status?.hasWindow && status?.isVisible) {
+            setLiveDisplayActive(true);
+            setLiveDisplayStatus('Active');
+            console.log('✅ LiveDisplayManager: Live display is active');
+          } else {
+            console.log('ℹ️ LiveDisplayManager: Live display is not active');
+            setLiveDisplayActive(false);
+            setLiveDisplayStatus('Disconnected');
+          }
+        } catch (error) {
+          console.error('❌ LiveDisplayManager: Error checking status:', error);
+          setLiveDisplayActive(false);
+          setLiveDisplayStatus('Disconnected');
         }
+      } else {
+        console.warn('⚠️ LiveDisplayManager: No electronAPI available');
       }
     };
     checkStatus();
@@ -42,13 +57,19 @@ export const useLiveDisplay = () => {
 
   const createLiveDisplay = async () => {
     try {
+      console.log('🚀 LiveDisplayManager: Creating live display...');
       const result = await window.electronAPI?.invoke('live-display:create', {});
+      console.log('🚀 LiveDisplayManager: Create result:', result);
       if (result?.success) {
         setLiveDisplayActive(true);
         setLiveDisplayStatus('Active');
+        console.log('✅ LiveDisplayManager: Live display created successfully');
+      } else {
+        console.error('❌ LiveDisplayManager: Failed to create - result:', result);
+        setLiveDisplayStatus('Error');
       }
     } catch (error) {
-      console.error('Failed to create live display:', error);
+      console.error('❌ LiveDisplayManager: Failed to create live display:', error);
       setLiveDisplayStatus('Error');
     }
   };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, MonitorSpeaker, SkipBack, SkipForward, Settings, Calendar, ChevronLeft, ChevronRight, Maximize2, ExternalLink } from 'lucide-react';
+import { Play, MonitorSpeaker, SkipBack, SkipForward, Settings, Calendar, ChevronLeft, ChevronRight, Maximize2, ExternalLink, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // Import drag and drop utilities
@@ -45,6 +45,10 @@ import { SlidePropertyPanel, SlideProperties } from '../components/slides/SlideP
 // Import live display components
 import { useLiveDisplay, LiveDisplayControls } from '../components/live/LiveDisplayManager';
 
+// Import Bible selector
+import BibleSelector from '../components/bible/BibleSelector';
+import { ScriptureVerse } from '../lib/services/bibleService';
+
 // Define Slide interface
 interface Slide {
   id: string;
@@ -63,7 +67,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const navigate = useNavigate();
 
   // State management
-  const [activeTab, setActiveTab] = useState<'plan' | 'plans'>('plan');
+  const [activeTab, setActiveTab] = useState<'scripture' | 'plan' | 'plans'>('scripture');
   const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<ServiceItem | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -684,6 +688,63 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     setServiceItems(prev => [...prev, newItem]);
   };
 
+  // Handle scripture selection from BibleSelector (Preview only)
+  const handleScriptureSelect = async (verses: ScriptureVerse[]) => {
+    console.log('🟠 LivePresentationPage: handleScriptureSelect called', {
+      versesCount: verses.length,
+      verses: verses.map(v => ({
+        book: v.book,
+        chapter: v.chapter,
+        verse: v.verse,
+        hasText: !!v.text,
+        textLength: v.text?.length || 0
+      }))
+    });
+
+    if (verses.length === 0) {
+      console.log('🟠 LivePresentationPage: No verses, skipping');
+      return;
+    }
+
+    console.log('📖 Scripture selected for preview:', verses);
+
+    // Create temporary scripture item for preview (not added to service items)
+    const firstVerse = verses[0];
+    let title = `${firstVerse.book} ${firstVerse.chapter}:${firstVerse.verse}`;
+
+    if (verses.length > 1) {
+      const lastVerse = verses[verses.length - 1];
+      if (lastVerse.verse !== firstVerse.verse) {
+        title = `${firstVerse.book} ${firstVerse.chapter}:${firstVerse.verse}-${lastVerse.verse}`;
+      }
+    }
+
+    const scriptureItem: ServiceItem = {
+      id: `scripture-preview-${Date.now()}`,
+      type: 'scripture',
+      title,
+      content: {
+        verses: verses.map(v => ({
+          id: v.id,
+          book: v.book,
+          chapter: v.chapter,
+          verse: v.verse,
+          text: v.text,
+          translation: v.translation,
+          bookId: v.bookId,
+          versionId: v.versionId
+        }))
+      },
+      order: 0
+    };
+
+    console.log('🟠 LivePresentationPage: Calling generateSlidesForItem');
+    // Generate slides and show in preview only (not added to service items list)
+    await generateSlidesForItem(scriptureItem, false);
+
+    console.log('✅ Scripture preview generated');
+  };
+
 
   // Handle drag end for service item reordering
   const handleDragEnd = (event: DragEndEvent) => {
@@ -932,6 +993,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           {/* Tab Navigation */}
           <div className="flex border-b border-border">
             {[
+              { key: 'scripture', label: 'Scripture', icon: BookOpen },
               { key: 'plan', label: 'Current Service', icon: Settings },
               { key: 'plans', label: 'Plan Manager', icon: Calendar }
             ].map(({ key, label, icon: Icon }) => (
@@ -951,7 +1013,26 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           </div>
 
           {/* Tab Content */}
-          <div className="p-4 h-full overflow-y-auto">
+          <div className="p-4 overflow-y-auto" style={{ height: 'calc(100vh - 220px)' }}>
+            {activeTab === 'scripture' && (
+              <div className="space-y-4">
+                <div className="mb-3">
+                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-purple-400" />
+                    Scripture Selection
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Select Bible verses to present • Automatically loads in preview window
+                  </p>
+                </div>
+
+                <BibleSelector
+                  onVerseSelect={handleScriptureSelect}
+                  defaultVersion="kjv"
+                />
+              </div>
+            )}
+
             {activeTab === 'plan' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between mb-4">

@@ -211,7 +211,8 @@ export const useChapterVerses = ({
         clearTimeout(debounceTimeoutRef.current);
       }
     };
-  }, [book, chapter, versionId, getVerses, debounceMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book?.id, chapter, versionId, debounceMs]); // Only depend on book.id, not the whole book object
 
   // Cleanup on unmount
   useEffect(() => {

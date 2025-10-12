@@ -16,11 +16,13 @@ export const ChapterVerseList: React.FC<ChapterVerseListProps> = ({
   versionId,
   versions,
   onVerseSelection,
+  onVerseDoubleClick,
   onVersionChange,
   className = '',
   loading: externalLoading = false,
   error: externalError = null,
-  hideVersionSelector = false
+  hideVersionSelector = false,
+  hideHeader = false
 }) => {
   // Hooks
   const {
@@ -39,9 +41,15 @@ export const ChapterVerseList: React.FC<ChapterVerseListProps> = ({
 
   const [focusedVerse, setFocusedVerse] = useState<number | null>(null);
   const verseListRef = useRef<HTMLDivElement>(null);
+  const isUpdatingFromPropsRef = useRef(false);
 
   // Update selection state when props change
   useEffect(() => {
+    console.log('🔵 ChapterVerseList: Props changed, updating selection state', {
+      selectedVerses,
+      isUpdatingFromProps: isUpdatingFromPropsRef.current
+    });
+    isUpdatingFromPropsRef.current = true;
     setSelectionState(prev => ({
       ...prev,
       selectedVerses: new Set(selectedVerses)
@@ -95,10 +103,35 @@ export const ChapterVerseList: React.FC<ChapterVerseListProps> = ({
     });
   }, []);
 
+  // Handle verse double-click
+  const handleVerseDoubleClick = useCallback((verseNumber: number) => {
+    if (onVerseDoubleClick) {
+      // Get all currently selected verses, or just the double-clicked one
+      const versesToPresent = selectionState.selectedVerses.has(verseNumber)
+        ? Array.from(selectionState.selectedVerses).sort((a, b) => a - b)
+        : [verseNumber];
+
+      onVerseDoubleClick(versesToPresent);
+    }
+  }, [onVerseDoubleClick, selectionState.selectedVerses]);
+
   // Effect to call parent handler when selection changes (avoiding setState during render)
   useEffect(() => {
+    console.log('🟡 ChapterVerseList: Selection state changed', {
+      selectedVerses: Array.from(selectionState.selectedVerses),
+      isUpdatingFromProps: isUpdatingFromPropsRef.current
+    });
+
+    // Skip if this update came from props to prevent infinite loop
+    if (isUpdatingFromPropsRef.current) {
+      console.log('🟢 ChapterVerseList: Skipping parent callback (update from props)');
+      isUpdatingFromPropsRef.current = false;
+      return;
+    }
+
     const selectedArray = Array.from(selectionState.selectedVerses).sort((a, b) => a - b);
     if (selectedArray.length > 0) {
+      console.log('🔴 ChapterVerseList: Calling parent onVerseSelection', selectedArray);
       // Use setTimeout to ensure this runs after render
       const timeoutId = setTimeout(() => {
         onVerseSelection(selectedArray);
@@ -190,37 +223,39 @@ export const ChapterVerseList: React.FC<ChapterVerseListProps> = ({
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-700 bg-gray-800/50">
-        <div className="flex items-center space-x-2">
-          <BookOpen className="w-4 h-4 text-blue-400" />
-          <span className="text-sm font-medium text-white">
-            {book.name} {chapter}
-          </span>
-          <span className="text-xs text-gray-400">
-            ({verses.length} verses)
-          </span>
-        </div>
-
-        {/* Version Selector - only show if not hidden */}
-        {!hideVersionSelector && (
-          <div className="relative">
-            <select
-              value={versionId}
-              onChange={(e) => onVersionChange(e.target.value)}
-              className="appearance-none bg-gray-700 border border-gray-600 rounded px-3 py-1 pr-8 text-sm text-white focus:border-blue-500 focus:outline-none"
-              disabled={isLoading}
-            >
-              {versions.map((version) => (
-                <option key={version.id} value={version.id}>
-                  {version.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+      {/* Header - only show if not hidden */}
+      {!hideHeader && (
+        <div className="flex items-center justify-between p-3 border-b border-gray-700 bg-gray-800/50">
+          <div className="flex items-center space-x-2">
+            <BookOpen className="w-4 h-4 text-blue-400" />
+            <span className="text-sm font-medium text-white">
+              {book.name} {chapter}
+            </span>
+            <span className="text-xs text-gray-400">
+              ({verses.length} verses)
+            </span>
           </div>
-        )}
-      </div>
+
+          {/* Version Selector - only show if not hidden */}
+          {!hideVersionSelector && (
+            <div className="relative">
+              <select
+                value={versionId}
+                onChange={(e) => onVersionChange(e.target.value)}
+                className="appearance-none bg-gray-700 border border-gray-600 rounded px-3 py-1 pr-8 text-sm text-white focus:border-blue-500 focus:outline-none"
+                disabled={isLoading}
+              >
+                {versions.map((version) => (
+                  <option key={version.id} value={version.id}>
+                    {version.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Content Area */}
       <div className="flex-1 min-h-0">
@@ -266,6 +301,7 @@ export const ChapterVerseList: React.FC<ChapterVerseListProps> = ({
                     isCtrlClick: e.ctrlKey || e.metaKey,
                     isKeyboardSelection: false
                   })}
+                  onDoubleClick={() => handleVerseDoubleClick(verse.verse)}
                   onMouseEnter={() => setFocusedVerse(verse.verse)}
                   className={`
                     p-2 rounded cursor-pointer transition-colors
@@ -306,23 +342,6 @@ export const ChapterVerseList: React.FC<ChapterVerseListProps> = ({
           </div>
         )}
       </div>
-
-      {/* Footer with selection info */}
-      {selectedVerses.length > 0 && (
-        <div className="p-2 border-t border-gray-700 bg-gray-800/50">
-          <div className="flex items-center justify-between text-xs text-gray-400">
-            <span>
-              Selected: {selectedVerses.length} verse{selectedVerses.length !== 1 ? 's' : ''}
-            </span>
-            <span>
-              {book.name} {chapter}:{selectedVerses.length === 1
-                ? selectedVerses[0]
-                : `${Math.min(...selectedVerses)}-${Math.max(...selectedVerses)}`
-              }
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

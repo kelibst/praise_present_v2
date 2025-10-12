@@ -56,47 +56,6 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
   const [showVerseList, setShowVerseList] = useState<boolean>(true);
   const [recentReferences, setRecentReferences] = useState<string[]>([]);
 
-  // Load verses on demand (used when clicking "Use This Scripture" with selections from ChapterVerseList)
-  const loadSelectedVerses = useCallback(async () => {
-    if (!currentParsedReference?.book || !currentParsedReference.chapter || !selectedVersion || selectedVersesFromList.length === 0) {
-      return [];
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const scriptureVerses = await bibleService.getVerses(
-        selectedVersion,
-        currentParsedReference.book.id,
-        currentParsedReference.chapter,
-        selectedVersesFromList
-      );
-
-      setCurrentVerses(scriptureVerses);
-      return scriptureVerses;
-
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load selected verses');
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, [currentParsedReference, selectedVersion, selectedVersesFromList]);
-
-  // Handle verse selection for presentation (defined early for use in useEffect)
-  const handleUseVerses = useCallback(async (verses: ScriptureVerse[]) => {
-    let versesToUse = verses;
-
-    // If we don't have verses but have selections from the list, load them
-    if (verses.length === 0 && selectedVersesFromList.length > 0) {
-      versesToUse = await loadSelectedVerses();
-    }
-
-    if (onVerseSelect && versesToUse.length > 0) {
-      onVerseSelect(versesToUse);
-    }
-  }, [onVerseSelect, selectedVersesFromList, loadSelectedVerses]);
 
   // Initialize component
   useEffect(() => {
@@ -112,19 +71,11 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
         setSelectedVersesFromList([]);
         setCurrentParsedReference(null);
       }
-      // Ctrl/Cmd + Enter to use current verses
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-        if (currentVerses.length > 0) {
-          handleUseVerses(currentVerses);
-        } else if (selectedVersesFromList.length > 0) {
-          handleUseVerses([]);
-        }
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentVerses, selectedVersesFromList, handleUseVerses]);
+  }, []);
 
   const initializeData = async () => {
     try {
@@ -409,17 +360,30 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
     }
   }, []);
 
-  // Handle verse selection from chapter list
-  const handleVerseSelectionFromList = useCallback((verseNumbers: number[]) => {
-    if (!currentParsedReference?.book || !currentParsedReference.chapter || !selectedVersion) {
+  // Handle verse selection from chapter list (auto-preview)
+  const handleVerseSelectionFromList = useCallback(async (verseNumbers: number[]) => {
+    console.log('🟣 BibleSelector: handleVerseSelectionFromList called', {
+      verseNumbers,
+      hasReference: !!currentParsedReference,
+      hasVersion: !!selectedVersion
+    });
+
+    if (!currentParsedReference?.book || !currentParsedReference.chapter || !selectedVersion || verseNumbers.length === 0) {
+      console.log('🟣 BibleSelector: Missing requirements, skipping');
       return;
     }
 
-    setSelectedVersesFromList(verseNumbers);
+    // Check if selection actually changed to prevent unnecessary updates
+    const currentSelection = Array.from(selectedVersesFromList).sort((a, b) => a - b).join(',');
+    const newSelection = Array.from(verseNumbers).sort((a, b) => a - b).join(',');
 
-    // The ChapterVerseList already has all the verses loaded, we just need to filter them
-    // based on the selected verse numbers. We'll get the actual verse data when the user
-    // clicks "Use This Scripture". This avoids redundant API calls.
+    if (currentSelection === newSelection) {
+      console.log('🟣 BibleSelector: Selection unchanged, skipping');
+      return;
+    }
+
+    console.log('🟣 BibleSelector: Setting selectedVersesFromList', verseNumbers);
+    setSelectedVersesFromList(verseNumbers);
 
     // Update the smart input to reflect the selection
     const formattedReference = bibleService.formatReference(
@@ -435,9 +399,57 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
     setVerseStart(verseNumbers[0]);
     setVerseEnd(verseNumbers.length > 1 ? verseNumbers[verseNumbers.length - 1] : null);
 
-    // Clear current verses since we're now in selection mode
-    setCurrentVerses([]);
-  }, [currentParsedReference]);
+    // Auto-load and preview the selected verses
+    // Note: Don't set loading state here - ChapterVerseList already has the verses loaded
+    try {
+      console.log('🟣 BibleSelector: Loading verses from API');
+      const scriptureVerses = await bibleService.getVerses(
+        selectedVersion,
+        currentParsedReference.book.id,
+        currentParsedReference.chapter,
+        verseNumbers
+      );
+
+      console.log('🟣 BibleSelector: Verses loaded, count:', scriptureVerses.length);
+      setCurrentVerses(scriptureVerses);
+
+      // Auto-send to preview
+      if (onVerseSelect && scriptureVerses.length > 0) {
+        console.log('🟣 BibleSelector: Calling onVerseSelect to send to preview');
+        onVerseSelect(scriptureVerses);
+      }
+    } catch (err) {
+      console.error('🟣 BibleSelector: Error loading verses:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load verses');
+      setCurrentVerses([]);
+    }
+  }, [currentParsedReference, selectedVersion, onVerseSelect, selectedVersesFromList]);
+
+  // Handle verse double-click from chapter list (send to live)
+  const handleVerseDoubleClickFromList = useCallback(async (verseNumbers: number[]) => {
+    if (!currentParsedReference?.book || !currentParsedReference.chapter || !selectedVersion || verseNumbers.length === 0) {
+      return;
+    }
+
+    try {
+      // Don't set loading state - verses are already loaded in ChapterVerseList
+      const scriptureVerses = await bibleService.getVerses(
+        selectedVersion,
+        currentParsedReference.book.id,
+        currentParsedReference.chapter,
+        verseNumbers
+      );
+
+      // Send directly to live presentation (this will be handled by parent)
+      if (onVerseSelect && scriptureVerses.length > 0) {
+        // We'll add a special flag or separate callback for immediate presentation
+        // For now, just send the verses - parent will handle the presentation
+        onVerseSelect(scriptureVerses);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load verses');
+    }
+  }, [currentParsedReference, selectedVersion, onVerseSelect]);
 
   // Get current version name
   const getCurrentVersion = () => {
@@ -478,16 +490,15 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
   }
 
   return (
-    <div className={`space-y-4 ${className}`}>
-      {/* Header with Version Selector */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-white">Scripture Selector</h2>
-        <div className="flex items-center space-x-2">
-          <label className="text-sm text-gray-400">Version:</label>
+    <div className={`space-y-4 max-w-4xl mx-auto ${className}`}>
+      {/* Version Selector - More Prominent */}
+      <div className="flex items-center justify-end mb-3">
+        <div className="flex items-center space-x-2 bg-gray-800 px-4 py-2 rounded-lg border border-gray-700">
+          <label className="text-sm font-medium text-gray-300">Version:</label>
           <select
             value={selectedVersion}
             onChange={(e) => handleVersionChange(e.target.value)}
-            className="px-3 py-1 border border-gray-600 rounded-md bg-gray-800 text-white text-sm focus:border-blue-500 focus:outline-none"
+            className="px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-white text-sm focus:border-blue-500 focus:outline-none min-w-[120px]"
           >
             <option value="">Select Version</option>
             {versions.map((version) => (
@@ -522,12 +533,12 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
       </div>
 
       {/* Tab Content */}
-      <div className="min-h-[300px]">
+      <div className="space-y-4">
         {/* Scripture Reference Tab */}
         {activeTab === 'reference' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
-            {/* Left Panel - Scripture Input */}
-            <div className="space-y-4">
+          <div className="space-y-4">
+            {/* Scripture Input Section */}
+            <div className="space-y-3">
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-300">
@@ -569,87 +580,18 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
                 />
               </div>
 
-              {/* Scripture Preview/Selection */}
-              {(currentVerses.length > 0 || selectedVersesFromList.length > 0) && (
-                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                  {currentVerses.length > 0 ? (
-                    <>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-sm font-medium text-white">
-                          {bibleService.formatReference(
-                            currentVerses[0].book,
-                            currentVerses[0].chapter,
-                            currentVerses.map(v => v.verse)
-                          )} ({getCurrentVersion()?.name})
-                        </div>
-                        <BookOpen className="w-4 h-4 text-gray-400" />
-                      </div>
-                      <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
-                        {currentVerses.map((verse) => (
-                          <div key={verse.id} className="text-gray-300">
-                            <span className="text-xs text-gray-500 mr-2 font-mono">
-                              {verse.verse}
-                            </span>
-                            {verse.text}
-                          </div>
-                        ))}
-                      </div>
-                      <button
-                        onClick={() => handleUseVerses(currentVerses)}
-                        className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium flex items-center justify-center gap-2"
-                      >
-                        Add to Presentation
-                        <span className="text-xs opacity-70">(Ctrl+Enter)</span>
-                      </button>
-                    </>
-                  ) : selectedVersesFromList.length > 0 && currentParsedReference?.book && (
-                    <>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-sm font-medium text-white">
-                          {bibleService.formatReference(
-                            currentParsedReference.book.name,
-                            currentParsedReference.chapter || 1,
-                            selectedVersesFromList
-                          )} ({getCurrentVersion()?.name})
-                        </div>
-                        <BookOpen className="w-4 h-4 text-gray-400" />
-                      </div>
-                      <div className="text-gray-400 text-sm mb-4 text-center py-4">
-                        {selectedVersesFromList.length} verse{selectedVersesFromList.length !== 1 ? 's' : ''} selected
-                      </div>
-                      <button
-                        onClick={() => handleUseVerses([])}
-                        disabled={loading}
-                        className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm font-medium flex items-center justify-center gap-2"
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Loading Verses...
-                          </>
-                        ) : (
-                          <>
-                            Add Selected Verses
-                            <span className="text-xs opacity-70">(Ctrl+Enter)</span>
-                          </>
-                        )}
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
             </div>
 
-            {/* Right Panel - Chapter Verse List */}
-            <div className="flex flex-col min-h-0">
+            {/* Chapter Verse List Section */}
+            <div className="space-y-2">
               {currentParsedReference?.book && currentParsedReference?.chapter ? (
                 <>
                   {/* Collapsible Header */}
-                  <div className="flex items-center justify-between p-3 bg-gray-800/50 rounded-t-lg border border-gray-700 border-b-0">
+                  <div className="flex items-center justify-between p-3 bg-gray-800 rounded-t-lg border border-gray-700 border-b-0">
                     <div className="flex items-center space-x-2">
                       <BookOpen className="w-4 h-4 text-blue-400" />
                       <span className="text-sm font-medium text-white">
-                        {currentParsedReference.book.name} {currentParsedReference.chapter}
+                        {currentParsedReference.book.name} Chapter {currentParsedReference.chapter}
                       </span>
                       {selectedVersesFromList.length > 0 && (
                         <span className="text-xs text-blue-400 bg-blue-400/20 px-2 py-1 rounded">
@@ -666,36 +608,38 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
                     </button>
                   </div>
 
-                  {/* Collapsible Content */}
+                  {/* Collapsible Content with Fixed Height */}
                   {showVerseList ? (
-                    <ChapterVerseList
-                      book={currentParsedReference.book}
-                      chapter={currentParsedReference.chapter}
-                      selectedVerses={selectedVersesFromList}
-                      versionId={selectedVersion || ''}
-                      versions={versions}
-                      onVerseSelection={handleVerseSelectionFromList}
-                      onVersionChange={() => {}} // Disabled - version controlled at top level
-                      className="flex-1 rounded-t-none border-t-0"
-                      loading={loading}
-                      error={error}
-                      hideVersionSelector={true}
-                    />
+                    <div className="h-[400px] overflow-y-auto bg-gray-800 rounded-b-lg border border-gray-700 border-t-0">
+                      <ChapterVerseList
+                        book={currentParsedReference.book}
+                        chapter={currentParsedReference.chapter}
+                        selectedVerses={selectedVersesFromList}
+                        versionId={selectedVersion || ''}
+                        versions={versions}
+                        onVerseSelection={handleVerseSelectionFromList}
+                        onVerseDoubleClick={handleVerseDoubleClickFromList}
+                        onVersionChange={() => {}} // Disabled - version controlled at top level
+                        className="h-full"
+                        loading={loading}
+                        error={error}
+                        hideVersionSelector={true}
+                        hideHeader={true}
+                      />
+                    </div>
                   ) : (
-                    <div className="flex-1 bg-gray-800/50 rounded-b-lg border border-gray-700 border-t-0 flex items-center justify-center py-8">
+                    <div className="bg-gray-800 rounded-b-lg border border-gray-700 border-t-0 flex items-center justify-center py-4">
                       <div className="text-center text-gray-400">
                         <span className="text-sm">Verse list collapsed</span>
-                        <p className="text-xs text-gray-500 mt-1">Click to expand</p>
                       </div>
                     </div>
                   )}
                 </>
               ) : (
-                <div className="flex-1 flex items-center justify-center bg-gray-800/50 rounded-lg border border-gray-700">
-                  <div className="text-center text-gray-400">
-                    <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-sm">Enter a scripture reference</p>
-                    <p className="text-xs text-gray-500 mt-1">Chapter verses will appear here</p>
+                <div className="bg-gray-800/30 rounded-lg border border-gray-700 flex items-center justify-center py-8">
+                  <div className="text-center text-gray-500">
+                    <BookOpen className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Enter a scripture reference above</p>
                   </div>
                 </div>
               )}
