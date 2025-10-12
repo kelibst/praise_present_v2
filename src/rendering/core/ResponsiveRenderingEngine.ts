@@ -62,8 +62,15 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
    * Render with responsive layout calculations
    */
   public render(clearCanvas: boolean = true): void {
+    console.log('🎨 ResponsiveRenderingEngine.render: START', {
+      clearCanvas,
+      enableResponsive: this.enableResponsive,
+      timestamp: Date.now()
+    });
+
     if (!this.enableResponsive) {
       // Use original rendering for non-responsive mode
+      console.log('🎨 ResponsiveRenderingEngine.render: Using non-responsive mode');
       super.render(clearCanvas);
       return;
     }
@@ -77,32 +84,49 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
       // Start rendering frame
       const renderer = this.getRenderer();
       renderer.startFrame();
+      console.log('🎨 ResponsiveRenderingEngine.render: Frame started');
 
       if (clearCanvas) {
         renderer.clear();
+        console.log('🎨 ResponsiveRenderingEngine.render: Canvas cleared');
       }
 
       const renderContext = this.createResponsiveRenderContext();
       const visibleShapes = this.getVisibleShapes();
+      console.log('🎨 ResponsiveRenderingEngine.render: Got visible shapes', {
+        count: visibleShapes.length
+      });
 
       // Separate responsive and non-responsive shapes
       const { responsiveShapes, regularShapes } = this.categorizeShapes(visibleShapes);
+      console.log('🎨 ResponsiveRenderingEngine.render: Shapes categorized', {
+        responsive: responsiveShapes.length,
+        regular: regularShapes.length
+      });
 
       // Render regular shapes first
       for (const shape of regularShapes) {
         this.renderShape(shape, renderContext);
       }
+      console.log('🎨 ResponsiveRenderingEngine.render: Regular shapes rendered');
 
       // Render responsive shapes with layout manager
       for (const shape of responsiveShapes) {
         this.renderResponsiveShape(shape, renderContext);
       }
+      console.log('🎨 ResponsiveRenderingEngine.render: Responsive shapes rendered');
 
       renderer.endFrame();
+      console.log('🎨 ResponsiveRenderingEngine.render: Frame ended');
 
       // Update performance metrics
       const endTime = performance.now();
       this.updatePerformanceMetrics(startTime, endTime, visibleShapes.length);
+
+      console.log('🎨 ResponsiveRenderingEngine.render: COMPLETE', {
+        renderTime: (endTime - startTime).toFixed(2) + 'ms',
+        shapesRendered: visibleShapes.length
+      });
 
       if (this.isDebugEnabled()) {
         this.renderDebugInfo(renderContext);
@@ -110,7 +134,7 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
       }
 
     } catch (error) {
-      console.error('Responsive rendering error:', error);
+      console.error('❌ ResponsiveRenderingEngine.render: ERROR', error);
       this.stopRenderLoop();
     }
   }
@@ -348,17 +372,36 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
    * Create container info from canvas and options
    */
   private createContainerInfo(canvas: HTMLCanvasElement, baseFontSize: number = 16): ContainerInfo {
-    const canvasWidth = canvas.clientWidth || canvas.width || 800;
-    const canvasHeight = canvas.clientHeight || canvas.height || 600;
+    // CRITICAL FIX: When responsive is disabled (preview mode with CSS scaling),
+    // use actual canvas resolution, NOT display size
+    // The industry-standard pattern is: canvas at full resolution + CSS scaling
+    const canvasWidth = this.enableResponsive
+      ? (canvas.clientWidth || canvas.width || 800)  // Responsive: use display size
+      : canvas.width;  // Non-responsive: use actual canvas resolution (1920x1080)
 
-    // For small preview containers, use presentation coordinate scaling
-    // instead of actual canvas size to ensure proper text sizing
+    const canvasHeight = this.enableResponsive
+      ? (canvas.clientHeight || canvas.height || 600)  // Responsive: use display size
+      : canvas.height;  // Non-responsive: use actual canvas resolution (1920x1080)
+
+    console.log('🎯 ResponsiveRenderingEngine.createContainerInfo: DETAILED DEBUG', {
+      enableResponsive: this.enableResponsive,
+      canvasActualWidth: canvas.width,
+      canvasActualHeight: canvas.height,
+      canvasClientWidth: canvas.clientWidth,
+      canvasClientHeight: canvas.clientHeight,
+      selectedWidth: canvasWidth,
+      selectedHeight: canvasHeight,
+      decision: this.enableResponsive ? 'USING CLIENT SIZE (responsive)' : 'USING CANVAS SIZE (non-responsive)'
+    });
+
+    // For small preview containers (ONLY when responsive is enabled),
+    // use presentation coordinate scaling instead of actual canvas size to ensure proper text sizing
     let width = canvasWidth;
     let height = canvasHeight;
     let scaleFactor = 1;
 
-    // Detect if this is a preview container based on size
-    const isSmallPreview = canvasWidth < 600 || canvasHeight < 400;
+    // Detect if this is a preview container based on size (only relevant for responsive mode)
+    const isSmallPreview = this.enableResponsive && (canvasWidth < 600 || canvasHeight < 400);
     const PRESENTATION_WIDTH = 1920;
     const PRESENTATION_HEIGHT = 1080;
 
@@ -379,6 +422,19 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
           presentationSize: { width, height },
           scaleFactor,
           baseFontSize
+        });
+      }
+    } else if (!this.enableResponsive) {
+      // Log that we're using fixed resolution (non-responsive mode)
+      const sizeKey = `${canvasWidth}x${canvasHeight}`;
+      if (!this.loggedPreviewSizes?.has(sizeKey)) {
+        if (!this.loggedPreviewSizes) this.loggedPreviewSizes = new Set();
+        this.loggedPreviewSizes.add(sizeKey);
+
+        console.log('🎯 ResponsiveRenderingEngine: Using fixed resolution (responsive disabled)', {
+          canvasResolution: { width, height },
+          enableResponsive: this.enableResponsive,
+          note: 'CSS handles all scaling'
         });
       }
     }
@@ -439,21 +495,47 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
     const originalResize = this.resize.bind(this);
 
     this.resize = (width: number, height: number) => {
+      console.log('🔄 ResponsiveRenderingEngine.resize: START', {
+        width,
+        height,
+        enableResponsive: this.enableResponsive,
+        timestamp: Date.now()
+      });
+
       originalResize(width, height);
+      console.log('🔄 ResponsiveRenderingEngine.resize: originalResize completed');
 
       if (this.enableResponsive) {
+        console.log('🔄 ResponsiveRenderingEngine.resize: Updating responsive layout');
+
         const containerInfo = this.createContainerInfo(
           this.getRenderer().getCanvas(),
           this.layoutManager.getContainerInfo().fontSize
         );
 
+        console.log('🔄 ResponsiveRenderingEngine.resize: Container info created', {
+          width: containerInfo.width,
+          height: containerInfo.height
+        });
+
         const needsRecalculation = this.layoutManager.updateContainer(containerInfo);
+        console.log('🔄 ResponsiveRenderingEngine.resize: Layout manager updated', {
+          needsRecalculation
+        });
 
         if (needsRecalculation) {
           // Use selective rendering to update only responsive shapes
+          console.log('🔄 ResponsiveRenderingEngine.resize: Marking shapes dirty and requesting render');
           this.markResponsiveShapesDirty('container-resize');
+
+          // CRITICAL FIX: Ensure immediate render after resize to prevent black screen
+          // Request render will handle the rendering on next frame
+          this.requestRender();
+          console.log('🔄 ResponsiveRenderingEngine.resize: Render requested');
         }
       }
+
+      console.log('🔄 ResponsiveRenderingEngine.resize: COMPLETE');
     };
   }
 
@@ -463,8 +545,8 @@ export class ResponsiveRenderingEngine extends SelectiveRenderingEngine {
   private updateLayoutManagerIfNeeded(): void {
     const canvas = this.getRenderer().getCanvas();
     const currentSize = {
-      width: canvas.clientWidth || canvas.width,
-      height: canvas.clientHeight || canvas.height
+      width: this.enableResponsive ? (canvas.clientWidth || canvas.width) : canvas.width,
+      height: this.enableResponsive ? (canvas.clientHeight || canvas.height) : canvas.height
     };
 
     // Add tolerance for minor size changes to prevent flickering

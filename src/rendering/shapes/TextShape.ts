@@ -52,6 +52,23 @@ export class TextShape extends Shape {
 
     const ctx = context.context;
 
+    // PHASE 1 DIAGNOSTICS: Log transform and canvas state
+    const transform = ctx.getTransform();
+    console.log('📝 TextShape.render: PHASE 1 DIAGNOSTICS', {
+      textPreview: this.text.substring(0, 30),
+      position: this.position,
+      size: this.size,
+      fontSize: this.textStyle.fontSize,
+      contextTransform: {
+        scaleX: transform.a,
+        scaleY: transform.d,
+        translateX: transform.e,
+        translateY: transform.f
+      },
+      canvasWidth: ctx.canvas.width,
+      canvasHeight: ctx.canvas.height
+    });
+
     // Single save/restore to reduce state management overhead
     ctx.save();
 

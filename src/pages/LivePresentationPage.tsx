@@ -25,8 +25,8 @@ import { ScriptureTemplate, SongTemplate, SlideGenerator, Shape } from '../rende
 import { ensureTemplateManagerReady } from '../rendering/templates/TemplateManager';
 import { DEFAULT_SLIDE_SIZE } from '../rendering/templates/templateUtils';
 
-// Import editable preview component
-import { EditableSlidePreview } from '../components/EditableSlidePreview';
+// Import new slide components (PowerPoint pattern)
+import { SlideEditor, SlideViewer, Slide as NewSlide } from '../components/slides';
 
 // Import window components
 import { PreviewWindow } from '../components/windows/PreviewWindow';
@@ -49,14 +49,8 @@ import { useLiveDisplay, LiveDisplayControls } from '../components/live/LiveDisp
 import BibleSelector from '../components/bible/BibleSelector';
 import { ScriptureVerse } from '../lib/services/bibleService';
 
-// Define Slide interface
-interface Slide {
-  id: string;
-  shapes: Shape[];
-  background?: {
-    type: 'color' | 'image' | 'gradient';
-    value: string;
-  };
+// Use the new Slide interface from SlideRenderer
+interface Slide extends NewSlide {
   duration?: number;
 }
 
@@ -127,8 +121,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     }
   };
 
-  // Editable slide state
-  const [editableSlideContent, setEditableSlideContent] = useState<any>(null);
+  // Slide properties (kept for property panel)
   const [slideProperties, setSlideProperties] = useState<SlideProperties>({
     backgroundColor: '#1a1a1a',
     fontSize: 48,
@@ -136,7 +129,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     fontFamily: 'Arial, sans-serif',
     textColor: '#ffffff'
   });
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showPropertyPanel, setShowPropertyPanel] = useState(false);
 
   // Plan-related state (simplified)
@@ -393,10 +385,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
         for (const group of groupedVerses) {
           if (group.length === 1) {
-            // Single verse slide
+            // Single Verse slide
             const verse = group[0];
             const scriptureContent = {
-              verse: verse.text || 'Loading verse...',
+              verse: verse.text || 'Loading...',
               reference: `${verse.book} ${verse.chapter}:${verse.verse}`,
               translation: verse.translation || 'KJV',
               book: verse.book,
@@ -582,100 +574,14 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     }
   };
 
-  // Slide editing functions
-  const handleSlideContentChange = (newContent: any) => {
-    console.log('🔄 HandleSlideContentChange: Content changed', {
-      hasSelectedItem: !!selectedItem,
-      hasSelectedSlides: !!selectedItem?.slides,
-      newContentType: newContent?.type,
-      hasNewSlide: !!newContent?.slide,
-      newSlideShapeCount: newContent?.slide?.shapes?.length
-    });
-
-    if (!selectedItem || !selectedItem.slides) {
-      console.log('❌ HandleSlideContentChange: Missing selected item or slides');
-      return;
-    }
-
-    // Update editable content and mark as changed
-    setEditableSlideContent(newContent);
-    setHasUnsavedChanges(true);
-    console.log('✅ HandleSlideContentChange: Content updated and marked as changed');
-  };
-
-  // Note: handleSlideGenerated removed to prevent infinite loop
-  // The EditableSlidePreview will use the content directly from getPreviewContent()
-
-  const saveSlideChanges = async () => {
-    console.log('💾 SaveSlideChanges: Starting save process', {
-      hasSelectedItem: !!selectedItem,
-      hasSelectedSlides: !!selectedItem?.slides,
-      hasEditableContent: !!editableSlideContent,
-      slidesLength: selectedItem?.slides?.length,
-      currentSlideIndex,
-      hasUnsavedChanges
-    });
-
-    if (!selectedItem || !selectedItem.slides || !editableSlideContent) {
-      console.log('❌ SaveSlideChanges: Missing required data');
-      return;
-    }
-
-    try {
-      console.log('🔄 SaveSlideChanges: Processing changes', {
-        editableContentType: editableSlideContent.type,
-        hasSlide: !!editableSlideContent.slide,
-        slideShapeCount: editableSlideContent.slide?.shapes?.length
-      });
-
-      // Update the current slide with modified content
-      const updatedSlides = [...selectedItem.slides];
-      if (editableSlideContent.slide) {
-        const updatedSlide = {
-          id: editableSlideContent.slide.id,
-          shapes: editableSlideContent.slide.shapes,
-          background: editableSlideContent.slide.background || { type: 'color', value: slideProperties.backgroundColor }
-        };
-
-        console.log('📝 SaveSlideChanges: Updated slide created', {
-          slideId: updatedSlide.id,
-          shapeCount: updatedSlide.shapes.length,
-          background: updatedSlide.background
-        });
-
-        updatedSlides[currentSlideIndex] = updatedSlide;
-      }
-
-      // Update the presentation item
-      const updatedItem = { ...selectedItem, slides: updatedSlides };
-      console.log('📋 SaveSlideChanges: Setting updated item');
-      setSelectedItem(updatedItem);
-
-      // Update service items array
-      console.log('📊 SaveSlideChanges: Updating service items');
-      setServiceItems(prev =>
-        prev.map(item => item.id === selectedItem.id ? updatedItem : item)
-      );
-
-      // If in live mode, immediately update the live display
-      if (presentationMode === 'live' && liveDisplayActive) {
-        console.log('📺 SaveSlideChanges: Updating live display');
-        await sendSlideToLive(updatedSlides[currentSlideIndex], updatedItem, currentSlideIndex);
-      }
-
-      setHasUnsavedChanges(false);
-      console.log('✅ SaveSlideChanges: Save completed successfully');
-    } catch (error) {
-      console.error('❌ SaveSlideChanges: Failed to save slide changes:', error);
-    }
-  };
-
+  // Slide property management (simplified for new PowerPoint pattern)
   const updateSlideProperty = (property: string, value: any) => {
     setSlideProperties(prev => ({
       ...prev,
       [property]: value
     }));
-    setHasUnsavedChanges(true);
+    // Note: With new PowerPoint pattern, slides update immediately via handleSlideUpdate
+    // No need for hasUnsavedChanges state
   };
 
   // Service item management functions
@@ -880,23 +786,33 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   const currentSlide = selectedItem?.slides?.[currentSlideIndex];
 
-  // Prepare content for EditableSlidePreview - stable reference to prevent loops
-  const getPreviewContent = React.useMemo(() => {
-    if (editableSlideContent) {
-      return editableSlideContent;
-    }
+  // Handle slide updates from SlideEditor (PowerPoint pattern)
+  const handleSlideUpdate = React.useCallback((updatedSlide: Slide) => {
+    if (!selectedItem || !selectedItem.slides) return;
 
-    if (currentSlide && selectedItem) {
-      return {
-        type: 'template-slide' as const,
-        title: selectedItem.title,
-        content: selectedItem.content,
-        slide: currentSlide
-      };
-    }
+    console.log('🎨 LivePresentationPage: Slide updated', {
+      slideId: updatedSlide.id,
+      shapeCount: updatedSlide.shapes.length,
+      currentSlideIndex
+    });
 
-    return null;
-  }, [editableSlideContent, currentSlide?.id, selectedItem?.id]); // Use IDs for stable comparison
+    // Update the slide in the service item
+    const updatedSlides = [...selectedItem.slides];
+    updatedSlides[currentSlideIndex] = updatedSlide;
+
+    const updatedServiceItem: ServiceItem = {
+      ...selectedItem,
+      slides: updatedSlides
+    };
+
+    // Update the service items array
+    setServiceItems(prev => prev.map(item => 
+      item.id === selectedItem.id ? updatedServiceItem : item
+    ));
+
+    // Update selected item
+    setSelectedItem(updatedServiceItem);
+  }, [selectedItem, currentSlideIndex]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -1331,9 +1247,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   <div className="border-b border-border p-3">
                     <SlidePropertyPanel
                       properties={slideProperties}
-                      hasUnsavedChanges={hasUnsavedChanges}
+                      hasUnsavedChanges={false} // PowerPoint pattern: changes save immediately
                       onPropertyChange={updateSlideProperty}
-                      onSave={saveSlideChanges}
+                      onSave={() => {}} // No-op: slides update immediately via handleSlideUpdate
                     />
                   </div>
                 )}
@@ -1351,15 +1267,11 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     onToggleControls={() => setShowPropertyPanel(!showPropertyPanel)}
                     className="h-full"
                   >
-                    {getPreviewContent ? (
-                      <EditableSlidePreview
-                        content={getPreviewContent}
-                        width={0} // Let PreviewWindow handle sizing
-                        height={0} // Let PreviewWindow handle sizing
+                    {currentSlide ? (
+                      <SlideEditor
+                        slide={currentSlide}
+                        onSlideChange={handleSlideUpdate}
                         editable={true}
-                        onContentChange={handleSlideContentChange}
-                        backgroundColor={slideProperties.backgroundColor}
-                        showControls={false} // PreviewWindow provides controls
                         className="w-full h-full"
                       />
                     ) : (
@@ -1420,12 +1332,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                         {presentationMode === 'live' ? 'LIVE MODE' : 'PREVIEW MODE'}
                       </div>
 
-                      {hasUnsavedChanges && (
-                        <div className="flex items-center gap-2 text-yellow-400">
-                          <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-                          UNSAVED CHANGES
-                        </div>
-                      )}
+                      {/* PowerPoint pattern: No unsaved changes - updates are immediate */}
                     </div>
                   </div>
                 )}
@@ -1458,17 +1365,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 className="h-full"
               >
                 {liveDisplayActive && isPresenting && currentSlide ? (
-                  <EditableSlidePreview
-                    content={{
-                      type: 'template-slide',
-                      title: `${selectedItem?.title} - Slide ${currentSlideIndex + 1}`,
-                      slide: currentSlide
-                    }}
-                    width={0} // Let PreviewWindow handle sizing
-                    height={0} // Let PreviewWindow handle sizing
-                    editable={false}
-                    showControls={false}
-                    backgroundColor={currentSlide.background?.value || '#1a1a1a'}
+                  <SlideViewer
+                    slide={currentSlide}
                     className="w-full h-full"
                   />
                 ) : (

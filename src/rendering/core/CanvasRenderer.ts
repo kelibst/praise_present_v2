@@ -61,13 +61,18 @@ export class CanvasRenderer {
 
   private setupCanvas(): void {
     const pixelRatio = this.getPixelRatio();
-    let displayWidth = this.canvas.clientWidth;
-    let displayHeight = this.canvas.clientHeight;
 
-    // Fallback to canvas attributes if clientWidth/clientHeight are 0
+    // CRITICAL FIX: Check if canvas already has dimensions set
+    // If canvas.width > 0, it means the caller (e.g., EditableSlidePreview) has
+    // already set it to a specific resolution (like 1920x1080). Respect that!
+    // Only use clientWidth as fallback if canvas is uninitialized.
+    let displayWidth = this.canvas.width;
+    let displayHeight = this.canvas.height;
+
+    // Only use clientWidth/clientHeight if canvas dimensions are not set
     if (displayWidth === 0 || displayHeight === 0) {
-      displayWidth = this.canvas.width || 800;
-      displayHeight = this.canvas.height || 600;
+      displayWidth = this.canvas.clientWidth || 800;
+      displayHeight = this.canvas.clientHeight || 600;
     }
 
     // Set actual canvas size accounting for device pixel ratio
@@ -77,6 +82,15 @@ export class CanvasRenderer {
     // Scale back down using CSS
     this.canvas.style.width = displayWidth + 'px';
     this.canvas.style.height = displayHeight + 'px';
+
+    console.log('🎨 CanvasRenderer.setupCanvas: Canvas setup complete', {
+      displayWidth,
+      displayHeight,
+      pixelRatio,
+      finalCanvasWidth: this.canvas.width,
+      finalCanvasHeight: this.canvas.height,
+      decision: displayWidth > 0 ? 'RESPECTED_PRESET_DIMENSIONS' : 'USED_CLIENT_SIZE'
+    });
 
     // Set up context loss/restore event listeners
     this.setupContextEventHandlers();
@@ -193,14 +207,22 @@ export class CanvasRenderer {
       throw new Error('Rendering context not initialized');
     }
 
-    let width = this.canvas.clientWidth;
-    let height = this.canvas.clientHeight;
+    // CRITICAL FIX: Always use actual canvas resolution, NOT display size
+    // The canvas is rendered at full resolution (e.g., 1920x1080) and CSS scales it
+    // If we use clientWidth/clientHeight, we get the scaled display size (~400x225)
+    // which causes text to render at wrong positions/sizes
+    const width = this.canvas.width || 800;
+    const height = this.canvas.height || 600;
 
-    // Fallback to canvas attributes if clientWidth/clientHeight are 0
-    if (width === 0 || height === 0) {
-      width = this.canvas.width || 800;
-      height = this.canvas.height || 600;
-    }
+    console.log('🎨 CanvasRenderer.createRenderContext: PHASE 1 DIAGNOSTICS', {
+      canvasActualWidth: this.canvas.width,
+      canvasActualHeight: this.canvas.height,
+      canvasClientWidth: this.canvas.clientWidth,
+      canvasClientHeight: this.canvas.clientHeight,
+      contextWidth: width,
+      contextHeight: height,
+      decision: 'USING ACTUAL CANVAS RESOLUTION (not display size)'
+    });
 
     return {
       canvas: this.canvas,
@@ -285,6 +307,12 @@ export class CanvasRenderer {
   }
 
   public resize(width: number, height: number): void {
+    console.log('🔧 CanvasRenderer.resize: START', {
+      requestedWidth: width,
+      requestedHeight: height,
+      timestamp: Date.now()
+    });
+
     // Ensure minimum dimensions
     const minWidth = Math.max(width, 1);
     const minHeight = Math.max(height, 1);
@@ -293,28 +321,67 @@ export class CanvasRenderer {
     const currentWidth = parseInt(this.canvas.style.width) || this.canvas.clientWidth;
     const currentHeight = parseInt(this.canvas.style.height) || this.canvas.clientHeight;
 
+    console.log('🔧 CanvasRenderer.resize: Current state', {
+      currentWidth,
+      currentHeight,
+      minWidth,
+      minHeight,
+      canvasActualWidth: this.canvas.width,
+      canvasActualHeight: this.canvas.height,
+      hasContext: !!this.ctx
+    });
+
     if (currentWidth === minWidth && currentHeight === minHeight) {
+      console.log('🔧 CanvasRenderer.resize: SKIPPED (no change needed)');
       return; // No resize needed
     }
 
     // Store current context settings before resize
     const contextSettings = this.preserveContextSettings();
+    console.log('🔧 CanvasRenderer.resize: Context settings preserved');
 
     this.canvas.style.width = minWidth + 'px';
     this.canvas.style.height = minHeight + 'px';
+    console.log('🔧 CanvasRenderer.resize: Canvas style updated');
+
     this.setupCanvas();
+    console.log('🔧 CanvasRenderer.resize: setupCanvas() called', {
+      newCanvasWidth: this.canvas.width,
+      newCanvasHeight: this.canvas.height,
+      styleWidth: this.canvas.style.width,
+      styleHeight: this.canvas.style.height
+    });
 
     // Only recreate context if it was lost or if critical dimension change
     if (!this.ctx || this.isContextLost()) {
+      console.log('🔧 CanvasRenderer.resize: Recreating context (lost or missing)');
       this.createRenderingContext();
     } else {
+      console.log('🔧 CanvasRenderer.resize: Reusing existing context');
+
+      // CRITICAL FIX: Reset transform matrix before applying new scale
+      // This prevents accumulation of scaling transforms that cause content to disappear
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset to identity matrix
+      console.log('🔧 CanvasRenderer.resize: Transform matrix reset to identity');
+
       // Restore context settings and scale for new canvas size
       this.restoreContextSettings(contextSettings);
+      console.log('🔧 CanvasRenderer.resize: Context settings restored');
+
       const pixelRatio = this.getPixelRatio();
       if (this.ctx) {
         this.ctx.scale(pixelRatio, pixelRatio);
+        console.log('🔧 CanvasRenderer.resize: Scale applied', { pixelRatio });
       }
     }
+
+    console.log('🔧 CanvasRenderer.resize: COMPLETE', {
+      finalCanvasWidth: this.canvas.width,
+      finalCanvasHeight: this.canvas.height,
+      finalStyleWidth: this.canvas.style.width,
+      finalStyleHeight: this.canvas.style.height,
+      contextValid: !!this.ctx
+    });
   }
 
   public getStats(): RenderStats {

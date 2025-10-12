@@ -34,10 +34,6 @@ import {
 interface EditableSlidePreviewProps {
   /** Content to render in the preview */
   content?: any;
-  /** Width of the preview container (not canvas) */
-  width?: number;
-  /** Height of the preview container (not canvas) */
-  height?: number;
   /** Target resolution for the live display (default: 1920x1080) */
   targetResolution?: { width: number; height: number };
   /** Whether editing is enabled */
@@ -69,8 +65,6 @@ interface EditableShape {
  */
 export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
   content,
-  width = 400,
-  height = 225,
   targetResolution = { width: 1920, height: 1080 },
   editable = true,
   onContentChange,
@@ -91,7 +85,6 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
   const [activeEditId, setActiveEditId] = useState<string | null>(null);
   const [editPosition, setEditPosition] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [actualDimensions, setActualDimensions] = useState({ width, height });
 
   // Responsive controls configuration
   const [responsiveConfig, setResponsiveConfig] = useState<ResponsiveControlConfig>(DEFAULT_RESPONSIVE_CONFIG);
@@ -100,63 +93,10 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
   // Sync manager for real-time updates
   const syncManagerRef = useRef<PreviewSyncManager | null>(null);
 
-  // Ref to track current dimensions and prevent unnecessary updates
-  const currentDimensionsRef = useRef({ width, height });
-
-  // Dynamic sizing effect (when width/height are 0, auto-detect container size)
-  useEffect(() => {
-    if (width === 0 || height === 0) {
-      const updateDimensions = () => {
-        if (containerRef.current) {
-          const rect = containerRef.current.getBoundingClientRect();
-          const aspectRatio = targetResolution.width / targetResolution.height;
-
-          let newWidth = width === 0 ? rect.width : width;
-          let newHeight = height === 0 ? rect.height : height;
-
-          // If both are 0, maintain aspect ratio
-          if (width === 0 && height === 0) {
-            if (rect.width / aspectRatio <= rect.height) {
-              newHeight = rect.width / aspectRatio;
-            } else {
-              newWidth = rect.height * aspectRatio;
-            }
-          }
-
-          const finalDimensions = {
-            width: Math.floor(newWidth),
-            height: Math.floor(newHeight)
-          };
-
-          // Only update if dimensions actually changed to prevent infinite loops
-          if (finalDimensions.width !== currentDimensionsRef.current.width ||
-              finalDimensions.height !== currentDimensionsRef.current.height) {
-            currentDimensionsRef.current = finalDimensions;
-            setActualDimensions(finalDimensions);
-          }
-        }
-      };
-
-      // Initial size calculation
-      updateDimensions();
-
-      // Set up resize observer for dynamic resizing
-      const resizeObserver = new ResizeObserver(updateDimensions);
-      if (containerRef.current) {
-        resizeObserver.observe(containerRef.current);
-      }
-
-      return () => resizeObserver.disconnect();
-    } else {
-      const fixedDimensions = { width, height };
-      // Only update if dimensions actually changed
-      if (fixedDimensions.width !== currentDimensionsRef.current.width ||
-          fixedDimensions.height !== currentDimensionsRef.current.height) {
-        currentDimensionsRef.current = fixedDimensions;
-        setActualDimensions(fixedDimensions);
-      }
-    }
-  }, [width, height, targetResolution]);
+  // SIMPLIFIED: Canvas always uses target resolution, CSS handles scaling
+  // No more dynamic dimension detection - industry standard approach
+  const canvasWidth = targetResolution.width;   // Always 1920
+  const canvasHeight = targetResolution.height; // Always 1080
 
   // Initialize rendering engine and slide renderer
   useEffect(() => {
@@ -172,46 +112,39 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
     }
 
     try {
-      console.log('🔧 EditableSlidePreview: Initializing ResponsiveRenderingEngine with canvas', {
-        canvasWidth: canvasRef.current.width,
-        canvasHeight: canvasRef.current.height,
+      // SIMPLIFIED: Set canvas to target resolution (1920x1080) BEFORE engine creation
+      // CSS will handle scaling down for preview
+      canvasRef.current.width = canvasWidth;
+      canvasRef.current.height = canvasHeight;
+
+      console.log('🔧 EditableSlidePreview: PHASE 1 DIAGNOSTICS - Canvas initialization', {
+        canvasWidth,
+        canvasHeight,
+        targetResolution,
+        canvasActualWidth: canvasRef.current.width,
+        canvasActualHeight: canvasRef.current.height,
         canvasClientWidth: canvasRef.current.clientWidth,
-        canvasClientHeight: canvasRef.current.clientHeight
+        canvasClientHeight: canvasRef.current.clientHeight,
+        canvasStyleWidth: canvasRef.current.style.width,
+        canvasStyleHeight: canvasRef.current.style.height
       });
 
+      // SIMPLIFIED: Disable responsive features for preview - not needed!
+      // We render at full resolution and let CSS scale it down
       const engine = new ResponsiveRenderingEngine({
         canvas: canvasRef.current,
         enableDebug: false,
-        enableResponsive: true,
+        enableResponsive: false, // DISABLED - CSS handles scaling
         settings: {
           quality: RenderQuality.HIGH,
-          targetFPS: 30, // Lower FPS for preview to save resources
+          targetFPS: 30,
           enableCaching: true,
           enableGPUAcceleration: true,
           debugMode: false
-        },
-        breakpoints: [
-          {
-            name: 'small-preview',
-            maxWidth: 500,
-            config: {
-              mode: LayoutMode.FIT_CONTENT,
-              padding: px(8)
-            }
-          },
-          {
-            name: 'large-preview',
-            minWidth: 501,
-            config: {
-              mode: LayoutMode.CENTER,
-              padding: px(16)
-            }
-          }
-        ],
-        baseFontSize: 16
+        }
       });
 
-      console.log('✅ EditableSlidePreview: ResponsiveRenderingEngine created successfully');
+      console.log('✅ EditableSlidePreview: Rendering engine created with fixed resolution');
 
       engineRef.current = engine;
 
@@ -277,57 +210,10 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
       // Register engine with resource manager for proper cleanup
       resourceManager.registerEngine(resourceId, engine);
 
-      // Set up smart dimension watching for responsive updates
-      if (canvasRef.current) {
-        resourceManager.createSmartDimensionWatcher(
-          `${resourceId}-canvas`,
-          canvasRef.current,
-          (entries) => {
-            console.log('📐 EditableSlidePreview: Canvas dimensions changed, updating responsive layout');
+      // SIMPLIFIED: No dimension watching needed!
+      // Canvas is fixed at target resolution, CSS handles preview scaling
 
-            // Update canvas dimensions
-            const canvas = canvasRef.current;
-            if (canvas && entries.length > 0) {
-              const entry = entries[0];
-              const newWidth = Math.round(entry.contentRect.width);
-              const newHeight = Math.round(entry.contentRect.height);
-
-              if (newWidth !== canvas.clientWidth || newHeight !== canvas.clientHeight) {
-                console.log('🎯 EditableSlidePreview: Resizing canvas for responsive layout', {
-                  from: `${canvas.clientWidth}x${canvas.clientHeight}`,
-                  to: `${newWidth}x${newHeight}`
-                });
-
-                // Trigger responsive re-render
-                if (engineRef.current) {
-                  engineRef.current.resize(newWidth, newHeight);
-                }
-              }
-            }
-          },
-          {
-            minDebounceMs: 100,  // Quick response for smooth resizing
-            maxDebounceMs: 500,  // Don't delay too long
-            adaptiveThreshold: 3 // Adjust quickly to resize patterns
-          }
-        );
-      }
-
-      // Set canvas to actual container size for responsive rendering
-      if (canvasRef.current) {
-        canvasRef.current.width = actualDimensions.width;
-        canvasRef.current.height = actualDimensions.height;
-        canvasRef.current.style.width = `${actualDimensions.width}px`;
-        canvasRef.current.style.height = `${actualDimensions.height}px`;
-
-        console.log('🔧 EditableSlidePreview: Canvas configured for responsive rendering', {
-          actualDimensions: `${actualDimensions.width}x${actualDimensions.height}`,
-          propDimensions: `${width}x${height}`,
-          targetResolution: `${targetResolution.width}x${targetResolution.height}`
-        });
-      }
-
-      // Create slide renderer with target resolution for responsive system
+      // Create slide renderer with target resolution
       console.log('🎯 EditableSlidePreview: Creating SlideRenderer with target resolution for responsive system');
 
       const slideRenderer = createSlideRenderer(engine, {
@@ -374,7 +260,10 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
 
       console.log(`EditableSlidePreview: Cleaned up resources for ${resourceId}`);
     };
-  }, [actualDimensions.width, actualDimensions.height, targetResolution.width, targetResolution.height]);
+    // SIMPLIFIED: Engine initializes once with target resolution, never changes
+    // No need for dimension update logic - CSS handles scaling
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run on mount/unmount
 
   // Render content when it changes - optimized for stability
   const contentId = React.useMemo(() => {
@@ -432,57 +321,61 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
         if (content.type === 'template-slide' && content.slide && content.slide.shapes) {
           console.log('🚀 EditableSlidePreview: Using responsive slide rendering');
 
-          // Convert regular shapes to responsive shapes for better scaling
-          const responsiveShapes = content.slide.shapes.map((shape: any) => {
-            if (shape.type === 'text') {
-              return new ResponsiveTextShape({
-                text: shape.text || '',
-                flexiblePosition: createFlexiblePosition(
-                  percent((shape.position?.x || 0) / targetResolution.width * 100),
-                  percent((shape.position?.y || 0) / targetResolution.height * 100)
-                ),
-                flexibleSize: createFlexibleSize(
-                  percent((shape.size?.width || 100) / targetResolution.width * 100),
-                  percent((shape.size?.height || 50) / targetResolution.height * 100)
-                ),
-                layoutConfig: {
-                  mode: LayoutMode.FIT_CONTENT,
-                  padding: px(4)
+          // CRITICAL FIX: Convert ResponsiveTextShape to simple TextShape
+          // Templates generate ResponsiveTextShape instances, but we need simple TextShape
+          // for preview mode with fixed 1920x1080 resolution and CSS scaling
+          const shapes = content.slide.shapes.map((shape: any) => {
+            // Check if this is a text-based shape (TextShape or ResponsiveTextShape)
+            if (shape.type === 'text' || shape instanceof ResponsiveTextShape) {
+              console.log('📝 Converting to simple TextShape for preview at full resolution:', {
+                originalType: shape.constructor.name,
+                position: shape.position,
+                size: shape.size,
+                text: shape.text?.substring(0, 30)
+              });
+
+              // Extract text - ResponsiveTextShape might have getText() method
+              const text = typeof shape.getText === 'function' ? shape.getText() : shape.text;
+
+              // Use simple TextShape with absolute pixel positions (for 1920x1080)
+              return new TextShape({
+                text: text || '',
+                position: {
+                  x: shape.position?.x || 0,
+                  y: shape.position?.y || 0
                 },
-                textStyle: shape.textStyle || {},
-                responsive: true,
-                optimizeReadability: true
+                size: {
+                  width: shape.size?.width || 100,
+                  height: shape.size?.height || 50
+                },
+                textStyle: shape.textStyle || {}
               });
             }
-            // For non-text shapes, return the original shape for now
+            // For non-text shapes, return the original shape
             return shape;
           });
 
-          // Add responsive shapes to the engine
-          console.log('🎯 EditableSlidePreview: Adding responsive shapes to engine');
+          // Add shapes to the engine (no responsive shapes for preview)
+          console.log('🎯 EditableSlidePreview: Adding simple shapes to engine');
           engineRef.current?.clearShapes();
-          responsiveShapes.forEach((shape: Shape) => {
-            if (shape instanceof ResponsiveTextShape) {
-              engineRef.current?.addResponsiveShape(shape);
-            } else {
-              engineRef.current?.addShape(shape);
-            }
+          shapes.forEach((shape: Shape) => {
+            engineRef.current?.addShape(shape);
           });
 
           // Create slide object for tracking
           slide = {
             id: content.slide.id,
-            contentId: `responsive-${content.slide.id}`,
-            templateId: 'responsive-slide',
-            shapes: responsiveShapes,
+            contentId: `preview-${content.slide.id}`,
+            templateId: 'preview-slide',
+            shapes: shapes,
             metadata: {
               generatedAt: new Date(),
-              shapeCount: responsiveShapes.length,
-              templateName: 'Responsive Slide'
+              shapeCount: shapes.length,
+              templateName: 'Preview Slide'
             }
           };
 
-          console.log('✅ EditableSlidePreview: Responsive shapes added to engine');
+          console.log('✅ EditableSlidePreview: Simple shapes added to engine');
         } else {
           console.log('🔄 EditableSlidePreview: Using normal renderContent');
           // Render provided content through normal conversion
@@ -578,22 +471,22 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
     };
 
     // Scale the click coordinates to match the target resolution (1920x1080)
-    // Since ResponsiveRenderingEngine handles scaling internally, we need to convert
-    // canvas coordinates to target resolution coordinates
-    const scaleX = targetResolution.width / actualDimensions.width;
-    const scaleY = targetResolution.height / actualDimensions.height;
+    // The canvas is rendered at full resolution but CSS-scaled to fit the container
+    // We need to convert from the displayed size to the actual canvas coordinates
+    const scaleX = canvasWidth / rect.width;
+    const scaleY = canvasHeight / rect.height;
 
     const targetPoint = {
       x: canvasPoint.x * scaleX,
       y: canvasPoint.y * scaleY
     };
 
-    console.log('🎯 EditableSlidePreview: Responsive click coordinates', {
+    console.log('🎯 EditableSlidePreview: Click coordinate transformation', {
       canvas: canvasPoint,
       target: targetPoint,
       scale: { x: scaleX, y: scaleY },
-      actualDimensions,
-      targetResolution
+      displayedSize: { width: rect.width, height: rect.height },
+      canvasResolution: { width: canvasWidth, height: canvasHeight }
     });
 
     // Find clicked text shape (using target coordinates)
@@ -608,7 +501,7 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
       // Start editing this shape
       setActiveEditId(clickedShape.id);
 
-      // Convert shape bounds back to canvas coordinates for input positioning
+      // Convert shape bounds back to displayed coordinates for input positioning
       const inputX = (clickedShape.bounds.x / scaleX);
       const inputY = (clickedShape.bounds.y / scaleY);
 
@@ -635,7 +528,7 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
       // Cancel any active editing
       cancelEditing();
     }
-  }, [editable, editableShapes, cancelEditing, actualDimensions, targetResolution]);
+  }, [editable, editableShapes, cancelEditing, canvasWidth, canvasHeight]);
 
   // Save text changes
   const saveTextEdit = useCallback((shapeId: string, newText: string) => {
@@ -960,22 +853,26 @@ export const EditableSlidePreview: React.FC<EditableSlidePreviewProps> = ({
         </div>
       )}
 
-      {/* Preview Canvas */}
+      {/* Preview Canvas Container - SIMPLIFIED */}
+      {/* Container defines preview window size, canvas is always 1920x1080 */}
       <div
         ref={containerRef}
-        className="relative bg-black rounded-lg border border-gray-700 flex items-center justify-center"
+        className="relative w-full h-full bg-black rounded-lg border border-gray-700 flex items-center justify-center"
         style={{
-          width: width === 0 ? '100%' : `${width}px`,
-          height: height === 0 ? '100%' : `${height}px`
+          aspectRatio: `${targetResolution.width} / ${targetResolution.height}`
         }}
       >
+        {/* Canvas is ALWAYS target resolution - CSS scales it to fit container */}
         <canvas
           ref={canvasRef}
           onClick={handleCanvasClick}
           style={{
             backgroundColor,
             cursor: editable ? 'pointer' : 'default',
-            display: 'block'
+            display: 'block',
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain' // Browser GPU scales the canvas automatically!
           }}
           className="rounded-lg"
         />

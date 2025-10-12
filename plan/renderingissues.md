@@ -1,78 +1,147 @@
-Plan: Fix Oversized Text in LivePresentationPage Preview                                                                                                                   │ │
-│ │                                                                                                                                                                            │ │
-│ │ Problem Analysis                                                                                                                                                           │ │
-│ │                                                                                                                                                                            │ │
-│ │ The oversized text issue in the LivePresentationPage middle and right panels is caused by multiple coordinate transformation and scaling mismatches in the rendering       │ │
-│ │ pipeline:                                                                                                                                                                  │ │
-│ │                                                                                                                                                                            │ │
-│ │ 1. Coordinate System Misalignment: The OptimizedSlidePreview uses different viewport sizes (400x225 default, 300x169 for live preview) but scales from presentation        │ │
-│ │ coordinates (1920x1080), causing incorrect text sizing                                                                                                                     │ │
-│ │ 2. ResponsiveTextShape Smart Scaling: The text scaling system is designed for full-screen presentation but not properly calibrated for smaller preview containers          │ │
-│ │ 3. Canvas Resolution vs Display Size: Device pixel ratio and target resolution conflicts cause text to render at wrong scales                                              │ │
-│ │ 4. ResponsiveControlPanel Not Applied: The responsive controls exist but aren't being properly connected to fix preview scaling issues                                     │ │
-│ │                                                                                                                                                                            │ │
-│ │ Diagnosis Strategy                                                                                                                                                         │ │
-│ │                                                                                                                                                                            │ │
-│ │ I'll use multiple approaches to visualize and diagnose the text sizing issues:                                                                                             │ │
-│ │                                                                                                                                                                            │ │
-│ │ 1. Console Logging Enhancement: Add detailed logging to track font size calculations, scaling factors, and coordinate transformations                                      │ │
-│ │ 2. Visual Debug Overlays: Add on-screen debug info showing actual vs expected font sizes, container dimensions, and scaling factors                                        │ │
-│ │ 3. ResponsiveControlPanel Integration: Enable and test the existing responsive controls to see current behavior                                                            │ │
-│ │ 4. Coordinate Transform Analysis: Log all coordinate transformations to identify where scaling breaks                                                                      │ │
-│ │                                                                                                                                                                            │ │
-│ │ Implementation Plan                                                                                                                                                        │ │
-│ │                                                                                                                                                                            │ │
-│ │ Phase 1: Enhanced Debugging & Visualization                                                                                                                                │ │
-│ │                                                                                                                                                                            │ │
-│ │ - Add debug logging to ResponsiveTextShape font size calculations                                                                                                          │ │
-│ │ - Create visual debug overlay showing:                                                                                                                                     │ │
-│ │   - Container dimensions vs target resolution                                                                                                                              │ │
-│ │   - Calculated vs actual font sizes                                                                                                                                        │ │
-│ │   - Scaling factors being applied                                                                                                                                          │ │
-│ │   - Text bounds and overflow detection                                                                                                                                     │ │
-│ │ - Add debug mode toggle to OptimizedSlidePreview                                                                                                                           │ │
-│ │                                                                                                                                                                            │ │
-│ │ Phase 2: Fix Core Scaling Issues                                                                                                                                           │ │
-│ │                                                                                                                                                                            │ │
-│ │ - Correct coordinate transformation in OptimizedSlidePreview for small viewports                                                                                           │ │
-│ │ - Fix ResponsiveTextShape scaling calculations for preview containers                                                                                                      │ │
-│ │ - Ensure smart scaling uses appropriate base sizes for preview vs live display                                                                                             │ │
-│ │ - Update CoordinateTransform to handle preview-specific scaling factors                                                                                                    │ │
-│ │                                                                                                                                                                            │ │
-│ │ Phase 3: ResponsiveControlPanel Integration                                                                                                                                │ │
-│ │                                                                                                                                                                            │ │
-│ │ - Wire up the existing ResponsiveControlPanel to actually affect preview rendering                                                                                         │ │
-│ │ - Add preview-specific responsive presets (small preview, live preview, full screen)                                                                                       │ │
-│ │ - Test and tune default configurations for optimal preview text sizing                                                                                                     │ │
-│ │                                                                                                                                                                            │ │
-│ │ Phase 4: Testing & Optimization                                                                                                                                            │ │
-│ │                                                                                                                                                                            │ │
-│ │ - Test with various content types (scripture, songs, announcements)                                                                                                        │ │
-│ │ - Verify consistent text sizing across middle panel (editable) and right panel (live preview)                                                                              │ │
-│ │ - Ensure changes don't break external monitor/live display rendering                                                                                                       │ │
-│ │ - Performance testing with rapid preview updates                                                                                                                           │ │
-│ │                                                                                                                                                                            │ │
-│ │ Expected Outcomes                                                                                                                                                          │ │
-│ │                                                                                                                                                                            │ │
-│ │ - Text properly sized and readable in both middle and right preview panels                                                                                                 │ │
-│ │ - Consistent text appearance between preview and live display                                                                                                              │ │
-│ │ - Working responsive controls for fine-tuning text sizing                                                                                                                  │ │
-│ │ - Comprehensive debugging tools for future text sizing issues                                                                                                              │ │
-│ │                                                                                                                                                                            │ │
-│ │ Tools for Visualization                                                                                                                                                    │ │
-│ │                                                                                                                                                                            │ │
-│ │ - Enhanced console logging with structured debug info                                                                                                                      │ │
-│ │ - Visual debug overlays showing scaling calculations                                                                                                                       │ │
-│ │ - ResponsiveControlPanel for real-time adjustments                                                                                                                         │ │
-│ │ - Coordinate transformation logging and visualization                                                                                                                      │ │
-│ │                                                                                                                                                                            │ │
-│ │ This systematic approach will identify the root cause of oversized text and provide both immediate fixes and long-term diagnostic tools.                                   │ │
-│ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
-│                                                                                                                                                                                │
-│ Would you like to proceed?                                                                                                                                                     │
-│                                                                                                                                                                                │
-│ ❯ 1. Yes, and auto-accept edits                                                                                                                                                │
-│   2. Yes, and manually approve edits                                                                                                                                           │
-│   3. No, keep planning                                                                                                                                                         │
-│                                                                                                                                                                                │
-╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+## Implementation Plan: PowerPoint-Style Architecture for PraisePresent
+
+### Executive Summary
+Implement a **single source of truth** rendering system where slides are rendered once at 1920x1080, then displayed at any size using CSS scaling. This matches how PowerPoint, Google Slides, and Canva work.
+
+### The Core Problem
+Current system has 3 separate rendering instances that each try to adapt to their container size, causing inconsistent rendering and the "tiny text" bug. We need ONE renderer that all windows display.
+
+### Implementation Phases
+
+#### **Phase 1: Fix Immediate Canvas Setup Bug** ⚡ (QUICK WIN - DO THIS FIRST)
+**Time:** 15 minutes  
+**Goal:** Stop CanvasRenderer from overwriting canvas dimensions
+
+**File:** `src/rendering/core/CanvasRenderer.ts` (lines 62-79)
+
+**Change `setupCanvas()` to respect existing canvas dimensions:**
+```typescript
+private setupCanvas(): void {
+  const pixelRatio = this.getPixelRatio();
+  
+  // CRITICAL: Check if canvas already has dimensions set
+  // If so, respect them (EditableSlidePreview sets to 1920x1080)
+  let displayWidth = this.canvas.width;
+  let displayHeight = this.canvas.height;
+  
+  // Only use clientWidth as fallback if canvas not initialized
+  if (displayWidth === 0 || displayHeight === 0) {
+    displayWidth = this.canvas.clientWidth || 800;
+    displayHeight = this.canvas.clientHeight || 600;
+  }
+  
+  // Set canvas size with pixel ratio
+  this.canvas.width = displayWidth * pixelRatio;
+  this.canvas.height = displayHeight * pixelRatio;
+  
+  // Scale back down using CSS
+  this.canvas.style.width = displayWidth + 'px';
+  this.canvas.style.height = displayHeight + 'px';
+  
+  this.setupContextEventHandlers();
+}
+```
+
+**Expected Result:** Preview windows should immediately show better text scaling
+
+---
+
+#### **Phase 2: Create Core SlideRenderer Component** 🎯 (FOUNDATION)
+**Time:** 2 hours  
+**Goal:** Build new clean component that ONLY renders slides
+
+**Create:** `src/components/slides/SlideRenderer.tsx`
+- Always renders at 1920x1080
+- Never reads container size
+- Simple, focused, single purpose
+- Returns canvas element for display
+
+**Test:** Render a scripture slide and verify it looks correct at any container size
+
+---
+
+#### **Phase 3: Create SlideViewer Component** 👀 (DISPLAY)
+**Time:** 30 minutes  
+**Goal:** Wrapper for SlideRenderer that handles display
+
+**Create:** `src/components/slides/SlideViewer.tsx`
+- Uses SlideRenderer
+- Applies CSS scaling via object-fit: contain
+- Read-only display
+- No editing capabilities
+
+**Test:** Display same slide in multiple containers of different sizes
+
+---
+
+#### **Phase 4: Create SlideEditor Component** ✏️ (EDITING)
+**Time:** 2 hours  
+**Goal:** SlideViewer + editing capabilities
+
+**Create:** `src/components/slides/SlideEditor.tsx`
+- Wraps SlideRenderer
+- Handles click-to-edit
+- Transforms display coordinates → canvas coordinates
+- Updates slide data (single source of truth)
+
+**Test:** Click on text, edit it, verify updates appear everywhere
+
+---
+
+#### **Phase 5: Refactor ScriptureTemplate** 📖 (CONTENT)
+**Time:** 1 hour  
+**Goal:** Generate slides with simple TextShape (not ResponsiveTextShape)
+
+**Modify:** `src/rendering/templates/ScriptureTemplate.ts`
+- Remove ResponsiveTextShape usage
+- Use simple TextShape with absolute 1920x1080 positions
+- Fixed font sizes (not responsive)
+- Absolute pixel positions
+
+**Test:** Generate scripture slide, verify it renders correctly in all viewers
+
+---
+
+#### **Phase 6: Integrate into LivePresentationPage** 🔗 (INTEGRATION)
+**Time:** 2 hours  
+**Goal:** Replace EditableSlidePreview with new components
+
+**Modify:** `src/pages/LivePresentationPage.tsx`
+- Preview window: Use SlideEditor
+- Live monitor: Use SlideViewer  
+- Keep live display window using SlideViewer
+
+**Test:** Full workflow - select verse, preview, edit, present
+
+---
+
+#### **Phase 7: Clean Up Legacy Code** 🧹 (CLEANUP)
+**Time:** 1 hour  
+**Goal:** Remove old, unused code
+
+**Remove:**
+- `EditableSlidePreview.tsx` (replaced by SlideEditor)
+- ResponsiveTextShape usage in templates
+- Container size detection from CanvasRenderer (after Phase 1 fix)
+
+---
+
+### Quick Win Strategy (START HERE)
+
+**Option A: Band-Aid Fix (15 min) - Get Something Working**
+- Just do Phase 1
+- Fixes immediate canvas setup bug
+- Should improve preview windows significantly
+- Buys time to implement proper architecture
+
+**Option B: Proper Fix (8-10 hours over 2-3 days)**
+- Do all phases 1-7
+- Results in clean, maintainable architecture
+- Matches PowerPoint/Slides behavior exactly
+- Future-proof for new features
+
+### Recommendation
+
+**START WITH PHASE 1** (the CanvasRenderer fix) - it's a quick win that should improve things significantly. Then assess if you want to continue with the full rewrite or if Phase 1 is "good enough" for now.
+
+The full rewrite (Phases 2-7) is the RIGHT solution long-term, but Phase 1 alone might be sufficient to unblock you.

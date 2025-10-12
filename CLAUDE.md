@@ -50,4 +50,12 @@ const sendContentToLive = async (content) => {
 ## Development Rules
 - Always check ACTIVITIES.md before major implementations
 - Update ACTIVITIES.md after significant changes with date/time
-- Follow existing patterns and conventions in the codebase 
+- ACTIVITIES.md file must not get too huge so add only these as in the example below.
+### 🔧 Added Comprehensive Logging for Window Resize Black Screen Issue
+**Time:** Late Afternoon
+**Description:** Added detailed logging throughout the resize and render pipeline to diagnose the black screen issue that occurs during window resize.
+**Technical Notes:**
+- Canvas switching properly reinitializes rendering context and settings
+- Error handling prevents cascade failures across viewports
+- Maintains compatibility with existing rendering pipeline
+- Supports the shared rendering architecture design patterns

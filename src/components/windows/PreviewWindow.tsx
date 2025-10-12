@@ -266,8 +266,8 @@ export const PreviewWindow: React.FC<PreviewWindowProps> = ({
               {/* Content */}
               <div
                 style={{
-                  width: `${dimensions.width}px`,
-                  height: `${dimensions.height}px`,
+                  width: '100%',
+                  height: '100%',
                   transform: isExpanded ? 'scale(1.2)' : 'scale(1)',
                   transition: 'transform 0.3s ease'
                 }}
@@ -294,8 +294,8 @@ export const PreviewWindow: React.FC<PreviewWindowProps> = ({
             <div
               className="bg-black rounded border border-gray-700 relative overflow-hidden shadow-lg"
               style={{
-                width: `${dimensions.width}px`,
-                height: `${dimensions.height}px`,
+                width: '100%',
+                height: '100%',
                 transform: isExpanded ? 'scale(1.1)' : 'scale(1)',
                 transition: 'transform 0.3s ease'
               }}
