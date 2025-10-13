@@ -9,6 +9,11 @@ export interface TextShapeProps extends ShapeProps {
   autoSize?: boolean;
   wordWrap?: boolean;
   maxLines?: number;
+
+  // PowerPoint-style overflow behavior
+  overflowBehavior?: 'clip' | 'shrink-to-fit' | 'expand-box';
+  minFontSize?: number;  // Minimum font size for shrink-to-fit (default: 8)
+  maxFontSize?: number;  // Maximum font size (for limiting growth)
 }
 
 export interface TextMetrics {
@@ -29,6 +34,13 @@ export class TextShape extends Shape {
   public autoSize: boolean;
   public wordWrap: boolean;
   public maxLines: number;
+
+  // PowerPoint-style overflow behavior
+  public overflowBehavior: 'clip' | 'shrink-to-fit' | 'expand-box' = 'clip';
+  public minFontSize: number = 8;
+  public maxFontSize?: number;
+  private appliedFontSize: number; // Actual font size after auto-shrink/grow
+
   private cachedMetrics: TextMetrics | null = null;
   private metricsCache: Map<string, TextMetrics> = new Map();
   private readonly MAX_CACHE_SIZE = 50; // Limit cache to prevent memory leaks
@@ -40,6 +52,12 @@ export class TextShape extends Shape {
     this.autoSize = props.autoSize !== false;
     this.wordWrap = props.wordWrap !== false;
     this.maxLines = props.maxLines || 0;
+
+    // PowerPoint-style overflow behavior
+    this.overflowBehavior = props.overflowBehavior || 'clip';
+    this.minFontSize = props.minFontSize || 8;
+    this.maxFontSize = props.maxFontSize;
+    this.appliedFontSize = this.textStyle.fontSize || 16;
   }
 
   public render(context: RenderContext): void {
@@ -52,22 +70,10 @@ export class TextShape extends Shape {
 
     const ctx = context.context;
 
-    // PHASE 1 DIAGNOSTICS: Log transform and canvas state
-    const transform = ctx.getTransform();
-    console.log('📝 TextShape.render: PHASE 1 DIAGNOSTICS', {
-      textPreview: this.text.substring(0, 30),
-      position: this.position,
-      size: this.size,
-      fontSize: this.textStyle.fontSize,
-      contextTransform: {
-        scaleX: transform.a,
-        scaleY: transform.d,
-        translateX: transform.e,
-        translateY: transform.f
-      },
-      canvasWidth: ctx.canvas.width,
-      canvasHeight: ctx.canvas.height
-    });
+    // FIXED RESOLUTION MODE: Canvas is ALWAYS 1920x1080
+    // All positions and sizes are in slide coordinates (0-1920, 0-1080)
+    // Never read canvas.clientWidth/clientHeight - those are CSS display sizes
+    // Always use canvas.width/height (actual render resolution: 1920x1080)
 
     // Single save/restore to reduce state management overhead
     ctx.save();
@@ -76,14 +82,41 @@ export class TextShape extends Shape {
       // Apply all transformations and styles in one go
       this.applyAllStyles(ctx);
 
-      const metrics = this.getTextMetrics(ctx);
+      // Get initial text metrics at current font size
+      let metrics = this.getTextMetrics(ctx);
 
-      // Auto-size the shape if enabled (only when necessary)
-      if (this.autoSize) {
+      // PowerPoint-style overflow behavior
+      if (this.overflowBehavior === 'shrink-to-fit' && metrics.actualBounds.height > this.size.height) {
+        // Text overflows! Shrink font to fit
+        this.appliedFontSize = this.calculateShrunkFontSize(ctx, metrics);
+
+        // Re-apply styles with new font size
+        ctx.restore();
+        ctx.save();
+        this.applyAllStyles(ctx, this.appliedFontSize);
+
+        // Re-measure with new font size
+        metrics = this.getTextMetrics(ctx);
+      } else if (this.overflowBehavior === 'expand-box') {
+        // Legacy autoSize behavior - expand box to fit text
         const newWidth = Math.max(this.size.width, metrics.actualBounds.width);
         const newHeight = Math.max(this.size.height, metrics.actualBounds.height);
 
-        // Only update if dimensions actually changed
+        if (newWidth !== this.size.width || newHeight !== this.size.height) {
+          this.size.width = newWidth;
+          this.size.height = newHeight;
+        }
+        this.appliedFontSize = this.textStyle.fontSize || 16;
+      } else {
+        // 'clip' mode - just render and let it clip
+        this.appliedFontSize = this.textStyle.fontSize || 16;
+      }
+
+      // Legacy autoSize support (if explicitly enabled and no overflowBehavior set)
+      if (this.autoSize && this.overflowBehavior === 'clip') {
+        const newWidth = Math.max(this.size.width, metrics.actualBounds.width);
+        const newHeight = Math.max(this.size.height, metrics.actualBounds.height);
+
         if (newWidth !== this.size.width || newHeight !== this.size.height) {
           this.size.width = newWidth;
           this.size.height = newHeight;
@@ -101,7 +134,7 @@ export class TextShape extends Shape {
   }
 
   // Optimized style application that combines all style operations
-  private applyAllStyles(ctx: CanvasRenderingContext2D): void {
+  private applyAllStyles(ctx: CanvasRenderingContext2D, overrideFontSize?: number): void {
     // Apply transformation
     this.applyTransformation(ctx);
 
@@ -124,7 +157,7 @@ export class TextShape extends Shape {
     const style = this.textStyle;
     const fontStyle = style.fontStyle || 'normal';
     const fontWeight = style.fontWeight || 'normal';
-    const fontSize = style.fontSize || 16;
+    const fontSize = overrideFontSize || style.fontSize || 16; // Allow override for shrink-to-fit
     const fontFamily = style.fontFamily || 'Arial, sans-serif';
 
     // Set font (most expensive operation) only once
@@ -136,6 +169,42 @@ export class TextShape extends Shape {
     if (style.color) {
       ctx.fillStyle = colorToString(style.color);
     }
+  }
+
+  /**
+   * Calculate optimal font size to fit text within bounds (PowerPoint-style)
+   * Uses proportional reduction for performance
+   */
+  private calculateShrunkFontSize(ctx: CanvasRenderingContext2D, currentMetrics: TextMetrics): number {
+    const currentFontSize = this.textStyle.fontSize || 16;
+    const availableHeight = this.size.height;
+    const requiredHeight = currentMetrics.actualBounds.height;
+
+    // Text fits already - no shrinking needed
+    if (requiredHeight <= availableHeight) {
+      return currentFontSize;
+    }
+
+    // Calculate proportional reduction with 5% safety margin
+    const overflowRatio = availableHeight / requiredHeight;
+    const targetFontSize = Math.floor(currentFontSize * overflowRatio * 0.95);
+
+    // Apply min/max constraints
+    let finalFontSize = Math.max(targetFontSize, this.minFontSize);
+    if (this.maxFontSize) {
+      finalFontSize = Math.min(finalFontSize, this.maxFontSize);
+    }
+
+    console.log('📏 TextShape: Auto-shrink font', {
+      id: this.id,
+      original: currentFontSize,
+      calculated: targetFontSize,
+      final: finalFontSize,
+      overflow: `${requiredHeight}px → ${availableHeight}px`,
+      ratio: overflowRatio.toFixed(2)
+    });
+
+    return finalFontSize;
   }
 
   private applyTextStyle(ctx: CanvasRenderingContext2D): void {
@@ -489,7 +558,10 @@ export class TextShape extends Shape {
         textStyle: { ...this.textStyle },
         autoSize: this.autoSize,
         wordWrap: this.wordWrap,
-        maxLines: this.maxLines
+        maxLines: this.maxLines,
+        overflowBehavior: this.overflowBehavior,
+        minFontSize: this.minFontSize,
+        maxFontSize: this.maxFontSize
       }
     );
     return cloned;
@@ -502,7 +574,10 @@ export class TextShape extends Shape {
       textStyle: this.textStyle,
       autoSize: this.autoSize,
       wordWrap: this.wordWrap,
-      maxLines: this.maxLines
+      maxLines: this.maxLines,
+      overflowBehavior: this.overflowBehavior,
+      minFontSize: this.minFontSize,
+      maxFontSize: this.maxFontSize
     };
   }
 
@@ -521,7 +596,10 @@ export class TextShape extends Shape {
         textStyle: data.textStyle,
         autoSize: data.autoSize,
         wordWrap: data.wordWrap,
-        maxLines: data.maxLines
+        maxLines: data.maxLines,
+        overflowBehavior: data.overflowBehavior,
+        minFontSize: data.minFontSize,
+        maxFontSize: data.maxFontSize
       }
     );
   }

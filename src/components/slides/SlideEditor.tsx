@@ -15,6 +15,11 @@ interface SlideEditorProps {
   onSlideChange?: (updatedSlide: Slide) => void;
 
   /**
+   * Callback when a shape is selected (for formatting toolbar)
+   */
+  onShapeSelect?: (shape: TextShape | null) => void;
+
+  /**
    * Whether editing is enabled
    */
   editable?: boolean;
@@ -31,23 +36,20 @@ interface SlideEditorProps {
   className?: string;
 }
 
-interface EditState {
-  shapeId: string | null;
-  text: string;
-  position: { x: number; y: number };
-}
-
 /**
- * SlideEditor - Editable slide component (PowerPoint pattern)
+ * SlideEditor - Slide component with shape selection (PowerPoint pattern)
  *
- * This component wraps SlideRenderer and adds editing capabilities.
- * It handles click-to-edit functionality with proper coordinate transformation.
+ * This component wraps SlideRenderer and adds shape selection capabilities.
+ * Unlike click-to-edit, this uses PowerPoint's selection model:
+ * - Click shape → Shape selected (visual indicator shown)
+ * - Formatting toolbar appears with all controls
+ * - Text editing happens in toolbar, not on canvas
  *
  * Key features:
- * - Click on text to edit
+ * - Click on text to select shape
+ * - Visual selection indicator (border/highlight)
  * - Coordinate transformation from display → canvas (1920x1080)
- * - Updates slide data (single source of truth)
- * - Enter to save, Esc to cancel
+ * - Updates via formatting toolbar
  *
  * The coordinate transformation is critical:
  * - Display size might be 305x171 (preview)
@@ -57,13 +59,14 @@ interface EditState {
 export const SlideEditor: React.FC<SlideEditorProps> = ({
   slide,
   onSlideChange,
+  onShapeSelect,
   editable = true,
   targetResolution = { width: 1920, height: 1080 },
   className = ''
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [editState, setEditState] = useState<EditState | null>(null);
+  const [selectedShape, setSelectedShape] = useState<TextShape | null>(null);
+  const [selectedShapeIndex, setSelectedShapeIndex] = useState<number>(-1);
 
   // Store canvas reference when rendered
   const handleRendered = useCallback((canvas: HTMLCanvasElement) => {
@@ -122,135 +125,117 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
     }
 
     if (clickedShape) {
-      console.log('✏️ SlideEditor: Shape clicked', {
+      console.log('🎯 SlideEditor: Shape selected', {
         shapeId: clickedShape.id,
         text: clickedShape.text?.substring(0, 30),
         bounds: clickedShape.getBounds()
       });
 
-      // Start editing - position input at clicked location (display coordinates)
-      setEditState({
-        shapeId: `${clickedShapeIndex}`,
-        text: clickedShape.text || '',
-        position: {
-          x: event.clientX,
-          y: event.clientY
-        }
-      });
+      // Update selected shape for formatting toolbar (PowerPoint pattern)
+      setSelectedShape(clickedShape);
+      setSelectedShapeIndex(clickedShapeIndex);
 
-      // Focus input
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-          inputRef.current.select();
-        }
-      }, 0);
+      if (onShapeSelect) {
+        onShapeSelect(clickedShape);
+      }
     } else {
-      // Clicked outside shapes - cancel editing
-      setEditState(null);
+      // Clicked outside shapes - deselect
+      setSelectedShape(null);
+      setSelectedShapeIndex(-1);
+
+      if (onShapeSelect) {
+        onShapeSelect(null);
+      }
     }
-  }, [editable, slide.shapes, targetResolution]);
+  }, [editable, slide.shapes, targetResolution, onShapeSelect]);
 
-  // Save edited text
-  const saveEdit = useCallback(() => {
-    if (!editState || !onSlideChange) return;
+  // Get selection bounds for visual indicator
+  const getSelectionBounds = (): { x: number; y: number; width: number; height: number } | null => {
+    if (!selectedShape || !canvasRef.current) return null;
 
-    const shapeIndex = parseInt(editState.shapeId!, 10);
-    if (isNaN(shapeIndex) || shapeIndex < 0 || shapeIndex >= slide.shapes.length) {
-      setEditState(null);
-      return;
-    }
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const bounds = selectedShape.getBounds();
 
-    const shape = slide.shapes[shapeIndex];
-    if (!isTextShape(shape)) {
-      setEditState(null);
-      return;
-    }
+    // Transform canvas coordinates (1920x1080) to display coordinates
+    const scaleX = rect.width / targetResolution.width;
+    const scaleY = rect.height / targetResolution.height;
 
-    console.log('💾 SlideEditor: Saving edit', {
-      shapeId: editState.shapeId,
-      oldText: (shape as TextShape).text?.substring(0, 30),
-      newText: editState.text.substring(0, 30)
-    });
-
-    // Update shape text
-    (shape as TextShape).setText(editState.text);
-
-    // Create updated slide
-    const updatedSlide: Slide = {
-      ...slide,
-      shapes: [...slide.shapes]
+    return {
+      x: bounds.x * scaleX,
+      y: bounds.y * scaleY,
+      width: bounds.width * scaleX,
+      height: bounds.height * scaleY
     };
+  };
 
-    // Notify parent of change
-    onSlideChange(updatedSlide);
-
-    // Clear edit state
-    setEditState(null);
-  }, [editState, slide, onSlideChange]);
-
-  // Cancel editing
-  const cancelEdit = useCallback(() => {
-    console.log('❌ SlideEditor: Canceling edit');
-    setEditState(null);
-  }, []);
-
-  // Handle keyboard events
-  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      saveEdit();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      cancelEdit();
-    }
-  }, [saveEdit, cancelEdit]);
+  const selectionBounds = getSelectionBounds();
 
   return (
     <div
       className={`relative w-full h-full ${className}`}
       onClick={handleCanvasClick}
-      style={{ cursor: editable ? 'pointer' : 'default' }}
+      style={{
+        cursor: editable ? 'pointer' : 'default',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
     >
-      <SlideRenderer
-        slide={slide}
-        targetResolution={targetResolution}
-        onRendered={handleRendered}
-      />
-
-      {/* Edit Input */}
-      {editState && (
-        <input
-          ref={inputRef}
-          type="text"
-          value={editState.text}
-          onChange={(e) => setEditState({ ...editState, text: e.target.value })}
-          onKeyDown={handleKeyDown}
-          onBlur={saveEdit}
-          style={{
-            position: 'fixed',
-            left: editState.position.x,
-            top: editState.position.y,
-            zIndex: 1000,
-            padding: '8px 12px',
-            border: '2px solid #4A90E2',
-            borderRadius: '4px',
-            fontSize: '16px',
-            backgroundColor: 'white',
-            color: 'black',
-            minWidth: '200px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-          }}
-          placeholder="Edit text..."
+      <div
+        className="relative"
+        style={{
+          width: '100%',
+          height: '100%',
+          aspectRatio: '16/9',
+          maxWidth: '100%',
+          maxHeight: '100%'
+        }}
+      >
+        <SlideRenderer
+          slide={slide}
+          targetResolution={targetResolution}
+          onRendered={handleRendered}
         />
-      )}
 
-      {/* Edit Instructions */}
-      {editable && !editState && (
+        {/* Visual Selection Indicator (PowerPoint-style blue border) */}
+        {selectedShape && selectionBounds && (
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              left: `${selectionBounds.x}px`,
+              top: `${selectionBounds.y}px`,
+              width: `${selectionBounds.width}px`,
+              height: `${selectionBounds.height}px`,
+              border: '3px solid #0078D4',
+              borderRadius: '2px',
+              boxShadow: '0 0 0 1px rgba(0, 120, 212, 0.3)',
+              animation: 'pulseSelection 2s ease-in-out infinite'
+            }}
+          >
+            {/* Selection corners (resize handles - visual only for now) */}
+            <div className="absolute -top-1 -left-1 w-2 h-2 bg-white border-2 border-blue-600 rounded-full" />
+            <div className="absolute -top-1 -right-1 w-2 h-2 bg-white border-2 border-blue-600 rounded-full" />
+            <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-white border-2 border-blue-600 rounded-full" />
+            <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-white border-2 border-blue-600 rounded-full" />
+          </div>
+        )}
+      </div>
+
+      {/* Selection Instructions */}
+      {editable && !selectedShape && (
         <div className="absolute bottom-2 left-2 text-xs text-gray-400 bg-black/50 px-2 py-1 rounded pointer-events-none">
-          💡 Click text to edit
+          💡 Click text to select and format
         </div>
       )}
+
+      {/* Add subtle pulse animation */}
+      <style>{`
+        @keyframes pulseSelection {
+          0%, 100% { box-shadow: 0 0 0 1px rgba(0, 120, 212, 0.3); }
+          50% { box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.5); }
+        }
+      `}</style>
     </div>
   );
 };

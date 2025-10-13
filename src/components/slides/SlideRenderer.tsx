@@ -81,7 +81,8 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
         canvasClientSize: { width: canvas.clientWidth, height: canvas.clientHeight }
       });
 
-      // Create simple rendering engine (NO responsive features)
+      // Create simple rendering engine (FIXED RESOLUTION MODE - NO responsive features)
+      // Canvas is ALWAYS 1920x1080 - CSS handles all display scaling
       const engine = new RenderingEngine({
         canvas,
         settings: {
@@ -90,7 +91,8 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
           enableCaching: true,
           enableGPUAcceleration: true,
           debugMode: false
-        }
+        },
+        enableDebug: false // No debug overlay needed
       });
 
       engineRef.current = engine;
@@ -182,8 +184,12 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
       style={{
         width: '100%',
         height: '100%',
-        objectFit: 'contain',
+        maxWidth: '100%',
+        maxHeight: '100%',
         display: 'block',
+        objectFit: 'contain', // Browser GPU handles scaling - maintains aspect ratio
+        objectPosition: 'center', // Center the canvas in its container
+        imageRendering: 'auto', // Smooth scaling for better quality
         backgroundColor: slide.background?.value || '#000000'
       }}
     />

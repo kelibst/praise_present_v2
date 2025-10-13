@@ -2,6 +2,207 @@
 
 This file tracks major features and changes implemented in PraisePresent.
 
+## 2025-10-13
+
+### ✅ Implemented PowerPoint-Style Formatting Toolbar
+**Time:** Evening (Continued)
+**Description:** Added comprehensive text formatting toolbar with live preview, matching PowerPoint's formatting experience. Users can now adjust font size, family, style, alignment, and color with immediate visual feedback.
+
+**Features Implemented:**
+
+**TextFormattingToolbar Component** (`src/components/formatting/TextFormattingToolbar.tsx`):
+- **Font Size Controls**: Slider (8-200px) + numeric input + +/- buttons
+- **Font Family Dropdown**: 10 common fonts (Arial, Times, Georgia, etc.)
+- **Text Style Toggles**: Bold, Italic, Underline with active state indicators
+- **Text Alignment**: Left, Center, Right with visual buttons
+- **Color Picker**: Native color picker with hex display
+- **Live Preview**: Changes reflect immediately in preview window
+- **Auto-shrink Display**: Shows applied font size vs. user-set size when shrink-to-fit is active
+
+**SlideEditor Enhancements** (`src/components/slides/SlideEditor.tsx`):
+- Added `onShapeSelect` callback to notify when text is selected
+- Enhanced `EditState` to track selected shape reference
+- Selection persists after editing completes (for continuous formatting)
+- Deselection when clicking outside text shapes
+
+**SlideEditorWithToolbar Component** (`src/components/slides/SlideEditorWithToolbar.tsx`):
+- Combines SlideEditor with TextFormattingToolbar
+- Manages shape selection state
+- Handles format change propagation to slide updates
+- Toolbar appears/disappears based on text selection
+
+**Workflow:**
+1. User clicks text shape → Shape selected, toolbar appears
+2. User adjusts formatting (font size, bold, alignment, color)
+3. Changes apply immediately to shape
+4. Preview window re-renders with new formatting
+5. Formatted slide syncs to live display window
+
+**Key Architecture Benefits:**
+- ✅ **PowerPoint UX Pattern**: Familiar formatting controls for users
+- ✅ **Live Preview**: Changes visible immediately (WYSIWYG)
+- ✅ **Per-Shape Formatting**: Each text box has independent formatting
+- ✅ **User Control**: Users set explicit font sizes, not template defaults
+- ✅ **Works with Auto-Fit**: User-set size becomes max, text shrinks if needed
+- ✅ **Clean Separation**: Toolbar ↔ Editor ↔ Slide data flow
+
+**Typography Controls:**
+```
+Font Family: Arial, Times New Roman, Georgia, Verdana, Trebuchet, etc.
+Font Size: 8-200px (slider + input + buttons)
+Font Style: Bold, Italic, Underline
+Text Align: Left, Center, Right
+Text Color: Full RGB color picker with hex display
+```
+
+**Files Created:**
+- `src/components/formatting/TextFormattingToolbar.tsx` (new, ~350 lines)
+- `src/components/slides/SlideEditorWithToolbar.tsx` (new wrapper component)
+
+**Files Modified:**
+- `src/components/slides/SlideEditor.tsx` (added shape selection tracking)
+
+**Integration Ready:**
+- Component can be integrated into LivePresentationPage preview panel
+- Formatting syncs to live display via existing slide update mechanism
+- Compatible with existing scripture/song templates
+
+**Impact:**
+- Professional text formatting capabilities
+- Matches user expectations from PowerPoint/Google Slides
+- Empowers users to create custom-styled presentations
+- Works seamlessly with auto-fit text feature
+- Foundation for future formatting features (line spacing, shadows, etc.)
+
+## 2025-10-13
+
+### ✅ Implemented PowerPoint-Style Auto-Fit Text Feature
+**Time:** Evening
+**Description:** Added intelligent font auto-sizing with three overflow behaviors: `clip`, `shrink-to-fit`, and `expand-box`. This matches PowerPoint's text fitting architecture where users control font size but text can automatically shrink to fit bounds.
+
+**Problem Solved:**
+- Long scripture passages and song lyrics would overflow slide boundaries
+- Fixed font sizes didn't adapt to varying content lengths
+- No mechanism to automatically fit text within defined bounds
+- Users couldn't control when/how text should shrink
+
+**PowerPoint-Style Architecture Implemented:**
+```typescript
+// 1. Template defines DEFAULT font sizes (user can override)
+verseFontSize: 64px (default)
+lyricsFontSize: 56px (default)
+
+// 2. TextShape handles overflow intelligently per-shape
+overflowBehavior: 'clip' | 'shrink-to-fit' | 'expand-box'
+minFontSize: 24px (minimum readable size)
+maxFontSize: 64px (user's preferred size)
+
+// 3. Automatic proportional font reduction
+if (text overflows) {
+  newFontSize = currentSize × (availableHeight / requiredHeight) × 0.95
+  fontSi ze = max(newFontSize, minFontSize)
+}
+```
+
+**Implementation Details:**
+
+**TextShape.ts Enhancements:**
+- Added `overflowBehavior`, `minFontSize`, `maxFontSize` properties
+- Implemented `calculateShrunkFontSize()` using proportional reduction (fast & predictable)
+- Enhanced `render()` to detect overflow and apply auto-shrink before rendering
+- Modified `applyAllStyles()` to accept override font size for shrink-to-fit
+- Updated `toJSON()`, `fromJSON()`, `clone()` to include new properties
+
+**ScriptureTemplate Updates:**
+- Verse text: `overflowBehavior: 'shrink-to-fit'`, `minFontSize: 24px`
+- Reference: `overflowBehavior: 'clip'` (stays fixed size)
+- Translation: `overflowBehavior: 'clip'` (stays fixed size)
+- Long passages (Psalm 119) will automatically shrink to fit
+
+**SongTemplate Updates:**
+- Song title: `overflowBehavior: 'shrink-to-fit'`, `minFontSize: 36px`
+- Lyrics: `overflowBehavior: 'shrink-to-fit'`, `minFontSize: 28px`
+- Long verses/choruses automatically adjust font size
+
+**Key Benefits:**
+- ✅ **User Control**: Templates provide defaults, users can override font sizes
+- ✅ **Per-Shape Behavior**: Verses shrink, references stay fixed (flexible)
+- ✅ **Scalable Architecture**: Works for Scripture, Songs, Announcements, Custom slides
+- ✅ **PowerPoint Pattern**: Matches industry standard behavior
+- ✅ **Simple & Fast**: Proportional calculation (no complex binary search)
+- ✅ **Predictable**: No complex responsive logic interfering
+
+**Overflow Behaviors:**
+1. **`clip`** (default) - Text renders at fixed size, clips if too long
+2. **`shrink-to-fit`** - Automatically reduces font size to fit bounds (PowerPoint-style)
+3. **`expand-box`** - Legacy behavior, expands text box (not for presentations)
+
+**Files Modified:**
+- `src/rendering/shapes/TextShape.ts` (added overflow behavior system)
+- `src/rendering/templates/ScriptureTemplate.ts` (enabled shrink-to-fit for verses)
+- `src/rendering/templates/SongTemplate.ts` (enabled shrink-to-fit for lyrics & titles)
+
+**Impact:**
+- Long content automatically fits within slide boundaries
+- No more text overflow or clipping issues
+- Consistent with PowerPoint/Google Slides UX
+- Prepares for future UI controls (font size slider in editor)
+- Maintains readability with minimum font size constraints
+
+## 2025-10-13
+
+### 🔧 Complete Rendering Architecture Overhaul - Fixed Resolution Mode
+**Time:** Evening
+**Description:** Transformed the rendering system from fragile responsive architecture to professional fixed-resolution pattern matching PowerPoint, Google Slides, and Keynote.
+
+**Problem Solved:**
+- Hybrid architecture fighting itself: "PowerPoint pattern" code + responsive engines
+- Preview windows not matching live display (inconsistent text sizing)
+- Black screens on window resize due to canvas dimension changes
+- Complex responsive logic with thousands of lines causing maintenance issues
+
+**New Architecture - True Fixed Resolution:**
+```
+Canvas: ALWAYS 1920×1080 (never changes)
+Scaling: 100% CSS-based (GPU accelerated)
+Preview = Live Display (identical rendering)
+```
+
+**Major Changes:**
+1. **RenderingEngine.ts** - Removed ResizeObserver, deprecated resize() method
+2. **SlideRenderer.tsx** - Added CSS object-fit:contain for GPU scaling
+3. **PreviewWindow.tsx** - Removed 70+ lines of dimension calculations
+4. **TextShape.ts** - Fixed transform confusion, clarified coordinate system
+5. **SongTemplate.ts** - Replaced ResponsiveTextShape with simple TextShape, fixed positions for 1920x1080
+
+**Code Reduction:**
+- Removed 147 lines of complex responsive code
+- Simplified createTitleShape: 35 → 15 lines (57% reduction)
+- Simplified createLyricsShape: 29 → 18 lines (38% reduction)
+- Removed WindowDimensions interface entirely
+
+**Technical Benefits:**
+- ✅ Canvas resolution never changes (stability)
+- ✅ All scaling handled by browser GPU (performance)
+- ✅ Preview matches live display perfectly (WYSIWYG)
+- ✅ No black screens on resize (reliability)
+- ✅ Simpler codebase (maintainability)
+
+**Files Modified:**
+- `src/rendering/core/RenderingEngine.ts` (removed ResizeObserver)
+- `src/components/slides/SlideRenderer.tsx` (CSS scaling)
+- `src/components/windows/PreviewWindow.tsx` (removed dimension logic)
+- `src/rendering/shapes/TextShape.ts` (fixed coordinate system)
+- `src/rendering/templates/SongTemplate.ts` (converted to fixed resolution)
+
+**Documentation:**
+- Created comprehensive architecture doc: `plan/rendering-architecture-overhaul-2025-10-13.md`
+
+**Impact:**
+- Foundation now matches professional presentation software
+- Rendering is consistent, stable, simple, and fast
+- Ready for advanced features (transitions, animations, effects)
+
 ## 2025-10-12
 
 ### ✅ Implemented PowerPoint-Style Architecture (Major Refactor)
@@ -640,3 +841,119 @@ This file tracks major features and changes implemented in PraisePresent.
 - Browser GPU handles all scaling via CSS efficiently
 - No complex responsive calculations needed for preview windows
 - Fix ensures container info matches actual rendering resolution
+### ✅ Replaced Click-to-Edit with PowerPoint-Style Typography Toolbar
+**Time:** Evening (Latest)
+**Description:** Removed click-to-edit functionality and implemented a PowerPoint-style typography management toolbar above the preview window for professional text formatting control.
+
+**Problem Solved:**
+- Click-to-edit was cumbersome for presentation formatting
+- Users needed familiar PowerPoint-style formatting controls
+- Required comprehensive typography management (font, size, style, alignment, color)
+
+**Implementation:**
+
+**New Components:**
+1. **TypographyToolbar** (`src/components/formatting/TypographyToolbar.tsx`):
+   - Font family dropdown (10 common fonts)
+   - Font size controls (slider 8-200px + numeric input + +/- buttons)
+   - Text style toggles (Bold, Italic, Underline) with active state indicators
+   - Text alignment buttons (Left, Center, Right)
+   - Color picker with hex display
+   - Line height control (0.8-3.0)
+   - Auto-fit indicator for shrink-to-fit text
+   - Only appears when text shape is selected
+
+2. **SlideEditorWithToolbar** (updated):
+   - Wraps SlideEditor with TypographyToolbar
+   - Manages shape selection state
+   - Handles format change propagation
+   - Updates slide and triggers re-render
+
+**Architecture:**
+- SlideEditor already had selection pattern (no inline editing to remove)
+- Toolbar appears above preview canvas when text selected
+- Format changes update TextShape.textStyle properties
+- Changes propagate: Toolbar → SlideEditorWithToolbar → Slide → Preview → Live Display
+- Fixed-resolution rendering ensures consistent appearance
+
+**Integration:**
+- LivePresentationPage now uses SlideEditorWithToolbar instead of SlideEditor
+- Toolbar integrated into preview panel layout
+- Works seamlessly with auto-shrink (user-set size becomes maxFontSize)
+
+**Typography Controls:**
+```
+Font Family: Arial, Times New Roman, Georgia, Verdana, Trebuchet MS, etc.
+Font Size: 8-200px (slider + input + buttons)
+Font Style: Bold, Italic, Underline
+Text Align: Left, Center, Right
+Text Color: Full RGB picker (#FFFFFF)
+Line Height: 0.8-3.0
+```
+
+**Files Created:**
+- `src/components/formatting/TypographyToolbar.tsx` (new, ~380 lines)
+
+**Files Modified:**
+- `src/components/slides/SlideEditorWithToolbar.tsx` (refactored)
+- `src/components/formatting/index.ts` (exports)
+- `src/pages/LivePresentationPage.tsx` (integrated)
+
+**Benefits:**
+- ✅ Professional PowerPoint-style UX
+- ✅ Live preview of changes
+- ✅ Per-shape formatting
+- ✅ Works with auto-fit
+- ✅ WYSIWYG consistency
+
+### 🔧 Fixed Typography Toolbar Style Preservation Issues
+**Time:** Evening (Latest)
+**Description:** Fixed critical bugs where text color turned black on font size changes, styles reset on color changes, and slide content disappeared when toolbar appeared.
+
+**Problems Fixed:**
+1. **Slide disappearing on click** - SlideEditor wasn't wrapped in PreviewWindow
+2. **Text turning black on font size change** - Partial style updates didn't preserve color
+3. **Everything resets on color change** - forEach mutation instead of spread operator
+4. **Styles not preserved** - Missing style merge in updates
+
+**Solutions Implemented:**
+
+**1. Fixed Style Preservation in TypographyToolbar**
+- Changed `applyFormat` to merge updates with existing style
+- Pattern: `{ ...selectedShape.textStyle, ...updates }`
+- Ensures color, alignment, etc. are ALWAYS included in updates
+- Fixed type error (TextShapeStyle → TextStyle)
+
+**2. Fixed Style Merge in SlideEditorWithToolbar**
+- Replaced `Object.entries().forEach()` with spread operator
+- Changed to: `updatedShape.textStyle = { ...updatedShape.textStyle, ...updates }`
+- Atomic update of all properties prevents partial updates
+- Added maxFontSize handling for auto-shrink feature
+
+**3. Wrapped SlideEditor in PreviewWindow**
+- Added PreviewWindow component wrapping SlideEditor
+- Maintains visual container and window chrome
+- Prevents black canvas showing through
+- Consistent appearance when toolbar appears/disappears
+
+**Code Changes:**
+```typescript
+// BEFORE (WRONG):
+applyFormat({ fontSize: newSize });
+// Only fontSize sent, color lost
+
+// AFTER (RIGHT):
+applyFormat({ ...selectedShape.textStyle, fontSize: newSize });
+// All properties preserved
+```
+
+**Files Modified:**
+- `src/components/formatting/TypographyToolbar.tsx` (lines 104-115)
+- `src/components/slides/SlideEditorWithToolbar.tsx` (lines 102-112, 143-164)
+
+**Impact:**
+- ✅ Text color preserved across all formatting changes
+- ✅ All style properties maintained (alignment, weight, etc.)
+- ✅ Slide content remains visible when toolbar appears
+- ✅ WYSIWYG consistency maintained
+- ✅ No unexpected resets

@@ -26,7 +26,7 @@ import { ensureTemplateManagerReady } from '../rendering/templates/TemplateManag
 import { DEFAULT_SLIDE_SIZE } from '../rendering/templates/templateUtils';
 
 // Import new slide components (PowerPoint pattern)
-import { SlideEditor, SlideViewer, Slide as NewSlide } from '../components/slides';
+import { SlideEditor, SlideViewer, SlideEditorWithToolbar, Slide as NewSlide } from '../components/slides';
 
 // Import window components
 import { PreviewWindow } from '../components/windows/PreviewWindow';
@@ -1254,35 +1254,36 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   </div>
                 )}
 
-                {/* Preview Window */}
-                <div className="flex-1 min-h-0">
-                  <PreviewWindow
-                    title={selectedItem ? `${selectedItem.title} - Slide ${currentSlideIndex + 1}/${selectedItem.slides?.length || 0}` : "Preview Window"}
-                    type="preview"
-                    showControls={true}
-                    contentResolution={{ width: 1920, height: 1080 }}
-                    renderResolution={{ width: 1920, height: 1080 }}
-                    isEditable={true}
-                    connectionStatus="connected"
-                    onToggleControls={() => setShowPropertyPanel(!showPropertyPanel)}
-                    className="h-full"
-                  >
-                    {currentSlide ? (
-                      <SlideEditor
-                        slide={currentSlide}
-                        onSlideChange={handleSlideUpdate}
-                        editable={true}
-                        className="w-full h-full"
-                      />
-                    ) : (
+                {/* Preview Window with Typography Toolbar */}
+                <div className="flex-1 min-h-0 flex flex-col">
+                  {currentSlide ? (
+                    <SlideEditorWithToolbar
+                      slide={currentSlide}
+                      onSlideChange={handleSlideUpdate}
+                      editable={true}
+                      showToolbar={true}
+                      className="flex-1"
+                    />
+                  ) : (
+                    <PreviewWindow
+                      title="Preview Window"
+                      type="preview"
+                      showControls={true}
+                      contentResolution={{ width: 1920, height: 1080 }}
+                      renderResolution={{ width: 1920, height: 1080 }}
+                      isEditable={true}
+                      connectionStatus="connected"
+                      onToggleControls={() => setShowPropertyPanel(!showPropertyPanel)}
+                      className="h-full"
+                    >
                       <div className="w-full h-full flex items-center justify-center text-gray-400">
                         <div className="text-center">
                           <div className="text-4xl mb-2">🎯</div>
                           <div>Select an item to preview</div>
                         </div>
                       </div>
-                    )}
-                  </PreviewWindow>
+                    </PreviewWindow>
+                  )}
                 </div>
 
                 {/* Navigation Controls */}

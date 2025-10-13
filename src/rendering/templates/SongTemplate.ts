@@ -1,19 +1,10 @@
 import { SlideTemplate, SlideTemplateOptions, TemplateContent, TemplatePlaceholder } from './SlideTemplate';
 import { Shape } from '../core/Shape';
 import { TextShape } from '../shapes/TextShape';
-import { ResponsiveTextShape } from '../shapes/ResponsiveTextShape';
 import { BackgroundShape } from '../shapes/BackgroundShape';
 import { RectangleShape } from '../shapes/RectangleShape';
 import { Size, Color } from '../types/geometry';
-import {
-  LayoutMode,
-  percent,
-  px,
-  rem,
-  createFlexiblePosition,
-  createFlexibleSize
-} from '../types/responsive';
-import { TypographyScaleMode } from '../layout/TypographyScaler';
+// REMOVED: ResponsiveTextShape and responsive utilities - using fixed resolution mode
 
 export interface SongSlideContent extends TemplateContent {
   title: string;
@@ -45,41 +36,42 @@ export interface SongTemplateStyle {
 export class SongTemplate extends SlideTemplate {
   private style: SongTemplateStyle;
 
-  constructor(slideSize: Size, style: SongTemplateStyle = {}) {
+  constructor(slideSize: Size = { width: 1920, height: 1080 }, style: SongTemplateStyle = {}) {
+    // Fixed positions for 1920x1080 resolution (PowerPoint pattern)
     const placeholders: TemplatePlaceholder[] = [
       {
         id: 'title',
         name: 'Song Title',
         type: 'text',
-        bounds: { x: 60, y: 40, width: slideSize.width - 120, height: 80 },
+        bounds: { x: 100, y: 60, width: 1720, height: 120 }, // Title at top
         required: true
       },
       {
         id: 'section_label',
         name: 'Section Label',
         type: 'text',
-        bounds: { x: 60, y: 140, width: 200, height: 40 },
+        bounds: { x: 100, y: 200, width: 300, height: 60 }, // Section label
         required: false
       },
       {
         id: 'lyrics',
         name: 'Lyrics',
         type: 'text',
-        bounds: { x: 60, y: 200, width: slideSize.width - 120, height: slideSize.height - 320 },
+        bounds: { x: 100, y: 280, width: 1720, height: 680 }, // Main lyrics area
         required: true
       },
       {
         id: 'chords',
         name: 'Chords',
         type: 'text',
-        bounds: { x: slideSize.width - 300, y: 140, width: 240, height: 40 },
+        bounds: { x: 1520, y: 200, width: 300, height: 60 }, // Chords on right
         required: false
       },
       {
         id: 'copyright',
         name: 'Copyright',
         type: 'text',
-        bounds: { x: 60, y: slideSize.height - 60, width: slideSize.width - 120, height: 30 },
+        bounds: { x: 100, y: 1000, width: 1720, height: 50 }, // Copyright at bottom
         required: false
       }
     ];
@@ -94,12 +86,13 @@ export class SongTemplate extends SlideTemplate {
 
     super(options);
 
+    // Fixed font sizes for 1920x1080 resolution
     this.style = {
-      titleFontSize: 48,
-      lyricsFontSize: 36,
-      chordsFontSize: 24,
-      copyrightFontSize: 18,
-      sectionLabelFontSize: 28,
+      titleFontSize: 72,          // Larger for 1920x1080
+      lyricsFontSize: 56,         // Larger for 1920x1080
+      chordsFontSize: 32,         // Larger for 1920x1080
+      copyrightFontSize: 24,      // Larger for 1920x1080
+      sectionLabelFontSize: 40,   // Larger for 1920x1080
       lineSpacing: 1.4,
       paragraphSpacing: 1.8,
       showSectionLabels: true,
@@ -152,44 +145,34 @@ export class SongTemplate extends SlideTemplate {
     return shapes;
   }
 
-  private createTitleShape(title: string): ResponsiveTextShape {
+  private createTitleShape(title: string): TextShape {
     const placeholder = this.getPlaceholder('title')!;
 
-    // Create responsive text shape for song title
-    return new ResponsiveTextShape({
+    // Title with shrink-to-fit for long song titles
+    return new TextShape({
       text: title,
-      flexiblePosition: createFlexiblePosition(
-        percent((placeholder.bounds.x / this.slideSize.width) * 100),
-        percent((placeholder.bounds.y / this.slideSize.height) * 100)
-      ),
-      flexibleSize: createFlexibleSize(
-        percent((placeholder.bounds.width / this.slideSize.width) * 100),
-        percent((placeholder.bounds.height / this.slideSize.height) * 100)
-      ),
-      layoutConfig: {
-        mode: LayoutMode.CENTER,
-        padding: px(12)
+      position: {
+        x: placeholder.bounds.x,
+        y: placeholder.bounds.y
       },
-      typography: {
-        baseSize: rem(3.0), // Equivalent to ~48px at default 16px base
-        scaleRatio: 0.85,
-        minSize: 28,
-        maxSize: 72,
-        lineHeightRatio: 1.2
+      size: {
+        width: placeholder.bounds.width,
+        height: placeholder.bounds.height
       },
-      textStyle: {
-        fontFamily: this.theme.fonts.display,
-        color: this.theme.colors.accent,
-        textAlign: this.style.centerAlign ? 'center' : 'left',
-        fontWeight: 'bold',
-        textDecoration: 'none'
-      },
-      responsive: true,
-      optimizeReadability: true,
-      scaleMode: TypographyScaleMode.STEPPED,
-      autoSize: true,
+      autoSize: false, // Fixed bounds
       wordWrap: true,
-      maxLines: 2
+      maxLines: 2,
+      overflowBehavior: 'shrink-to-fit', // Shrink font if title is too long
+      minFontSize: 36, // Keep title readable
+      maxFontSize: this.style.titleFontSize
+    }, {
+      fontFamily: this.theme.fonts.display,
+      fontSize: this.style.titleFontSize!,
+      color: this.theme.colors.accent,
+      textAlign: this.style.centerAlign ? 'center' : 'left',
+      verticalAlign: 'middle',
+      fontWeight: 'bold',
+      lineHeight: 1.2
     });
   }
 
@@ -243,47 +226,37 @@ export class SongTemplate extends SlideTemplate {
     );
   }
 
-  private createLyricsShape(lyrics: string): ResponsiveTextShape {
+  private createLyricsShape(lyrics: string): TextShape {
     const placeholder = this.getPlaceholder('lyrics')!;
 
     // Process lyrics for better display
     const processedLyrics = this.processLyrics(lyrics);
 
-    // Create responsive text shape for song lyrics
-    return new ResponsiveTextShape({
+    // Lyrics with shrink-to-fit - THE KEY FEATURE for song presentation
+    // Long verses/choruses will automatically shrink to fit the slide
+    return new TextShape({
       text: processedLyrics,
-      flexiblePosition: createFlexiblePosition(
-        percent((placeholder.bounds.x / this.slideSize.width) * 100),
-        percent((placeholder.bounds.y / this.slideSize.height) * 100)
-      ),
-      flexibleSize: createFlexibleSize(
-        percent((placeholder.bounds.width / this.slideSize.width) * 100),
-        percent((placeholder.bounds.height / this.slideSize.height) * 100)
-      ),
-      layoutConfig: {
-        mode: LayoutMode.FIT_CONTENT,
-        padding: px(16),
-        margin: px(8)
+      position: {
+        x: placeholder.bounds.x,
+        y: placeholder.bounds.y
       },
-      typography: {
-        baseSize: rem(2.25), // Equivalent to ~36px at default 16px base
-        scaleRatio: 0.9,
-        minSize: 20,
-        maxSize: 56,
-        lineHeightRatio: this.style.lineSpacing
+      size: {
+        width: placeholder.bounds.width,
+        height: placeholder.bounds.height
       },
-      textStyle: {
-        fontFamily: this.theme.fonts.primary,
-        color: this.theme.colors.text,
-        textAlign: this.style.centerAlign ? 'center' : 'left',
-        verticalAlign: 'middle',
-        fontWeight: 'normal'
-      },
-      responsive: true,
-      optimizeReadability: true,
-      scaleMode: TypographyScaleMode.FLUID,
-      autoSize: true,
-      wordWrap: true
+      autoSize: false, // Fixed bounds - never expand beyond slide
+      wordWrap: true,
+      overflowBehavior: 'shrink-to-fit', // PowerPoint-style: automatically shrink font for long lyrics
+      minFontSize: 28, // Don't shrink smaller than 28px (audience readability)
+      maxFontSize: this.style.lyricsFontSize // User's preferred size is the max
+    }, {
+      fontFamily: this.theme.fonts.primary,
+      fontSize: this.style.lyricsFontSize!,
+      color: this.theme.colors.text,
+      textAlign: this.style.centerAlign ? 'center' : 'left',
+      verticalAlign: 'middle',
+      fontWeight: 'normal',
+      lineHeight: this.style.lineSpacing
     });
   }
 

@@ -33,24 +33,13 @@ export class RenderingEngine {
     this.performanceMetrics = this.initializeMetrics();
 
     this.bindMethods();
-    this.setupEventListeners();
+    // REMOVED: setupEventListeners() - ResizeObserver was causing canvas dimension changes
+    // Canvas should ALWAYS stay at fixed resolution (1920x1080) - no dynamic resizing
   }
 
   private bindMethods(): void {
     this.render = this.render.bind(this);
     this.renderLoop = this.renderLoop.bind(this);
-  }
-
-  private setupEventListeners(): void {
-    // Handle canvas resize
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        this.resize(width, height);
-      }
-    });
-
-    resizeObserver.observe(this.renderer.getCanvas());
   }
 
   private createViewportInfo(canvas: HTMLCanvasElement): ViewportInfo {
@@ -162,16 +151,11 @@ export class RenderingEngine {
   }
 
   public resize(width: number, height: number): void {
-    // Ensure minimum dimensions
-    const minWidth = Math.max(width, 1);
-    const minHeight = Math.max(height, 1);
-
-    this.renderer.resize(minWidth, minHeight);
-    this.viewport.width = minWidth;
-    this.viewport.height = minHeight;
-    this.viewport.visibleArea.width = minWidth;
-    this.viewport.visibleArea.height = minHeight;
-    this.requestRender();
+    // DEPRECATED: In fixed-resolution mode, canvas should NEVER resize
+    // Canvas stays at 1920x1080, CSS handles all scaling
+    console.warn('RenderingEngine.resize() called but resize is deprecated in fixed-resolution mode');
+    console.warn('Canvas should always stay at 1920x1080. CSS will handle display scaling.');
+    // Do nothing - prevent any resizing
   }
 
   public render(clearCanvas: boolean = true): void {

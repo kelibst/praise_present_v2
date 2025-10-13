@@ -29,16 +29,9 @@ interface PreviewWindowProps {
   className?: string;
 }
 
-interface WindowDimensions {
-  width: number;
-  height: number;
-  scale: number;
-  aspectRatio: number;
-}
-
 /**
  * PreviewWindow provides a window-like container for preview and live display content
- * Handles responsive sizing while maintaining proper aspect ratios
+ * Uses fixed-resolution canvas (1920x1080) with CSS-only scaling for optimal performance
  */
 export const PreviewWindow: React.FC<PreviewWindowProps> = ({
   title,
@@ -57,87 +50,12 @@ export const PreviewWindow: React.FC<PreviewWindowProps> = ({
   className = ''
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState<WindowDimensions>({
-    width: 400,
-    height: 225,
-    scale: 1,
-    aspectRatio: 16/9
-  });
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Calculate optimal window dimensions based on container size
-  const calculateDimensions = useCallback(() => {
-    if (!containerRef.current) return;
-
-    const container = containerRef.current;
-    const containerRect = container.getBoundingClientRect();
-
-    // Account for window chrome (headers, borders, controls)
-    const chromeHeight = showControls ? 80 : 40; // Header + controls
-    const chromeBorder = 8; // Border padding
-
-    const availableWidth = containerRect.width - (chromeBorder * 2);
-    const availableHeight = containerRect.height - chromeHeight - (chromeBorder * 2);
-
-    // Target aspect ratio (16:9 for presentation content)
-    const targetAspectRatio = contentResolution.width / contentResolution.height;
-
-    // Calculate dimensions that fit within available space while maintaining aspect ratio
-    let optimalWidth = availableWidth;
-    let optimalHeight = optimalWidth / targetAspectRatio;
-
-    // If height exceeds available space, constrain by height instead
-    if (optimalHeight > availableHeight) {
-      optimalHeight = availableHeight;
-      optimalWidth = optimalHeight * targetAspectRatio;
-    }
-
-    // Ensure minimum size for usability
-    const minWidth = 200;
-    const minHeight = minWidth / targetAspectRatio;
-
-    if (optimalWidth < minWidth) {
-      optimalWidth = minWidth;
-      optimalHeight = minHeight;
-    }
-
-    // Calculate scale factor
-    const scale = optimalWidth / contentResolution.width;
-
-    setDimensions({
-      width: Math.round(optimalWidth),
-      height: Math.round(optimalHeight),
-      scale,
-      aspectRatio: targetAspectRatio
-    });
-
-    console.log('📐 PreviewWindow: Calculated dimensions', {
-      type,
-      container: { width: containerRect.width, height: containerRect.height },
-      available: { width: availableWidth, height: availableHeight },
-      optimal: { width: optimalWidth, height: optimalHeight },
-      scale,
-      targetAspectRatio
-    });
-  }, [contentResolution, showControls, type]);
-
-  // Responsive dimension calculation
-  useEffect(() => {
-    calculateDimensions();
-
-    // Set up resize observer for dynamic resizing
-    const resizeObserver = new ResizeObserver(() => {
-      calculateDimensions();
-    });
-
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [calculateDimensions]);
+  // SIMPLIFIED: No dimension calculations needed!
+  // Canvas is always 1920x1080, CSS handles ALL scaling via object-fit: contain
+  // We only track the aspect ratio for display purposes
+  const targetAspectRatio = contentResolution.width / contentResolution.height;
 
   // Window styling based on type
   const getWindowStyling = () => {
@@ -206,7 +124,7 @@ export const PreviewWindow: React.FC<PreviewWindowProps> = ({
             {renderResolution && (
               <span>• Render: {formatResolution(renderResolution)}</span>
             )}
-            <span>• Scale: {Math.round(dimensions.scale * 100)}%</span>
+            <span>• CSS Scaled</span>
           </div>
 
           {/* Window Controls */}
@@ -253,7 +171,9 @@ export const PreviewWindow: React.FC<PreviewWindowProps> = ({
             <div
               className="w-full h-full bg-black rounded border-2 border-gray-800 relative overflow-hidden flex items-center justify-center"
               style={{
-                aspectRatio: dimensions.aspectRatio
+                aspectRatio: '16/9',
+                maxHeight: '60vh',
+                width: '100%'
               }}
             >
               {/* Live Display Status LED */}
@@ -296,6 +216,8 @@ export const PreviewWindow: React.FC<PreviewWindowProps> = ({
               style={{
                 width: '100%',
                 height: '100%',
+                maxHeight: '60vh',
+                aspectRatio: '16/9',
                 transform: isExpanded ? 'scale(1.1)' : 'scale(1)',
                 transition: 'transform 0.3s ease'
               }}
@@ -319,9 +241,9 @@ export const PreviewWindow: React.FC<PreviewWindowProps> = ({
         {showControls && (
           <div className={`${styling.headerBg} ${styling.headerBorder} border-t px-3 py-1.5 flex items-center justify-between text-xs`}>
             <div className="flex items-center gap-3 text-gray-400">
-              <span>Window: {dimensions.width}×{dimensions.height}</span>
+              <span>Canvas: 1920×1080</span>
               <span>•</span>
-              <span>Aspect: {dimensions.aspectRatio.toFixed(2)}:1</span>
+              <span>Aspect: {targetAspectRatio.toFixed(2)}:1</span>
               {type === 'live-display' && (
                 <>
                   <span>•</span>
@@ -340,30 +262,7 @@ export const PreviewWindow: React.FC<PreviewWindowProps> = ({
               )}
             </div>
 
-            {/* Zoom Controls */}
-            {(onZoomIn || onZoomOut) && (
-              <div className="flex items-center gap-1">
-                {onZoomOut && (
-                  <button
-                    onClick={onZoomOut}
-                    className="px-2 py-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition-colors"
-                    title="Zoom out"
-                  >
-                    -
-                  </button>
-                )}
-                <span className="text-gray-500 mx-1">{Math.round(dimensions.scale * 100)}%</span>
-                {onZoomIn && (
-                  <button
-                    onClick={onZoomIn}
-                    className="px-2 py-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition-colors"
-                    title="Zoom in"
-                  >
-                    +
-                  </button>
-                )}
-              </div>
-            )}
+            {/* Zoom Controls - Removed since CSS handles scaling automatically */}
           </div>
         )}
       </div>

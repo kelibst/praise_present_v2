@@ -144,21 +144,26 @@ export class ScriptureTemplate extends SlideTemplate {
 
   private createVerseShape(verse: string): TextShape {
     const placeholder = this.getPlaceholder('verse')!;
-    
+
     // Process the verse text
     let processedVerse = this.processVerseText(verse);
 
-    // Create simple TextShape with absolute positions for 1920x1080
+    // Create TextShape with shrink-to-fit behavior (PowerPoint-style)
     const textShape = new TextShape({
       text: processedVerse,
-      position: { 
-        x: placeholder.bounds.x, 
-        y: placeholder.bounds.y 
+      position: {
+        x: placeholder.bounds.x,
+        y: placeholder.bounds.y
       },
-      size: { 
-        width: placeholder.bounds.width, 
-        height: placeholder.bounds.height 
-      }
+      size: {
+        width: placeholder.bounds.width,
+        height: placeholder.bounds.height
+      },
+      wordWrap: true,
+      autoSize: false, // Fixed bounds - never expand
+      overflowBehavior: 'shrink-to-fit', // PowerPoint-style: shrink font if text overflows
+      minFontSize: 24, // Don't shrink smaller than 24px for readability
+      maxFontSize: this.style.verseFontSize // User's preferred size is the max
     }, {
       fontFamily: this.theme.fonts.primary,
       fontSize: this.style.verseFontSize!,
@@ -168,14 +173,16 @@ export class ScriptureTemplate extends SlideTemplate {
       fontWeight: 'normal',
       lineHeight: this.style.lineSpacing
     });
-    
-    console.log('🔍 ScriptureTemplate: Created verse shape', {
+
+    console.log('🔍 ScriptureTemplate: Created verse shape with shrink-to-fit', {
       id: textShape.id,
       type: textShape.type,
-      hasIsVisible: typeof textShape.isVisible === 'function',
+      overflowBehavior: textShape.overflowBehavior,
+      fontSize: this.style.verseFontSize,
+      minFontSize: 24,
       text: processedVerse.substring(0, 30)
     });
-    
+
     return textShape;
   }
 
@@ -198,21 +205,24 @@ export class ScriptureTemplate extends SlideTemplate {
 
   private createReferenceShape(reference: string): TextShape {
     const placeholder = this.getPlaceholder('reference')!;
-    
+
     // Format the reference nicely
     const formattedReference = this.formatReference(reference);
 
-    // Create simple TextShape with absolute positions for 1920x1080
+    // Reference should stay fixed size - no auto-shrink (user expects consistent reference size)
     return new TextShape({
       text: formattedReference,
-      position: { 
-        x: placeholder.bounds.x, 
-        y: placeholder.bounds.y 
+      position: {
+        x: placeholder.bounds.x,
+        y: placeholder.bounds.y
       },
-      size: { 
-        width: placeholder.bounds.width, 
-        height: placeholder.bounds.height 
-      }
+      size: {
+        width: placeholder.bounds.width,
+        height: placeholder.bounds.height
+      },
+      wordWrap: false,
+      autoSize: false,
+      overflowBehavior: 'clip' // Reference stays fixed size
     }, {
       fontFamily: this.theme.fonts.display,
       fontSize: this.style.referenceFontSize!,
@@ -234,17 +244,20 @@ export class ScriptureTemplate extends SlideTemplate {
   private createTranslationShape(translation: string): TextShape {
     const placeholder = this.getPlaceholder('translation')!;
 
-    // Create simple TextShape with absolute positions for 1920x1080
+    // Translation should stay fixed size - no auto-shrink
     return new TextShape({
       text: `— ${translation}`,
-      position: { 
-        x: placeholder.bounds.x, 
-        y: placeholder.bounds.y 
+      position: {
+        x: placeholder.bounds.x,
+        y: placeholder.bounds.y
       },
-      size: { 
-        width: placeholder.bounds.width, 
-        height: placeholder.bounds.height 
-      }
+      size: {
+        width: placeholder.bounds.width,
+        height: placeholder.bounds.height
+      },
+      wordWrap: false,
+      autoSize: false,
+      overflowBehavior: 'clip' // Translation stays fixed size
     }, {
       fontFamily: this.theme.fonts.secondary,
       fontSize: this.style.translationFontSize!,

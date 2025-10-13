@@ -39,11 +39,26 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
   className = ''
 }) => {
   return (
-    <div className={`relative w-full h-full ${className}`}>
-      <SlideRenderer
-        slide={slide}
-        targetResolution={targetResolution}
-      />
+    <div
+      className={`relative w-full h-full ${className}`}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
+    >
+      <div style={{
+        width: '100%',
+        height: '100%',
+        aspectRatio: '16/9',
+        maxWidth: '100%',
+        maxHeight: '100%'
+      }}>
+        <SlideRenderer
+          slide={slide}
+          targetResolution={targetResolution}
+        />
+      </div>
     </div>
   );
 };
