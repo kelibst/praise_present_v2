@@ -1,6 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { SlideBackground } from "../components/formatting/BackgroundToolbar";
-import { TextStyle } from "../rendering/types/shapes";
 
 // Feature-specific settings types
 export interface ScriptureSettings {
@@ -15,6 +14,9 @@ export interface ScriptureSettings {
     bold: boolean;
     italic: boolean;
     lineHeight: number;
+    // Reference positioning - 6 positions
+    referencePosition: "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right";
+    referenceAlign: "left" | "center" | "right"; // Text alignment within reference box
   };
 }
 
@@ -75,7 +77,9 @@ export const defaultScriptureSettings: ScriptureSettings = {
     textAlign: "center",
     bold: false,
     italic: false,
-    lineHeight: 1.5
+    lineHeight: 1.5,
+    referencePosition: "top-center",
+    referenceAlign: "center"
   }
 };
 
@@ -131,10 +135,11 @@ const loadSettingsFromStorage = (): AllFeatureSettings => {
     const stored = localStorage.getItem("praisePresent_featureSettings");
     if (stored) {
       const parsedSettings = JSON.parse(stored);
+      console.log('📖 Loading settings from localStorage:', parsedSettings);
 
       // Deep merge with defaults to ensure all properties exist
       // This is critical for gradient backgrounds which have nested structure
-      return {
+      const mergedSettings = {
         scriptures: {
           ...defaultScriptureSettings,
           ...parsedSettings.scriptures,
@@ -163,10 +168,14 @@ const loadSettingsFromStorage = (): AllFeatureSettings => {
           }
         }
       };
+
+      console.log('✅ Merged settings with defaults:', mergedSettings);
+      return mergedSettings;
     }
   } catch (error) {
     console.warn("Failed to load feature settings from localStorage:", error);
   }
+  console.log('⚠️ Using default settings');
   return defaultAllSettings;
 };
 
@@ -278,13 +287,41 @@ const featureSettingsSlice = createSlice({
       action: PayloadAction<{ feature: keyof AllFeatureSettings; settings: Partial<ScriptureSettings | SongSettings | AnnouncementSettings> }>
     ) => {
       const { feature, settings } = action.payload;
+
+      // Deep merge to handle nested typography and background objects
+      const currentSettings = state.settings[feature] as any;
+      const newSettings = { ...settings } as any;
+
+      // Merge typography if provided
+      if (newSettings.typography) {
+        newSettings.typography = {
+          ...currentSettings.typography,
+          ...newSettings.typography
+        };
+      }
+
+      // Merge background if provided (important for gradient objects)
+      if (newSettings.background) {
+        if (newSettings.background.gradient) {
+          newSettings.background = {
+            ...currentSettings.background,
+            ...newSettings.background,
+            gradient: {
+              ...currentSettings.background?.gradient,
+              ...newSettings.background.gradient
+            }
+          };
+        }
+      }
+
       state.settings[feature] = {
-        ...state.settings[feature],
-        ...settings
+        ...currentSettings,
+        ...newSettings
       } as any;
       state.lastSaved = Date.now();
 
       // Save to localStorage immediately
+      console.log('💾 Saving settings to localStorage:', { feature, settings: state.settings[feature] });
       saveSettingsToStorage(state.settings);
     },
 

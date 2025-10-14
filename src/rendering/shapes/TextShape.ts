@@ -48,7 +48,16 @@ export class TextShape extends Shape {
   constructor(props: TextShapeProps = {}, style: TextStyle = {}) {
     super(props);
     this.text = props.text || '';
-    this.textStyle = { ...defaultTextStyle, ...style };
+
+    // CRITICAL FIX: Properly merge textStyle from props AND style parameter
+    // If props.textStyle exists, use it as the source of truth, then apply style overrides
+    // This ensures clone() and direct construction both work correctly
+    this.textStyle = {
+      ...defaultTextStyle,
+      ...(props.textStyle || {}),
+      ...style
+    };
+
     this.autoSize = props.autoSize !== false;
     this.wordWrap = props.wordWrap !== false;
     this.maxLines = props.maxLines || 0;
@@ -554,6 +563,17 @@ export class TextShape extends Shape {
   }
 
   public clone(): TextShape {
+    // Deep clone textStyle to prevent shared references
+    const clonedTextStyle: TextStyle = {
+      ...this.textStyle,
+      // Deep clone color object if it exists
+      color: this.textStyle.color
+        ? (typeof this.textStyle.color === 'string'
+            ? this.textStyle.color
+            : { ...this.textStyle.color })
+        : undefined
+    };
+
     const cloned = new TextShape(
       {
         id: this.generateId(),
@@ -564,8 +584,9 @@ export class TextShape extends Shape {
         zIndex: this.zIndex,
         visible: this.visible,
         transform: { ...this.transform },
+        metadata: { ...this.metadata }, // Preserve metadata (verse/reference/translation type)
         text: this.text,
-        textStyle: { ...this.textStyle },
+        textStyle: clonedTextStyle,
         autoSize: this.autoSize,
         wordWrap: this.wordWrap,
         maxLines: this.maxLines,

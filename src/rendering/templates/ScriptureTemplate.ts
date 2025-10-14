@@ -200,6 +200,7 @@ export class ScriptureTemplate extends SlideTemplate {
         width: placeholder.bounds.width,
         height: placeholder.bounds.height
       },
+      metadata: { elementType: 'verse' }, // Tag this as the verse element
       wordWrap: true,
       autoSize: false, // Fixed bounds - never expand
       overflowBehavior: 'shrink-to-fit', // PowerPoint-style: shrink font if text overflows
@@ -218,6 +219,7 @@ export class ScriptureTemplate extends SlideTemplate {
 
     console.log('🔍 ScriptureTemplate: Created verse shape with feature settings', {
       id: textShape.id,
+      elementType: textShape.metadata.elementType,
       type: textShape.type,
       overflowBehavior: textShape.overflowBehavior,
       fontSize,
@@ -232,6 +234,43 @@ export class ScriptureTemplate extends SlideTemplate {
   private rgbToHex(color: Color | string): string {
     if (typeof color === 'string') return color;
     return `#${((1 << 24) + (color.r << 16) + (color.g << 8) + color.b).toString(16).slice(1)}`;
+  }
+
+  private calculateReferenceBounds(position: string): { x: number; y: number; width: number; height: number } {
+    const slideWidth = this.slideSize.width;
+    const slideHeight = this.slideSize.height;
+    const padding = 100; // Margin from edges
+    const refHeight = 80; // Reference height
+    const refWidth = slideWidth - (padding * 2); // Full width minus padding
+
+    // Calculate X position based on horizontal alignment
+    let x = padding;
+    let width = refWidth;
+
+    // For left and right positions, make the reference smaller (half width)
+    if (position.includes('left')) {
+      width = refWidth / 2;
+      x = padding;
+    } else if (position.includes('right')) {
+      width = refWidth / 2;
+      x = slideWidth - padding - width;
+    } else {
+      // Center positions use full width
+      x = padding;
+    }
+
+    // Calculate Y position based on vertical alignment
+    let y = 40; // Default top position
+
+    if (position.startsWith('bottom')) {
+      // Bottom positions - leave space for preview toolbar
+      y = slideHeight - refHeight - 100; // 100px from bottom to avoid toolbar
+    } else {
+      // Top positions
+      y = 40;
+    }
+
+    return { x, y, width, height: refHeight };
   }
 
   private processVerseText(verse: string): string {
@@ -252,7 +291,9 @@ export class ScriptureTemplate extends SlideTemplate {
   }
 
   private createReferenceShape(reference: string, typography?: any): TextShape {
-    const placeholder = this.getPlaceholder('reference')!;
+    // Calculate position based on settings
+    const position = typography?.referencePosition || 'top-center';
+    const bounds = this.calculateReferenceBounds(position);
 
     // Format the reference nicely
     const formattedReference = this.formatReference(reference);
@@ -262,19 +303,21 @@ export class ScriptureTemplate extends SlideTemplate {
     const fontSize = typography?.referenceFontSize || this.style.referenceFontSize!;
     // CRITICAL: Use same text color as verse if provided, otherwise fallback to white for visibility
     const textColor = typography?.textColor || '#ffffff';
-    const textAlign = typography?.textAlign || (this.style.centerAlign ? 'center' : 'right');
+    // Use referenceAlign if provided, otherwise use the general textAlign or default
+    const textAlign = typography?.referenceAlign || typography?.textAlign || (this.style.centerAlign ? 'center' : 'right');
 
     // Reference should stay fixed size - no auto-shrink (user expects consistent reference size)
     const referenceShape = new TextShape({
       text: formattedReference,
       position: {
-        x: placeholder.bounds.x,
-        y: placeholder.bounds.y
+        x: bounds.x,
+        y: bounds.y
       },
       size: {
-        width: placeholder.bounds.width,
-        height: placeholder.bounds.height
+        width: bounds.width,
+        height: bounds.height
       },
+      metadata: { elementType: 'reference' }, // Tag this as the reference element
       wordWrap: false,
       autoSize: false,
       overflowBehavior: 'clip' // Reference stays fixed size
@@ -288,9 +331,11 @@ export class ScriptureTemplate extends SlideTemplate {
     });
 
     console.log('📖 ScriptureTemplate: Created reference shape', {
+      id: referenceShape.id,
+      elementType: referenceShape.metadata.elementType,
       text: formattedReference,
-      position: { x: placeholder.bounds.x, y: placeholder.bounds.y },
-      size: { width: placeholder.bounds.width, height: placeholder.bounds.height },
+      position: { x: bounds.x, y: bounds.y },
+      size: { width: bounds.width, height: bounds.height },
       color: textColor,
       textAlign,
       fontSize
@@ -328,6 +373,7 @@ export class ScriptureTemplate extends SlideTemplate {
         width: placeholder.bounds.width,
         height: placeholder.bounds.height
       },
+      metadata: { elementType: 'translation' }, // Tag this as the translation element
       wordWrap: false,
       autoSize: false,
       overflowBehavior: 'clip' // Translation stays fixed size
@@ -340,6 +386,8 @@ export class ScriptureTemplate extends SlideTemplate {
     });
 
     console.log('📖 ScriptureTemplate: Created translation shape', {
+      id: translationShape.id,
+      elementType: translationShape.metadata.elementType,
       text: `— ${translation}`,
       position: { x: placeholder.bounds.x, y: placeholder.bounds.y },
       size: { width: placeholder.bounds.width, height: placeholder.bounds.height },

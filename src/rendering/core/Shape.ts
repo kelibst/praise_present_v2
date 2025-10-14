@@ -12,6 +12,7 @@ export abstract class Shape {
   public visible: boolean;
   public transform: Transform;
   public style: ShapeStyle;
+  public metadata: Record<string, any>; // For identifying shape purpose (verse/reference/translation)
   public abstract readonly type: ShapeType;
 
   constructor(props: ShapeProps = {}, style: ShapeStyle = {}) {
@@ -25,6 +26,7 @@ export abstract class Shape {
     this.zIndex = mergedProps.zIndex;
     this.visible = mergedProps.visible;
     this.transform = { ...mergedProps.transform };
+    this.metadata = mergedProps.metadata || {};
     this.style = { ...style };
   }
 
@@ -181,6 +183,7 @@ export abstract class Shape {
     cloned.zIndex = this.zIndex;
     cloned.visible = this.visible;
     cloned.transform = { ...this.transform };
+    cloned.metadata = { ...this.metadata };
     cloned.style = { ...this.style };
     return cloned;
   }

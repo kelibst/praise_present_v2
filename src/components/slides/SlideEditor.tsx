@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { SlideRenderer, Slide } from './SlideRenderer';
 import { TextShape } from '../../rendering/shapes/TextShape';
 import { isTextShape } from '../../rendering/utils/shapeTypeGuards';
@@ -67,6 +67,25 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [selectedShape, setSelectedShape] = useState<TextShape | null>(null);
   const [selectedShapeIndex, setSelectedShapeIndex] = useState<number>(-1);
+
+  // CRITICAL: Update selected shape when slide changes
+  // This ensures the selected shape stays in sync with the slide's shape array
+  useEffect(() => {
+    if (selectedShapeIndex >= 0 && selectedShapeIndex < slide.shapes.length) {
+      const updatedShape = slide.shapes[selectedShapeIndex];
+      if (isTextShape(updatedShape)) {
+        console.log('🔄 SlideEditor: Updating selected shape from slide', {
+          shapeId: updatedShape.id,
+          fontSize: updatedShape.textStyle?.fontSize,
+          color: updatedShape.textStyle?.color
+        });
+        setSelectedShape(updatedShape as TextShape);
+        if (onShapeSelect) {
+          onShapeSelect(updatedShape as TextShape);
+        }
+      }
+    }
+  }, [slide, selectedShapeIndex, onShapeSelect]);
 
   // Store canvas reference when rendered
   const handleRendered = useCallback((canvas: HTMLCanvasElement) => {

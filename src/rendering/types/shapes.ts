@@ -10,6 +10,7 @@ export interface ShapeProps {
   zIndex?: number;
   visible?: boolean;
   transform?: Transform;
+  metadata?: Record<string, any>; // For storing shape-specific data like type (verse/reference/translation)
 }
 
 export interface ShapeStyle {

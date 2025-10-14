@@ -215,6 +215,110 @@ export const ScriptureSettingsPanel: React.FC<ScriptureSettingsPanelProps> = ({
           </div>
         </div>
 
+        {/* Reference Position */}
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">Scripture Reference Position</label>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              onClick={() => handleTypographyChange('referencePosition', 'top-left')}
+              className={`px-3 py-2 text-xs rounded border transition-colors ${
+                settings.typography.referencePosition === 'top-left'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              Top Left
+            </button>
+            <button
+              onClick={() => handleTypographyChange('referencePosition', 'top-center')}
+              className={`px-3 py-2 text-xs rounded border transition-colors ${
+                settings.typography.referencePosition === 'top-center'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              Top Center
+            </button>
+            <button
+              onClick={() => handleTypographyChange('referencePosition', 'top-right')}
+              className={`px-3 py-2 text-xs rounded border transition-colors ${
+                settings.typography.referencePosition === 'top-right'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              Top Right
+            </button>
+            <button
+              onClick={() => handleTypographyChange('referencePosition', 'bottom-left')}
+              className={`px-3 py-2 text-xs rounded border transition-colors ${
+                settings.typography.referencePosition === 'bottom-left'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              Bottom Left
+            </button>
+            <button
+              onClick={() => handleTypographyChange('referencePosition', 'bottom-center')}
+              className={`px-3 py-2 text-xs rounded border transition-colors ${
+                settings.typography.referencePosition === 'bottom-center'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              Bottom Center
+            </button>
+            <button
+              onClick={() => handleTypographyChange('referencePosition', 'bottom-right')}
+              className={`px-3 py-2 text-xs rounded border transition-colors ${
+                settings.typography.referencePosition === 'bottom-right'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              Bottom Right
+            </button>
+          </div>
+        </div>
+
+        {/* Reference Text Alignment */}
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">Reference Text Alignment</label>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleTypographyChange('referenceAlign', 'left')}
+              className={`px-4 py-2 rounded border transition-colors ${
+                settings.typography.referenceAlign === 'left'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              Left
+            </button>
+            <button
+              onClick={() => handleTypographyChange('referenceAlign', 'center')}
+              className={`px-4 py-2 rounded border transition-colors ${
+                settings.typography.referenceAlign === 'center'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              Center
+            </button>
+            <button
+              onClick={() => handleTypographyChange('referenceAlign', 'right')}
+              className={`px-4 py-2 rounded border transition-colors ${
+                settings.typography.referenceAlign === 'right'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              Right
+            </button>
+          </div>
+        </div>
+
         {/* Text Style & Line Height */}
         <div className="grid grid-cols-2 gap-4">
           <div>

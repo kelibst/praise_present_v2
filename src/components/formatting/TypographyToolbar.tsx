@@ -9,7 +9,8 @@ import {
   AlignRight,
   Minus,
   Plus,
-  Palette
+  Palette,
+  Save
 } from 'lucide-react';
 import { TextShape } from '../../rendering/shapes/TextShape';
 import { TextStyle } from '../../rendering/types/shapes';
@@ -24,6 +25,11 @@ interface TypographyToolbarProps {
    * Callback when user changes formatting
    */
   onFormatChange: (shapeId: string, updates: Partial<TextStyle>) => void;
+
+  /**
+   * Optional callback to save current formatting as default settings
+   */
+  onSaveAsDefault?: () => void;
 
   /**
    * Optional CSS class
@@ -51,6 +57,7 @@ interface TypographyToolbarProps {
 export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
   selectedShape,
   onFormatChange,
+  onSaveAsDefault,
   className = ''
 }) => {
   // Local state for form controls (synced with selected shape)
@@ -69,6 +76,13 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
 
     const style = selectedShape.textStyle;
     if (!style) return;
+
+    console.log('📊 TypographyToolbar syncing from shape:', {
+      shapeId: selectedShape.id,
+      fontSize: style.fontSize,
+      color: style.color,
+      fullStyle: { ...style }
+    });
 
     setFontSize(style.fontSize || 64);
     setFontFamily(style.fontFamily || 'Arial');
@@ -109,8 +123,18 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
   const applyFormat = (updates: Partial<TextStyle>) => {
     if (!selectedShape) return;
 
+    // CRITICAL: Remove undefined values to prevent overwriting existing properties
+    const cleanedUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([_, value]) => value !== undefined)
+    ) as Partial<TextStyle>;
+
+    console.log('🎨 TypographyToolbar applying format:', {
+      original: updates,
+      cleaned: cleanedUpdates
+    });
+
     // Pass only the updates - SlideEditorWithToolbar will merge with existing style
-    onFormatChange(selectedShape.id, updates);
+    onFormatChange(selectedShape.id, cleanedUpdates);
   };
 
   // Font size handlers
@@ -187,9 +211,24 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
     'Helvetica'
   ];
 
+  // Get the element type from metadata for display
+  const elementType = selectedShape?.metadata?.elementType || 'text';
+  const elementLabel = elementType === 'verse' ? 'Verse' :
+                      elementType === 'reference' ? 'Reference' :
+                      elementType === 'translation' ? 'Translation' : 'Text';
+
   return (
     <div className={`bg-gray-900/95 border-b border-gray-700 px-4 py-2 ${className}`}>
       <div className="flex items-center gap-4 flex-wrap">
+        {/* Element Type Indicator */}
+        <div className="flex items-center gap-2 px-3 py-1 bg-blue-900/50 border border-blue-600 rounded">
+          <span className="text-xs font-semibold text-blue-300">Editing:</span>
+          <span className="text-sm font-bold text-white">{elementLabel}</span>
+        </div>
+
+        {/* Divider */}
+        <div className="h-6 w-px bg-gray-600" />
+
         {/* Font Family Dropdown */}
         <div className="flex items-center gap-2">
           <Type className="w-4 h-4 text-gray-400" />
@@ -371,6 +410,21 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
           />
           <span className="text-xs text-white w-8">{lineHeight.toFixed(1)}</span>
         </div>
+
+        {/* Save as Default Button */}
+        {onSaveAsDefault && (
+          <>
+            <div className="h-6 w-px bg-gray-600" />
+            <button
+              onClick={onSaveAsDefault}
+              className="flex items-center gap-2 px-3 py-1 bg-green-700 hover:bg-green-600 text-white text-sm rounded border border-green-600 transition-colors"
+              title="Save current formatting as default for all future slides"
+            >
+              <Save className="w-4 h-4" />
+              Save as Default
+            </button>
+          </>
+        )}
 
         {/* Shape Info (helpful for debugging) */}
         <div className="ml-auto text-xs text-gray-500">

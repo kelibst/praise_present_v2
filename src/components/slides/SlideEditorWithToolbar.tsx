@@ -7,6 +7,7 @@ import { PreviewWindow } from '../windows/PreviewWindow';
 import { TextShape } from '../../rendering/shapes/TextShape';
 import { TextStyle } from '../../rendering/types/shapes';
 import { isTextShape } from '../../rendering/utils/shapeTypeGuards';
+import { useFeatureSettings } from '../../hooks/useFeatureSettings';
 
 interface SlideEditorWithToolbarProps {
   /**
@@ -64,6 +65,10 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
 }) => {
   const [selectedShape, setSelectedShape] = useState<TextShape | null>(null);
   const [showBackgroundToolbar, setShowBackgroundToolbar] = useState(false);
+  const [saveConfirmation, setSaveConfirmation] = useState(false);
+
+  // Feature settings hook for saving as default
+  const { updateScriptureTypography } = useFeatureSettings();
 
   // Handle shape selection from SlideEditor
   const handleShapeSelect = useCallback((shape: TextShape | null) => {
@@ -102,12 +107,23 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
     // Clone the shape with updated style
     const updatedShape = (shape as TextShape).clone();
 
+    console.log('🎨 Applying format changes:', {
+      shapeId,
+      updates,
+      beforeTextStyle: { ...updatedShape.textStyle },
+    });
+
     // Apply style updates using spread operator to preserve ALL properties
     // This is CRITICAL: merging ensures color, alignment, etc. are never lost
     updatedShape.textStyle = {
       ...updatedShape.textStyle,
       ...updates
     };
+
+    console.log('✅ After merge:', {
+      afterTextStyle: { ...updatedShape.textStyle },
+      fontSize: updatedShape.textStyle.fontSize
+    });
 
     // Handle maxFontSize for auto-shrink (if fontSize changed, update max)
     if (updates.fontSize !== undefined) {
@@ -146,6 +162,55 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
     }
   }, [slide, onSlideChange]);
 
+  // Handle saving current shape style as default
+  const handleSaveAsDefault = useCallback(() => {
+    if (!selectedShape || !selectedShape.textStyle) return;
+
+    console.log('💾 Saving current formatting as default:', selectedShape.textStyle);
+
+    const style = selectedShape.textStyle;
+
+    // Extract color as hex string
+    let colorHex = '#ffffff';
+    if (style.color) {
+      if (typeof style.color === 'string') {
+        colorHex = style.color;
+      } else {
+        const { r, g, b } = style.color;
+        colorHex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+      }
+    }
+
+    // Determine which element type this is and update the appropriate font size
+    const elementType = selectedShape.metadata?.elementType;
+    const updates: any = {
+      fontFamily: style.fontFamily || 'Arial',
+      textColor: colorHex,
+      textAlign: (style.textAlign as 'left' | 'center' | 'right') || 'center',
+      bold: style.fontWeight === 'bold',
+      italic: style.fontStyle === 'italic',
+      lineHeight: style.lineHeight || 1.5,
+    };
+
+    // Update the appropriate font size based on element type
+    if (elementType === 'verse') {
+      updates.verseFontSize = style.fontSize || 64;
+    } else if (elementType === 'reference') {
+      updates.referenceFontSize = style.fontSize || 36;
+    } else if (elementType === 'translation') {
+      updates.translationFontSize = style.fontSize || 28;
+    }
+
+    console.log('💾 Saving as default for element type:', elementType, updates);
+
+    // Update scripture typography settings
+    updateScriptureTypography(updates);
+
+    // Show confirmation
+    setSaveConfirmation(true);
+    setTimeout(() => setSaveConfirmation(false), 2000);
+  }, [selectedShape, updateScriptureTypography]);
+
   // Get current background from slide or use default
   const currentBackground: SlideBackground = slide.background || {
     type: 'color',
@@ -166,10 +231,20 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
 
           {/* Typography Toolbar - Appears when text is selected */}
           {selectedShape && (
-            <TypographyToolbar
-              selectedShape={selectedShape}
-              onFormatChange={handleFormatChange}
-            />
+            <div className="relative">
+              <TypographyToolbar
+                selectedShape={selectedShape}
+                onFormatChange={handleFormatChange}
+                onSaveAsDefault={handleSaveAsDefault}
+              />
+
+              {/* Save Confirmation Toast */}
+              {saveConfirmation && (
+                <div className="absolute right-4 top-14 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg animate-fade-in">
+                  ✓ Saved as default settings
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

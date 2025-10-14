@@ -644,22 +644,56 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // Handle service item selection (single click)
   const handleServiceItemSelect = (item: ServiceItem, event: React.MouseEvent) => {
     event.stopPropagation();
-    generateSlidesForItem(item, false);
+
+    // CRITICAL: Only generate slides if they don't exist
+    // This preserves toolbar edits made to existing slides
+    if (!item.slides || item.slides.length === 0) {
+      console.log('📝 Generating slides for new item:', item.id);
+      generateSlidesForItem(item, false);
+    } else {
+      console.log('✅ Using existing slides for item:', item.id, 'slides:', item.slides.length);
+      setSelectedItem(item);
+      setCurrentSlideIndex(0);
+      setPresentationMode('preview');
+    }
   };
 
   // Handle service item presentation (double click)
   const handleServiceItemPresent = async (item: ServiceItem, event: React.MouseEvent) => {
     event.stopPropagation();
 
+    // Generate slides only if they don't exist
+    const needsGeneration = !item.slides || item.slides.length === 0;
+
     if (!liveDisplayActive) {
       // Create live display if it doesn't exist
       await createLiveDisplay();
       // Wait a moment for live display to be ready
       setTimeout(() => {
-        generateSlidesForItem(item, true);
+        if (needsGeneration) {
+          generateSlidesForItem(item, true);
+        } else {
+          setSelectedItem(item);
+          setCurrentSlideIndex(0);
+          setPresentationMode('live');
+          if (item.slides && item.slides.length > 0) {
+            sendSlideToLive(item.slides[0], item, 0);
+            setIsPresenting(true);
+          }
+        }
       }, 500);
     } else {
-      generateSlidesForItem(item, true);
+      if (needsGeneration) {
+        generateSlidesForItem(item, true);
+      } else {
+        setSelectedItem(item);
+        setCurrentSlideIndex(0);
+        setPresentationMode('live');
+        if (item.slides && item.slides.length > 0) {
+          sendSlideToLive(item.slides[0], item, 0);
+          setIsPresenting(true);
+        }
+      }
     }
   };
 
@@ -735,8 +769,15 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       }
     }
 
+    // CRITICAL: Check if we're selecting the exact same verses as current preview
+    // Only preserve slides if the verse selection hasn't changed
+    const isCurrentlyPreviewingScripture = selectedItem?.id?.startsWith('scripture-preview-');
+    const currentVerseIds = selectedItem?.content?.verses?.map((v: any) => v.id).sort().join(',');
+    const newVerseIds = verses.map(v => v.id).sort().join(',');
+    const isSameVerseSelection = isCurrentlyPreviewingScripture && currentVerseIds === newVerseIds;
+
     const scriptureItem: ServiceItem = {
-      id: `scripture-preview-${Date.now()}`,
+      id: isCurrentlyPreviewingScripture ? selectedItem!.id : `scripture-preview-${Date.now()}`,
       type: 'scripture',
       title,
       content: {
@@ -751,14 +792,31 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           versionId: v.versionId
         }))
       },
-      order: 0
+      order: 0,
+      // ONLY preserve slides if selecting the exact same verses
+      slides: isSameVerseSelection ? selectedItem!.slides : undefined
     };
 
-    console.log('🟠 LivePresentationPage: Calling generateSlidesForItem');
-    // Generate slides and show in preview only (not added to service items list)
-    await generateSlidesForItem(scriptureItem, false);
+    console.log('🟠 LivePresentationPage: Scripture selection', {
+      isCurrentlyPreviewingScripture,
+      isSameVerseSelection,
+      currentVerseIds,
+      newVerseIds,
+      hasExistingSlides: !!scriptureItem.slides,
+      slideCount: scriptureItem.slides?.length || 0
+    });
 
-    console.log('✅ Scripture preview generated');
+    // Generate slides only if verse selection changed or no slides exist
+    if (!isSameVerseSelection || !scriptureItem.slides || scriptureItem.slides.length === 0) {
+      await generateSlidesForItem(scriptureItem, false);
+    } else {
+      // Same verses - just update the selected item without regenerating
+      setSelectedItem(scriptureItem);
+      setCurrentSlideIndex(0);
+      console.log('✅ Preview using existing slides (same verse selection, preserving edits)');
+    }
+
+    console.log('✅ Scripture preview generated/updated');
   };
 
 
