@@ -210,19 +210,23 @@ export const PreviewWindow: React.FC<PreviewWindowProps> = ({
 
         {/* Preview Window Content */}
         {type === 'preview' && (
-          <div className="flex-1 p-3 bg-gray-950 flex items-center justify-center">
+          <div className="flex-1 p-3 bg-gray-950 flex items-center justify-center overflow-hidden">
             <div
-              className="bg-black rounded border border-gray-700 relative overflow-hidden shadow-lg"
+              className="bg-black rounded border border-gray-700 relative shadow-lg"
               style={{
                 width: '100%',
                 height: '100%',
-                maxHeight: '60vh',
+                maxWidth: '100%',
+                maxHeight: '100%',
                 aspectRatio: '16/9',
                 transform: isExpanded ? 'scale(1.1)' : 'scale(1)',
                 transition: 'transform 0.3s ease'
               }}
             >
-              {children}
+              {/* Content container - ensures full canvas is visible */}
+              <div style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
+                {children}
+              </div>
 
               {/* Edit Mode Indicator */}
               {isEditable && (

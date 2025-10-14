@@ -8,8 +8,14 @@ export interface Slide {
   id: string;
   shapes: Shape[];
   background?: {
-    type: 'color' | 'image' | 'gradient';
-    value: string;
+    type: 'color' | 'gradient' | 'image';
+    value?: string; // Hex color for solid, or image URL
+    gradient?: {
+      start: string; // Hex color
+      end: string;   // Hex color
+      direction?: 'horizontal' | 'vertical' | 'diagonal';
+    };
+    opacity?: number;
   };
 }
 
@@ -131,12 +137,51 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
       // Clear existing shapes
       engine.clearShapes();
 
-      // Set background color if specified
-      if (slide.background?.type === 'color') {
+      // Apply background (color, gradient, or image)
+      if (slide.background) {
         const ctx = canvasRef.current.getContext('2d');
         if (ctx) {
-          ctx.fillStyle = slide.background.value;
-          ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          ctx.save();
+
+          // Apply opacity
+          if (slide.background.opacity !== undefined) {
+            ctx.globalAlpha = slide.background.opacity;
+          }
+
+          if (slide.background.type === 'color') {
+            // Solid color background
+            ctx.fillStyle = slide.background.value || '#1a1a1a';
+            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          } else if (slide.background.type === 'gradient' && slide.background.gradient) {
+            // Gradient background
+            const { start, end, direction } = slide.background.gradient;
+            let gradient;
+
+            if (direction === 'horizontal') {
+              gradient = ctx.createLinearGradient(0, 0, canvasRef.current.width, 0);
+            } else if (direction === 'diagonal') {
+              gradient = ctx.createLinearGradient(0, 0, canvasRef.current.width, canvasRef.current.height);
+            } else {
+              // vertical (default)
+              gradient = ctx.createLinearGradient(0, 0, 0, canvasRef.current.height);
+            }
+
+            gradient.addColorStop(0, start);
+            gradient.addColorStop(1, end);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          } else if (slide.background.type === 'image' && slide.background.value) {
+            // Image background (load and draw)
+            const img = new Image();
+            img.onload = () => {
+              ctx.drawImage(img, 0, 0, canvasRef.current!.width, canvasRef.current!.height);
+              // Re-render shapes on top of image
+              engine.render();
+            };
+            img.src = slide.background.value;
+          }
+
+          ctx.restore();
         }
       }
 

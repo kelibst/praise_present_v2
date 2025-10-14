@@ -186,16 +186,19 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
         className="relative"
         style={{
           width: '100%',
-          height: '100%',
           aspectRatio: '16/9',
           maxWidth: '100%',
-          maxHeight: '100%'
+          maxHeight: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
         }}
       >
         <SlideRenderer
           slide={slide}
           targetResolution={targetResolution}
           onRendered={handleRendered}
+          className="w-full h-full"
         />
 
         {/* Visual Selection Indicator (PowerPoint-style blue border) */}

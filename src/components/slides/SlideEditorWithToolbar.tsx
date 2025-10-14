@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { SlideEditor } from './SlideEditor';
 import { Slide } from './SlideRenderer';
 import { TypographyToolbar } from '../formatting/TypographyToolbar';
+import { BackgroundToolbar, SlideBackground } from '../formatting/BackgroundToolbar';
 import { PreviewWindow } from '../windows/PreviewWindow';
 import { TextShape } from '../../rendering/shapes/TextShape';
 import { TextStyle } from '../../rendering/types/shapes';
@@ -62,6 +63,7 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
   showToolbar = true
 }) => {
   const [selectedShape, setSelectedShape] = useState<TextShape | null>(null);
+  const [showBackgroundToolbar, setShowBackgroundToolbar] = useState(false);
 
   // Handle shape selection from SlideEditor
   const handleShapeSelect = useCallback((shape: TextShape | null) => {
@@ -130,14 +132,46 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
     }
   }, [slide, selectedShape, onSlideChange]);
 
+  // Handle background changes from BackgroundToolbar
+  const handleBackgroundChange = useCallback((background: SlideBackground) => {
+    console.log('🎨 SlideEditorWithToolbar: Background changed', background);
+
+    const updatedSlide: Slide = {
+      ...slide,
+      background
+    };
+
+    if (onSlideChange) {
+      onSlideChange(updatedSlide);
+    }
+  }, [slide, onSlideChange]);
+
+  // Get current background from slide or use default
+  const currentBackground: SlideBackground = slide.background || {
+    type: 'color',
+    value: '#1a1a1a',
+    opacity: 1.0
+  };
+
   return (
     <div className={`flex flex-col w-full h-full ${className}`}>
-      {/* Typography Toolbar - Appears when text is selected */}
-      {showToolbar && editable && selectedShape && (
-        <TypographyToolbar
-          selectedShape={selectedShape}
-          onFormatChange={handleFormatChange}
-        />
+      {/* Toolbars Section */}
+      {showToolbar && editable && (
+        <div className="flex flex-col">
+          {/* Background Toolbar - Always visible when editing */}
+          <BackgroundToolbar
+            currentBackground={currentBackground}
+            onBackgroundChange={handleBackgroundChange}
+          />
+
+          {/* Typography Toolbar - Appears when text is selected */}
+          {selectedShape && (
+            <TypographyToolbar
+              selectedShape={selectedShape}
+              onFormatChange={handleFormatChange}
+            />
+          )}
+        </div>
       )}
 
       {/* Slide Editor wrapped in PreviewWindow */}
