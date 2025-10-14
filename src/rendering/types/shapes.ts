@@ -43,7 +43,7 @@ export interface TextStyle extends ShapeStyle {
   letterSpacing?: number;
   wordSpacing?: number;
   textDecoration?: 'none' | 'underline' | 'overline' | 'line-through';
-  color?: Color;
+  color?: Color | string; // Allow hex strings for convenience
 }
 
 export interface ImageStyle {

@@ -4,6 +4,98 @@ This file tracks major features and changes implemented in PraisePresent.
 
 ## 2025-10-14
 
+### 🎨 Fixed Background Rendering in SlideRenderer
+**Time:** Evening
+**Description:** Fixed critical bug where background changes from settings/toolbar were not rendering on the actual slide canvas. Background was being manually drawn but then cleared by the rendering engine, and template was creating duplicate background that overwrote user settings.
+
+**Root Cause - Part 1:**
+- Background was manually drawn to canvas using `ctx.fillRect` before shape rendering
+- Then `engine.render()` was called, which cleared the canvas
+- The rendering engine didn't know about the manually-drawn background
+- Result: Background appeared briefly or not at all, despite being set correctly
+
+**Root Cause - Part 2 (Critical Discovery):**
+- ScriptureTemplate was creating its OWN BackgroundShape with theme colors
+- This template background was being added AFTER the SlideRenderer background
+- Result: Template's dark background (#0f172a) was covering user's selected background (#5e1e1e)
+- Console logs revealed both backgrounds were being rendered, but in wrong order
+
+**Solution:**
+- Removed manual canvas drawing of backgrounds (lines 143-188)
+- Created `convertSlideBackgroundToBackgroundStyle()` helper function
+- Converted `Slide.background` format to `BackgroundStyle` format
+- Created `BackgroundShape` instance and added it as first shape to engine
+- Engine now renders background as a shape with z-index of -1000 (always behind)
+- **Modified ScriptureTemplate to NOT create background when featureSettings.background is provided**
+
+**Technical Changes:**
+- [SlideRenderer.tsx:48-64](src/components/slides/SlideRenderer.tsx#L48): Added `parseHexColor()` helper for robust hex parsing
+- [SlideRenderer.tsx:67-112](src/components/slides/SlideRenderer.tsx#L67): Added conversion helper for background formats
+- [SlideRenderer.tsx:224-238](src/components/slides/SlideRenderer.tsx#L224): Create BackgroundShape and add to shape list
+- [ScriptureTemplate.ts:121-125](src/rendering/templates/ScriptureTemplate.ts#L121): Only create background if no featureSettings
+- Removed manual `ctx.fillRect` drawing code that was being cleared
+- Leveraged existing `BackgroundShape` class from rendering system
+- Removed debug logging after identifying issue
+
+**User Impact:**
+- Background settings from toolbar now render correctly on slide canvas
+- Background settings from feature settings modal work properly
+- User-selected backgrounds no longer overwritten by template defaults
+- All background types work: solid colors, gradients, images
+- Background persists through engine rendering cycles
+- Works in preview window, live display, and live screen
+- Consistent behavior across all rendering contexts
+
+## 2025-10-14
+
+### 🔧 Fixed Feature Settings Integration and Text Color Application
+**Time:** Late Afternoon
+**Description:** Resolved critical bugs where feature settings (especially text color) were not being applied to scripture slides, and fixed inconsistencies between settings modal and typography toolbar.
+
+**Issues Fixed:**
+1. **Feature Settings Not Applied to Slides:**
+   - Scripture slides were being generated without passing feature settings to templates
+   - Background and typography preferences from settings modal were completely ignored
+   - Modified `LivePresentationPage.tsx:381-461` to pass `featureSettings` to `ScriptureTemplate.generateSlide()`
+
+2. **Text Color Not Rendering:**
+   - Text color from feature settings was never reaching the rendering pipeline
+   - Added proper color application in `ScriptureTemplate.ts:174-195`
+   - Ensured color from typography settings takes precedence over theme defaults
+
+3. **Background Format Mismatch:**
+   - `SlideBackground` type (with optional value, gradient object) incompatible with `Slide.background` format
+   - Added conversion logic to transform feature settings background to slide background format
+   - Handles color, gradient, and image backgrounds correctly
+
+4. **Typography Toolbar Color Handling:**
+   - Simplified color handling in `TypographyToolbar.tsx:162-167`
+   - Removed redundant style merging that was causing property loss
+   - Color changes now properly applied to text shapes
+
+5. **Color Type Mismatch in Rendering:**
+   - `TextShape` expected `Color` object but received hex strings from toolbar
+   - Updated `TextShape.ts:169-177` to handle both Color objects and hex strings
+   - Updated `TextStyle` interface to allow `color?: Color | string`
+   - Fixes issue where text color was incorrectly interpreted
+
+**Technical Changes:**
+- [LivePresentationPage.tsx:408-420](src/pages/LivePresentationPage.tsx#L408): Pass feature settings to scripture template
+- [LivePresentationPage.tsx:417-420](src/pages/LivePresentationPage.tsx#L417): Convert SlideBackground format for slides
+- [ScriptureTemplate.ts:190-195](src/rendering/templates/ScriptureTemplate.ts#L190): Added debug logging for color application
+- [TypographyToolbar.tsx:108-114](src/components/formatting/TypographyToolbar.tsx#L108): Simplified format application
+- [TextShape.ts:169-177](src/rendering/shapes/TextShape.ts#L169): Handle both Color objects and hex strings
+- [shapes.ts:46](src/rendering/types/shapes.ts#L46): Updated TextStyle to accept string colors
+
+**User Impact:**
+- Settings configured in the modal now properly apply to new slides
+- Text color changes in both settings and toolbar work correctly
+- Background settings (color/gradient/image) render as expected
+- Consistent behavior between settings modal and quick toolbar edits
+- Text color is now applied to text (not background) as expected
+
+## 2025-10-14
+
 ### ✅ Implemented Persistent Feature-Specific Settings System
 **Time:** Afternoon
 **Description:** Implemented comprehensive feature-specific settings architecture allowing users to configure and persist default backgrounds and typography for scriptures, songs, and announcements separately.

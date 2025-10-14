@@ -105,17 +105,12 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
     } : { r: 255, g: 255, b: 255, a: 1.0 };
   };
 
-  // Apply formatting change - IMPORTANT: Merge with existing style to preserve all properties
+  // Apply formatting change
   const applyFormat = (updates: Partial<TextStyle>) => {
     if (!selectedShape) return;
 
-    // Merge updates with existing style to preserve color, alignment, etc.
-    const mergedUpdates: Partial<TextStyle> = {
-      ...selectedShape.textStyle,
-      ...updates
-    };
-
-    onFormatChange(selectedShape.id, mergedUpdates);
+    // Pass only the updates - SlideEditorWithToolbar will merge with existing style
+    onFormatChange(selectedShape.id, updates);
   };
 
   // Font size handlers
@@ -167,7 +162,8 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
   // Color handler
   const handleColorChange = (hex: string) => {
     setTextColor(hex);
-    applyFormat({ color: hexToColor(hex) });
+    // Pass hex string directly - rendering system handles conversion
+    applyFormat({ color: hex as any });
   };
 
   // Line height handler

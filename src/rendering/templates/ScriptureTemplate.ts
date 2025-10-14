@@ -118,9 +118,11 @@ export class ScriptureTemplate extends SlideTemplate {
       };
     }
 
-    // Background with solid color (simplified for PowerPoint pattern)
-    // Note: Background from featureSettings is handled by SlideRenderer
-    shapes.push(this.createScriptureBackground(content.theme));
+    // Background is handled by SlideRenderer when using featureSettings
+    // Only add template background if no featureSettings background is provided
+    if (!content.featureSettings?.background) {
+      shapes.push(this.createScriptureBackground(content.theme));
+    }
 
     // Main verse text
     if (content.verse) {
@@ -180,6 +182,7 @@ export class ScriptureTemplate extends SlideTemplate {
     // Apply typography from feature settings or use defaults
     const fontFamily = typography?.fontFamily || this.theme.fonts.primary;
     const fontSize = typography?.verseFontSize || this.style.verseFontSize!;
+    // CRITICAL: Use text color from settings if provided, otherwise fallback to theme
     const textColor = typography?.textColor || this.rgbToHex(this.theme.colors.text);
     const textAlign = typography?.textAlign || (this.style.centerAlign ? 'center' : 'left');
     const fontWeight = typography?.bold ? 'bold' : 'normal';

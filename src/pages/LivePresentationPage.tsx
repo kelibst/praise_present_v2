@@ -404,14 +404,25 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               verseNumber: verse.verse,
               theme: 'reading' as const,
               showTranslation: true,
-              emphasizeReference: true
+              emphasizeReference: true,
+              // Pass feature settings to template
+              featureSettings: {
+                background: scriptureSettings.background,
+                typography: scriptureSettings.typography
+              }
             };
 
             const shapes = scriptureTemplate.generateSlide(scriptureContent);
+
+            // Convert SlideBackground to Slide background format
+            const slideBackground = scriptureSettings.background.type === 'gradient'
+              ? { type: 'gradient' as const, value: `${scriptureSettings.background.gradient?.start || '#000000'},${scriptureSettings.background.gradient?.end || '#000000'}` }
+              : { type: scriptureSettings.background.type as 'color' | 'image', value: scriptureSettings.background.value || '#1a1a1a' };
+
             slides.push({
               id: `scripture-${verse.id || Date.now()}`,
               shapes: shapes,
-              background: { type: 'color', value: '#1a1a1a' }
+              background: slideBackground
             });
           } else {
             // Multiple consecutive verses on one slide
@@ -428,14 +439,25 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               verseNumber: firstVerse.verse,
               theme: 'reading' as const,
               showTranslation: true,
-              emphasizeReference: true
+              emphasizeReference: true,
+              // Pass feature settings to template
+              featureSettings: {
+                background: scriptureSettings.background,
+                typography: scriptureSettings.typography
+              }
             };
 
             const shapes = scriptureTemplate.generateSlide(scriptureContent);
+
+            // Convert SlideBackground to Slide background format
+            const slideBackground = scriptureSettings.background.type === 'gradient'
+              ? { type: 'gradient' as const, value: `${scriptureSettings.background.gradient?.start || '#000000'},${scriptureSettings.background.gradient?.end || '#000000'}` }
+              : { type: scriptureSettings.background.type as 'color' | 'image', value: scriptureSettings.background.value || '#1a1a1a' };
+
             slides.push({
               id: `scripture-group-${firstVerse.id}-${lastVerse.id}`,
               shapes: shapes,
-              background: { type: 'color', value: '#1a1a1a' }
+              background: slideBackground
             });
           }
         }

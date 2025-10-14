@@ -3,6 +3,9 @@ import { RenderingEngine, Shape } from '../../rendering';
 import { RenderQuality } from '../../rendering/types/rendering';
 import { ResourceManager } from '../../rendering/utils/ResourceManager';
 import { ShapeReconstructor } from '../../rendering/utils/ShapeReconstructor';
+import { BackgroundShape } from '../../rendering/shapes/BackgroundShape';
+import { BackgroundStyle } from '../../rendering/types/shapes';
+import { Color, Gradient } from '../../rendering/types/geometry';
 
 export interface Slide {
   id: string;
@@ -41,6 +44,80 @@ interface SlideRendererProps {
    */
   className?: string;
 }
+
+/**
+ * Helper function to parse hex color string to Color object
+ */
+const parseHexColor = (hex: string, alpha: number = 1): Color => {
+  // Remove # if present
+  const cleanHex = hex.replace('#', '');
+
+  // Handle 3-digit hex (e.g., #f00 -> #ff0000)
+  const fullHex = cleanHex.length === 3
+    ? cleanHex.split('').map(c => c + c).join('')
+    : cleanHex;
+
+  const r = parseInt(fullHex.slice(0, 2), 16) || 0;
+  const g = parseInt(fullHex.slice(2, 4), 16) || 0;
+  const b = parseInt(fullHex.slice(4, 6), 16) || 0;
+
+  return { r, g, b, a: alpha };
+};
+
+/**
+ * Helper function to convert Slide.background format to BackgroundStyle
+ */
+const convertSlideBackgroundToBackgroundStyle = (
+  slideBackground: Slide['background'],
+  resolution: { width: number; height: number }
+): BackgroundStyle | null => {
+  if (!slideBackground) return null;
+
+  const { type, value, gradient, opacity } = slideBackground;
+
+  if (type === 'color') {
+    // Convert hex string to Color object
+    const hex = value || '#1a1a1a';
+    const color = parseHexColor(hex, opacity || 1);
+
+    return { type: 'color', color };
+  }
+
+  if (type === 'gradient' && gradient) {
+    // Convert gradient format
+    const { start, end, direction } = gradient;
+
+    // Parse colors using helper function
+    const startColor = parseHexColor(start, 1);
+    const endColor = parseHexColor(end, 1);
+
+    // Determine gradient angle from direction
+    let angle = 90; // vertical (default)
+    if (direction === 'horizontal') angle = 0;
+    if (direction === 'diagonal') angle = 45;
+
+    const gradientStyle: Gradient = {
+      type: 'linear',
+      angle,
+      stops: [
+        { offset: 0, color: startColor },
+        { offset: 1, color: endColor }
+      ]
+    };
+
+    return { type: 'gradient', gradient: gradientStyle };
+  }
+
+  if (type === 'image' && value) {
+    return {
+      type: 'image',
+      imageUrl: value,
+      imageStyle: { objectFit: 'cover' }
+    };
+  }
+
+  return null;
+};
 
 /**
  * SlideRenderer - Core rendering component (PowerPoint pattern)
@@ -139,66 +216,39 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
       // Clear existing shapes
       engine.clearShapes();
 
-      // Apply background (color, gradient, or image)
+      // Convert slide background to BackgroundShape and add as first shape
+      let allShapes: Shape[] = [];
+
       if (slide.background) {
-        const ctx = canvasRef.current.getContext('2d');
-        if (ctx) {
-          ctx.save();
+        const backgroundStyle = convertSlideBackgroundToBackgroundStyle(slide.background, targetResolution);
 
-          // Apply opacity
-          if (slide.background.opacity !== undefined) {
-            ctx.globalAlpha = slide.background.opacity;
-          }
+        if (backgroundStyle) {
+          const backgroundShape = new BackgroundShape({
+            position: { x: 0, y: 0 },
+            size: { width: targetResolution.width, height: targetResolution.height },
+            opacity: slide.background.opacity || 1,
+            zIndex: -1000, // Ensure background is always behind
+            backgroundStyle
+          });
 
-          if (slide.background.type === 'color') {
-            // Solid color background
-            ctx.fillStyle = slide.background.value || '#1a1a1a';
-            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-          } else if (slide.background.type === 'gradient' && slide.background.gradient) {
-            // Gradient background
-            const { start, end, direction } = slide.background.gradient;
-            let gradient;
-
-            if (direction === 'horizontal') {
-              gradient = ctx.createLinearGradient(0, 0, canvasRef.current.width, 0);
-            } else if (direction === 'diagonal') {
-              gradient = ctx.createLinearGradient(0, 0, canvasRef.current.width, canvasRef.current.height);
-            } else {
-              // vertical (default)
-              gradient = ctx.createLinearGradient(0, 0, 0, canvasRef.current.height);
-            }
-
-            gradient.addColorStop(0, start);
-            gradient.addColorStop(1, end);
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-          } else if (slide.background.type === 'image' && slide.background.value) {
-            // Image background (load and draw)
-            const img = new Image();
-            img.onload = () => {
-              ctx.drawImage(img, 0, 0, canvasRef.current!.width, canvasRef.current!.height);
-              // Re-render shapes on top of image
-              engine.render();
-            };
-            img.src = slide.background.value;
-          }
-
-          ctx.restore();
+          allShapes.push(backgroundShape);
         }
       }
 
       // Reconstruct shapes if they've been serialized by React state
       const reconstructedShapes = ShapeReconstructor.ensureShapeInstances(slide.shapes);
+      allShapes = [...allShapes, ...reconstructedShapes];
 
       // Diagnostic logging disabled for production
       // console.log('🔧 SlideRenderer: Shape reconstruction', {
       //   originalCount: slide.shapes.length,
       //   reconstructedCount: reconstructedShapes.length,
+      //   totalWithBackground: allShapes.length,
       //   needsReconstruction: slide.shapes.some(shape => ShapeReconstructor.needsReconstruction(shape))
       // });
 
-      // Add all shapes to engine
-      reconstructedShapes.forEach((shape: Shape, index: number) => {
+      // Add all shapes to engine (background first, then content shapes)
+      allShapes.forEach((shape: Shape, index: number) => {
         // console.log('🔍 SlideRenderer: Adding shape', {
         //   index,
         //   id: shape.id,

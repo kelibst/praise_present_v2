@@ -167,7 +167,12 @@ export class TextShape extends Shape {
                       style.verticalAlign === 'bottom' ? 'bottom' : 'top';
 
     if (style.color) {
-      ctx.fillStyle = colorToString(style.color);
+      // Handle both Color objects and hex strings
+      if (typeof style.color === 'string') {
+        ctx.fillStyle = style.color;
+      } else {
+        ctx.fillStyle = colorToString(style.color);
+      }
     }
   }
 
@@ -222,7 +227,12 @@ export class TextShape extends Shape {
                       style.verticalAlign === 'bottom' ? 'bottom' : 'top';
 
     if (style.color) {
-      ctx.fillStyle = colorToString(style.color);
+      // Handle both Color objects and hex strings
+      if (typeof style.color === 'string') {
+        ctx.fillStyle = style.color;
+      } else {
+        ctx.fillStyle = colorToString(style.color);
+      }
     }
 
     // Text decorations will be handled separately as Canvas doesn't support them directly
