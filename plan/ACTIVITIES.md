@@ -4,9 +4,9 @@ This file tracks major features and changes implemented in PraisePresent.
 
 ## 2025-10-14
 
-### ✅ Media Background Upload with Image Preview for Scripture Settings
+### ✅ Media Background Upload with Image Preview for Scripture Settings + Rendering Fix
 **Time:** Evening (Latest)
-**Description:** Added image upload functionality with base64 conversion and live preview to scripture background settings, allowing users to upload images directly and see a preview before applying.
+**Description:** Added image upload functionality with base64 conversion and live preview to scripture background settings. Fixed critical rendering issue where image backgrounds appeared as white placeholders due to render loop not running continuously.
 
 **Features Added:**
 1. **File Upload Handler:**
@@ -52,6 +52,26 @@ This file tracks major features and changes implemented in PraisePresent.
 7. Settings auto-save to Redux and localStorage
 8. Background immediately applies to all scripture slides
 
+**Critical Bug Fix - Image Background Rendering:**
+**Problem:**
+- Uploaded images appeared as white/gray placeholders instead of displaying
+- Images loaded successfully (confirmed in console logs) but weren't rendered
+- Root cause: SlideRenderer called `engine.render()` once, then stopped
+- When image loaded asynchronously, no render cycle existed to display it
+
+**Solution:**
+- [SlideRenderer.tsx:186](src/components/slides/SlideRenderer.tsx#L186): Changed from single `engine.render()` to `engine.startRenderLoop()`
+- Render loop now runs continuously at 60fps via requestAnimationFrame
+- When image finishes loading, next render frame automatically displays it
+- Proper cleanup: `engine.dispose()` stops render loop on unmount
+
+**Technical Details:**
+- BackgroundShape creates ImageShape with async image loading
+- Initially renders placeholder while `loadState === 'loading'`
+- When image loads, `loadState` changes to `'loaded'`
+- Continuous render loop picks up the change and displays image
+- No manual intervention needed - render loop handles everything
+
 **Impact:**
 - Users can now upload images directly without external hosting
 - Base64 encoding eliminates file path issues across sessions
@@ -59,6 +79,8 @@ This file tracks major features and changes implemented in PraisePresent.
 - Image metadata helps users manage file sizes
 - Seamless integration with existing background system
 - All images persist in localStorage (with size limits)
+- **Image backgrounds now display correctly after loading**
+- Smooth experience with no flashing or blank slides
 
 ## 2025-10-14
 

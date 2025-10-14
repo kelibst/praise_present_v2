@@ -216,12 +216,6 @@ export class ImageShape extends Shape {
       return Promise.resolve();
     }
 
-    console.log('🖼️ ImageShape: Starting image load', {
-      srcPreview: this.src.substring(0, 50),
-      isBase64: this.src.startsWith('data:image'),
-      srcLength: this.src.length
-    });
-
     this.loadState = ImageLoadState.LOADING;
 
     this.loadPromise = new Promise((resolve, reject) => {
@@ -232,21 +226,13 @@ export class ImageShape extends Shape {
       }
 
       img.onload = () => {
-        console.log('✅ ImageShape: Image loaded successfully', {
-          width: img.width,
-          height: img.height
-        });
         this.image = img;
         this.loadState = ImageLoadState.LOADED;
         this.notifyLoadCallbacks(true);
         resolve();
       };
 
-      img.onerror = (e) => {
-        console.error('❌ ImageShape: Image load failed', {
-          srcPreview: this.src.substring(0, 50),
-          error: e
-        });
+      img.onerror = () => {
         this.image = null;
         this.loadState = ImageLoadState.ERROR;
         this.notifyLoadCallbacks(false);

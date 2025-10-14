@@ -439,16 +439,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   opacity: scriptureSettings.background.opacity
                 };
 
-            console.log('📋 LivePresentationPage: Creating SINGLE verse slide with background', {
-              verseId: verse.id,
-              settingsType: scriptureSettings.background.type,
-              settingsHasValue: !!scriptureSettings.background.value,
-              settingsValuePreview: scriptureSettings.background.value?.substring(0, 50),
-              slideBackgroundType: slideBackground.type,
-              slideBackgroundHasValue: !!(slideBackground as any).value,
-              slideBackgroundValuePreview: (slideBackground as any).value?.substring(0, 50)
-            });
-
             slides.push({
               id: `scripture-${verse.id || Date.now()}`,
               shapes: shapes,
