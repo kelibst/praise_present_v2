@@ -4,6 +4,35 @@ This file tracks major features and changes implemented in PraisePresent.
 
 ## 2025-10-14
 
+### ✅ Implement Element-Specific Color Settings for Scripture Elements
+**Time:** Evening (Latest)
+**Description:** Implemented separate color settings for verse, reference, and translation elements so that changing one element's color doesn't affect the others.
+
+**Problem:**
+- User edits Reference → changes color to yellow → clicks "Save as Default"
+- User selects different verse → ALL elements (verse, reference, translation) appear yellow
+- Only wanted reference to be yellow, not verse or translation
+
+**Root Cause:**
+- All three element types shared one `textColor` setting
+- Saving reference color as default updated `textColor` for everyone
+- No way to have element-specific colors
+
+**Solution:**
+- [featureSettingsSlice.ts:13-15](src/lib/featureSettingsSlice.ts#L13): Added `verseColor`, `referenceColor`, `translationColor` fields to ScriptureSettings
+- [SlideEditorWithToolbar.tsx:200-212](src/components/slides/SlideEditorWithToolbar.tsx#L200): Updated handleSaveAsDefault to save element-specific colors
+- [ScriptureTemplate.ts:189](src/rendering/templates/ScriptureTemplate.ts#L189): Use `verseColor || textColor || theme default`
+- [ScriptureTemplate.ts:308](src/rendering/templates/ScriptureTemplate.ts#L308): Use `referenceColor || textColor || white`
+- [ScriptureTemplate.ts:377](src/rendering/templates/ScriptureTemplate.ts#L377): Use `translationColor || textColor || white`
+
+**Impact:**
+- Each element type now has its own independent color setting
+- Fallback chain: element-specific → shared textColor → theme default
+- Users can customize colors per element or use shared color
+- "Save as Default" now saves both font size AND color for specific element
+
+## 2025-10-14
+
 ### 🔧 Save Element-Specific Font Sizes with "Save as Default"
 **Time:** Evening
 **Description:** Fixed "Save as Default" to save font sizes for the specific element type (verse/reference/translation), not just general typography settings.

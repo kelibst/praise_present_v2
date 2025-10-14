@@ -412,6 +412,13 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               }
             };
 
+            console.log('🎨 Generating slide with scripture settings:', {
+              referenceFontSize: scriptureSettings.typography.referenceFontSize,
+              textColor: scriptureSettings.typography.textColor,
+              bold: scriptureSettings.typography.bold,
+              italic: scriptureSettings.typography.italic
+            });
+
             const shapes = scriptureTemplate.generateSlide(scriptureContent);
 
             // Convert SlideBackground to Slide background format

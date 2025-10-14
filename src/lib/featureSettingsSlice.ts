@@ -9,7 +9,10 @@ export interface ScriptureSettings {
     referenceFontSize: number;
     translationFontSize: number;
     fontFamily: string;
-    textColor: string;
+    textColor: string; // Default/shared color
+    verseColor?: string; // Verse-specific color (optional, falls back to textColor)
+    referenceColor?: string; // Reference-specific color (optional, falls back to textColor)
+    translationColor?: string; // Translation-specific color (optional, falls back to textColor)
     textAlign: "left" | "center" | "right";
     bold: boolean;
     italic: boolean;

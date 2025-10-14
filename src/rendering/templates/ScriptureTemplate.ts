@@ -23,7 +23,10 @@ export interface ScriptureSlideContent extends TemplateContent {
       referenceFontSize?: number;
       translationFontSize?: number;
       fontFamily?: string;
-      textColor?: string;
+      textColor?: string; // Shared/default color
+      verseColor?: string; // Verse-specific color
+      referenceColor?: string; // Reference-specific color
+      translationColor?: string; // Translation-specific color
       textAlign?: 'left' | 'center' | 'right';
       bold?: boolean;
       italic?: boolean;
@@ -182,8 +185,8 @@ export class ScriptureTemplate extends SlideTemplate {
     // Apply typography from feature settings or use defaults
     const fontFamily = typography?.fontFamily || this.theme.fonts.primary;
     const fontSize = typography?.verseFontSize || this.style.verseFontSize!;
-    // CRITICAL: Use text color from settings if provided, otherwise fallback to theme
-    const textColor = typography?.textColor || this.rgbToHex(this.theme.colors.text);
+    // CRITICAL: Use verse-specific color if available, fallback to shared textColor, then theme
+    const textColor = typography?.verseColor || typography?.textColor || this.rgbToHex(this.theme.colors.text);
     const textAlign = typography?.textAlign || (this.style.centerAlign ? 'center' : 'left');
     const fontWeight = typography?.bold ? 'bold' : 'normal';
     const fontStyle = typography?.italic ? 'italic' : 'normal';
@@ -301,10 +304,14 @@ export class ScriptureTemplate extends SlideTemplate {
     // Apply typography from feature settings or use defaults
     const fontFamily = typography?.fontFamily || this.theme.fonts.display;
     const fontSize = typography?.referenceFontSize || this.style.referenceFontSize!;
-    // CRITICAL: Use same text color as verse if provided, otherwise fallback to white for visibility
-    const textColor = typography?.textColor || '#ffffff';
+    // CRITICAL: Use reference-specific color if available, fallback to shared textColor, then white
+    const textColor = typography?.referenceColor || typography?.textColor || '#ffffff';
     // Use referenceAlign if provided, otherwise use the general textAlign or default
     const textAlign = typography?.referenceAlign || typography?.textAlign || (this.style.centerAlign ? 'center' : 'right');
+    // Apply bold/italic from feature settings or use defaults (bold/italic for references)
+    const fontWeight = typography?.bold ? 'bold' : 'normal';
+    const fontStyle = typography?.italic ? 'italic' : 'normal';
+    const lineHeight = typography?.lineHeight || this.style.lineSpacing;
 
     // Reference should stay fixed size - no auto-shrink (user expects consistent reference size)
     const referenceShape = new TextShape({
@@ -326,8 +333,9 @@ export class ScriptureTemplate extends SlideTemplate {
       fontSize,
       color: textColor,
       textAlign: textAlign as any,
-      fontWeight: 'bold',
-      fontStyle: 'italic'
+      fontWeight: fontWeight as any,
+      fontStyle: fontStyle as any,
+      lineHeight
     });
 
     console.log('📖 ScriptureTemplate: Created reference shape', {
@@ -338,7 +346,14 @@ export class ScriptureTemplate extends SlideTemplate {
       size: { width: bounds.width, height: bounds.height },
       color: textColor,
       textAlign,
-      fontSize
+      fontSize,
+      fontWeight,
+      fontStyle,
+      fromTypography: {
+        textColor: typography?.textColor,
+        bold: typography?.bold,
+        italic: typography?.italic
+      }
     });
 
     return referenceShape;
@@ -358,8 +373,8 @@ export class ScriptureTemplate extends SlideTemplate {
     // Apply typography from feature settings or use defaults
     const fontFamily = typography?.fontFamily || this.theme.fonts.secondary;
     const fontSize = typography?.translationFontSize || this.style.translationFontSize!;
-    // CRITICAL: Use same text color as verse if provided, otherwise fallback to white for visibility
-    const textColor = typography?.textColor || '#ffffff';
+    // CRITICAL: Use translation-specific color if available, fallback to shared textColor, then white
+    const textColor = typography?.translationColor || typography?.textColor || '#ffffff';
     const textAlign = typography?.textAlign || (this.style.centerAlign ? 'center' : 'right');
 
     // Translation should stay fixed size - no auto-shrink

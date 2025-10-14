@@ -181,24 +181,34 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
       }
     }
 
-    // Determine which element type this is and update the appropriate font size
+    console.log('💾 Extracting color from style:', {
+      originalColor: style.color,
+      extractedHex: colorHex
+    });
+
+    // Determine which element type this is and update the appropriate font size AND color
     const elementType = selectedShape.metadata?.elementType;
     const updates: any = {
       fontFamily: style.fontFamily || 'Arial',
-      textColor: colorHex,
       textAlign: (style.textAlign as 'left' | 'center' | 'right') || 'center',
       bold: style.fontWeight === 'bold',
       italic: style.fontStyle === 'italic',
       lineHeight: style.lineHeight || 1.5,
     };
 
-    // Update the appropriate font size based on element type
+    // Update the appropriate font size AND color based on element type
     if (elementType === 'verse') {
       updates.verseFontSize = style.fontSize || 64;
+      updates.verseColor = colorHex; // Verse-specific color
     } else if (elementType === 'reference') {
       updates.referenceFontSize = style.fontSize || 36;
+      updates.referenceColor = colorHex; // Reference-specific color
     } else if (elementType === 'translation') {
       updates.translationFontSize = style.fontSize || 28;
+      updates.translationColor = colorHex; // Translation-specific color
+    } else {
+      // Fallback: update the shared textColor if element type unknown
+      updates.textColor = colorHex;
     }
 
     console.log('💾 Saving as default for element type:', elementType, updates);
