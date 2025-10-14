@@ -4,6 +4,64 @@ This file tracks major features and changes implemented in PraisePresent.
 
 ## 2025-10-14
 
+### ✅ Media Background Upload with Image Preview for Scripture Settings
+**Time:** Evening (Latest)
+**Description:** Added image upload functionality with base64 conversion and live preview to scripture background settings, allowing users to upload images directly and see a preview before applying.
+
+**Features Added:**
+1. **File Upload Handler:**
+   - Added file input to BackgroundToolbar for local image uploads
+   - Converts uploaded images to base64 data URLs for storage
+   - Validates file types (JPG, PNG, WebP, GIF) and size (max 2MB)
+   - Shows upload progress and error states
+
+2. **Improved Image Controls UI:**
+   - Replaced single URL input with dual options: Upload button + URL field
+   - Upload button with hidden file input for better UX
+   - Clear button appears when image is selected
+   - Error messages for invalid uploads
+
+3. **Image Preview Component:**
+   - 200×112px thumbnail preview (16:9 aspect ratio)
+   - Shows actual image with opacity applied
+   - Displays image dimensions and file size
+   - Only visible when background type is 'image'
+
+4. **Integration with Settings:**
+   - Preview section added below BackgroundToolbar in ScriptureSettingsPanel
+   - Auto-calculates image info when background changes
+   - Real-time updates as settings change
+   - Clean, informative layout with image metadata
+
+**Technical Implementation:**
+- [BackgroundToolbar.tsx:70-71](src/components/formatting/BackgroundToolbar.tsx#L70): Added upload state management
+- [BackgroundToolbar.tsx:174-213](src/components/formatting/BackgroundToolbar.tsx#L174): File upload handler with validation
+- [BackgroundToolbar.tsx:377-427](src/components/formatting/BackgroundToolbar.tsx#L377): Updated image controls UI
+- [ScriptureSettingsPanel.tsx:1](src/components/settings/ScriptureSettingsPanel.tsx#L1): Added React hooks and ImageIcon
+- [ScriptureSettingsPanel.tsx:27](src/components/settings/ScriptureSettingsPanel.tsx#L27): Image info state tracking
+- [ScriptureSettingsPanel.tsx:42-64](src/components/settings/ScriptureSettingsPanel.tsx#L42): useEffect to calculate image metadata
+- [ScriptureSettingsPanel.tsx:97-155](src/components/settings/ScriptureSettingsPanel.tsx#L97): Image preview section
+
+**User Flow:**
+1. User opens Settings → Scripture Settings
+2. User selects "Image" background type in BackgroundToolbar
+3. User clicks "Upload Image" button or enters URL
+4. File validation runs (type & size checks)
+5. Image converts to base64 and stores in settings
+6. Preview appears showing thumbnail with dimensions and file size
+7. Settings auto-save to Redux and localStorage
+8. Background immediately applies to all scripture slides
+
+**Impact:**
+- Users can now upload images directly without external hosting
+- Base64 encoding eliminates file path issues across sessions
+- Live preview gives confidence before applying
+- Image metadata helps users manage file sizes
+- Seamless integration with existing background system
+- All images persist in localStorage (with size limits)
+
+## 2025-10-14
+
 ### ✅ Implement Element-Specific Color Settings for Scripture Elements
 **Time:** Evening (Latest)
 **Description:** Implemented separate color settings for verse, reference, and translation elements so that changing one element's color doesn't affect the others.

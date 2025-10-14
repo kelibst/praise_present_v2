@@ -18,17 +18,25 @@ export class BackgroundShape extends Shape {
     super(props, {});
     this.backgroundStyle = props.backgroundStyle;
 
+    // Background shapes are typically at the lowest z-index
+    this.zIndex = -1000;
+
     // Initialize image shape if background type is image
+    // Do this AFTER setting zIndex so initialization is complete
     if (this.backgroundStyle.type === 'image' && this.backgroundStyle.imageUrl) {
       this.createImageShape();
     }
-
-    // Background shapes are typically at the lowest z-index
-    this.zIndex = -1000;
   }
 
   private createImageShape(): void {
     if (!this.backgroundStyle.imageUrl) return;
+
+    console.log('🖼️ BackgroundShape: Creating image shape', {
+      imageUrlPreview: this.backgroundStyle.imageUrl.substring(0, 50),
+      isBase64: this.backgroundStyle.imageUrl.startsWith('data:image'),
+      size: this.size,
+      opacity: this.opacity
+    });
 
     this.imageShape = new ImageShape(
       {
@@ -40,7 +48,17 @@ export class BackgroundShape extends Shape {
       this.backgroundStyle.imageStyle
     );
 
+    // Start loading the image
     this.imageShape.setSrc(this.backgroundStyle.imageUrl);
+
+    // Log when image loads (rendering engine will pick it up on next frame)
+    this.imageShape.onLoad((success) => {
+      if (success) {
+        console.log('🎨 BackgroundShape: Image loaded successfully, will render on next frame');
+      } else {
+        console.error('❌ BackgroundShape: Image failed to load');
+      }
+    });
   }
 
   public render(context: RenderContext): void {
@@ -128,9 +146,20 @@ export class BackgroundShape extends Shape {
   }
 
   private renderImageBackground(ctx: CanvasRenderingContext2D, context: RenderContext): void {
-    if (!this.imageShape) return;
+    if (!this.imageShape) {
+      console.warn('⚠️ BackgroundShape: No imageShape created');
+      return;
+    }
 
-    if (this.imageShape.getLoadState() === ImageLoadState.LOADED) {
+    const loadState = this.imageShape.getLoadState();
+    console.log('🖼️ BackgroundShape.renderImageBackground:', {
+      loadState,
+      isLoaded: loadState === ImageLoadState.LOADED,
+      hasImage: !!this.imageShape
+    });
+
+    if (loadState === ImageLoadState.LOADED) {
+      console.log('✅ BackgroundShape: Rendering LOADED image');
       // Update image shape properties to match background
       this.imageShape.position = this.position;
       this.imageShape.size = this.size;
@@ -139,6 +168,7 @@ export class BackgroundShape extends Shape {
       // Render the image
       this.imageShape.render(context);
     } else {
+      console.log('⏳ BackgroundShape: Rendering placeholder (loadState:', loadState, ')');
       // Render placeholder while loading
       this.renderImagePlaceholder(ctx);
     }

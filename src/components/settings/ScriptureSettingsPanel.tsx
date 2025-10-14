@@ -1,5 +1,5 @@
-import React from 'react';
-import { BookOpen, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BookOpen, RotateCcw, Image as ImageIcon } from 'lucide-react';
 import { BackgroundToolbar, SlideBackground } from '../formatting/BackgroundToolbar';
 import { ScriptureSettings } from '../../lib/featureSettingsSlice';
 
@@ -24,6 +24,8 @@ export const ScriptureSettingsPanel: React.FC<ScriptureSettingsPanelProps> = ({
   onUpdate,
   onReset
 }) => {
+  const [imageInfo, setImageInfo] = useState<{ width: number; height: number; size: string } | null>(null);
+
   const handleBackgroundChange = (background: SlideBackground) => {
     onUpdate({ background });
   };
@@ -36,6 +38,30 @@ export const ScriptureSettingsPanel: React.FC<ScriptureSettingsPanelProps> = ({
       }
     });
   };
+
+  // Calculate image info when background changes
+  useEffect(() => {
+    if (settings.background.type === 'image' && settings.background.value) {
+      const img = new Image();
+      img.onload = () => {
+        // Calculate approximate size from base64 string
+        const base64Length = settings.background.value?.length || 0;
+        const sizeInBytes = (base64Length * 3) / 4;
+        const sizeInKB = sizeInBytes / 1024;
+        const sizeInMB = sizeInKB / 1024;
+        const sizeStr = sizeInMB > 1 ? `${sizeInMB.toFixed(2)} MB` : `${sizeInKB.toFixed(0)} KB`;
+
+        setImageInfo({
+          width: img.width,
+          height: img.height,
+          size: sizeStr
+        });
+      };
+      img.src = settings.background.value;
+    } else {
+      setImageInfo(null);
+    }
+  }, [settings.background.type, settings.background.value]);
 
   return (
     <div className="flex flex-col gap-6 p-6 bg-gray-900 rounded-lg">
@@ -67,6 +93,65 @@ export const ScriptureSettingsPanel: React.FC<ScriptureSettingsPanelProps> = ({
             onBackgroundChange={handleBackgroundChange}
           />
         </div>
+
+        {/* Image Preview - Only show when background type is image */}
+        {settings.background.type === 'image' && settings.background.value && (
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+            <div className="flex items-start gap-4">
+              {/* Preview Thumbnail */}
+              <div className="relative group">
+                <div className="w-[200px] h-[112px] rounded border-2 border-gray-600 overflow-hidden bg-gray-900 flex items-center justify-center">
+                  {settings.background.value ? (
+                    <img
+                      src={settings.background.value}
+                      alt="Background preview"
+                      className="w-full h-full object-cover"
+                      style={{ opacity: settings.background.opacity || 1.0 }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 text-gray-500">
+                      <ImageIcon className="w-8 h-8" />
+                      <span className="text-xs">No image</span>
+                    </div>
+                  )}
+                </div>
+                {/* Aspect ratio indicator */}
+                <div className="absolute bottom-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
+                  16:9
+                </div>
+              </div>
+
+              {/* Image Info */}
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-blue-400" />
+                  <h5 className="text-sm font-semibold text-white">Background Image Preview</h5>
+                </div>
+                {imageInfo && (
+                  <div className="space-y-1 text-xs text-gray-400">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">Dimensions:</span>
+                      <span className="text-white font-mono">{imageInfo.width} × {imageInfo.height}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">Size:</span>
+                      <span className="text-white font-mono">{imageInfo.size}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">Opacity:</span>
+                      <span className="text-white font-mono">{Math.round((settings.background.opacity || 1.0) * 100)}%</span>
+                    </div>
+                  </div>
+                )}
+                <div className="pt-2">
+                  <p className="text-xs text-gray-500 italic">
+                    This preview shows how your image will appear as the slide background.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Typography Settings */}

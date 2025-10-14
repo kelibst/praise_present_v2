@@ -182,7 +182,10 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
       engineRef.current = engine;
       resourceManager.registerEngine(resourceId, engine);
 
-      // console.log('✅ SlideRenderer: Engine created successfully');
+      // Start continuous render loop to handle async image loading
+      engine.startRenderLoop();
+
+      // console.log('✅ SlideRenderer: Engine created and render loop started');
 
       // Notify parent that canvas is ready
       if (onRendered) {
@@ -220,9 +223,23 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
       let allShapes: Shape[] = [];
 
       if (slide.background) {
+        console.log('🖼️ SlideRenderer: Processing background', {
+          type: slide.background.type,
+          hasValue: !!slide.background.value,
+          valuePreview: slide.background.value?.substring(0, 50),
+          isBase64: slide.background.value?.startsWith('data:image'),
+          opacity: slide.background.opacity
+        });
+
         const backgroundStyle = convertSlideBackgroundToBackgroundStyle(slide.background, targetResolution);
 
         if (backgroundStyle) {
+          console.log('🎨 SlideRenderer: Created backgroundStyle', {
+            type: backgroundStyle.type,
+            hasImageUrl: !!(backgroundStyle as any).imageUrl,
+            imageUrlPreview: (backgroundStyle as any).imageUrl?.substring(0, 50)
+          });
+
           const backgroundShape = new BackgroundShape({
             position: { x: 0, y: 0 },
             size: { width: targetResolution.width, height: targetResolution.height },
@@ -262,10 +279,10 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
         engine.addShape(shape);
       });
 
-      // Render once
-      engine.render();
+      // No need to manually render - the render loop is already running
+      // and will continuously render, picking up async image loads
 
-      // console.log('✅ SlideRenderer: Render complete', {
+      // console.log('✅ SlideRenderer: Shapes added, render loop will handle rendering', {
       //   slideId: slide.id,
       //   shapesRendered: slide.shapes.length
       // });

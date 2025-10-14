@@ -67,6 +67,8 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
   );
   const [imageUrl, setImageUrl] = useState(currentBackground.value || '');
   const [opacity, setOpacity] = useState(currentBackground.opacity || 1.0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Sync local state with current background
   // IMPORTANT: Use JSON.stringify for gradient to detect deep changes in nested object
@@ -162,10 +164,52 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
   // Handle image change
   const handleImageChange = (url: string) => {
     setImageUrl(url);
+    setUploadError(null);
     applyBackground({
       type: 'image',
       value: url
     });
+  };
+
+  // Handle file upload
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!validTypes.includes(file.type)) {
+      setUploadError('Invalid file type. Please upload JPG, PNG, WebP, or GIF.');
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    const maxSize = 2 * 1024 * 1024; // 2MB in bytes
+    if (file.size > maxSize) {
+      setUploadError('File too large. Maximum size is 2MB.');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64String = reader.result as string;
+        handleImageChange(base64String);
+        setIsUploading(false);
+      };
+      reader.onerror = () => {
+        setUploadError('Failed to read file. Please try again.');
+        setIsUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      setUploadError('Upload failed. Please try again.');
+      setIsUploading(false);
+    }
   };
 
   // Handle opacity change
@@ -333,22 +377,52 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
         {bgType === 'image' && (
           <>
             <div className="flex items-center gap-2">
-              <Upload className="w-4 h-4 text-gray-400" />
+              {/* Upload Button */}
+              <label className={`px-3 py-1 text-xs rounded border transition-colors cursor-pointer flex items-center gap-1 ${
+                isUploading
+                  ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-wait'
+                  : 'bg-blue-600 hover:bg-blue-700 border-blue-500 text-white'
+              }`}>
+                <Upload className="w-3 h-3" />
+                {isUploading ? 'Uploading...' : 'Upload Image'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                  className="hidden"
+                />
+              </label>
+
+              {/* URL Input */}
+              <span className="text-xs text-gray-400">or</span>
               <input
                 type="text"
                 value={imageUrl}
                 onChange={(e) => handleImageChange(e.target.value)}
-                placeholder="Enter image URL or upload..."
-                className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-3 py-1 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter image URL..."
+                className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-3 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <button
-                onClick={() => handleImageChange('')}
-                className="p-1 bg-gray-800 hover:bg-red-600 text-gray-300 rounded border border-gray-600 transition-colors"
-                title="Clear image"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
+
+              {/* Clear Button */}
+              {imageUrl && (
+                <button
+                  onClick={() => handleImageChange('')}
+                  className="p-1 bg-gray-800 hover:bg-red-600 text-gray-300 rounded border border-gray-600 transition-colors"
+                  title="Clear image"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
             </div>
+
+            {/* Error Message */}
+            {uploadError && (
+              <div className="text-xs text-red-400 flex items-center gap-1">
+                <span>⚠️</span>
+                <span>{uploadError}</span>
+              </div>
+            )}
           </>
         )}
 
