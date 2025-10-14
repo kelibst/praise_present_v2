@@ -51,25 +51,25 @@ export class ScriptureTemplate extends SlideTemplate {
     // Fixed positions for 1920x1080 resolution (PowerPoint pattern)
     const placeholders: TemplatePlaceholder[] = [
       {
-        id: 'verse',
-        name: 'Bible Verse',
-        type: 'text',
-        bounds: { x: 100, y: 200, width: 1720, height: 600 }, // Main verse area
-        required: true
-      },
-      {
         id: 'reference',
         name: 'Scripture Reference',
         type: 'text',
-        bounds: { x: 1200, y: 900, width: 600, height: 80 }, // Bottom right
+        bounds: { x: 100, y: 40, width: 1720, height: 80 }, // Reference at top
         required: true
       },
       {
         id: 'translation',
         name: 'Bible Translation',
         type: 'text',
-        bounds: { x: 1200, y: 980, width: 600, height: 60 }, // Below reference
+        bounds: { x: 100, y: 125, width: 1720, height: 60 }, // Translation below reference
         required: false
+      },
+      {
+        id: 'verse',
+        name: 'Bible Verse',
+        type: 'text',
+        bounds: { x: 100, y: 220, width: 1720, height: 800 }, // Main verse area - below reference
+        required: true
       }
     ];
 
@@ -260,11 +260,12 @@ export class ScriptureTemplate extends SlideTemplate {
     // Apply typography from feature settings or use defaults
     const fontFamily = typography?.fontFamily || this.theme.fonts.display;
     const fontSize = typography?.referenceFontSize || this.style.referenceFontSize!;
-    const textColor = typography?.textColor || this.rgbToHex(this.theme.colors.accent);
+    // CRITICAL: Use same text color as verse if provided, otherwise fallback to white for visibility
+    const textColor = typography?.textColor || '#ffffff';
     const textAlign = typography?.textAlign || (this.style.centerAlign ? 'center' : 'right');
 
     // Reference should stay fixed size - no auto-shrink (user expects consistent reference size)
-    return new TextShape({
+    const referenceShape = new TextShape({
       text: formattedReference,
       position: {
         x: placeholder.bounds.x,
@@ -285,6 +286,17 @@ export class ScriptureTemplate extends SlideTemplate {
       fontWeight: 'bold',
       fontStyle: 'italic'
     });
+
+    console.log('📖 ScriptureTemplate: Created reference shape', {
+      text: formattedReference,
+      position: { x: placeholder.bounds.x, y: placeholder.bounds.y },
+      size: { width: placeholder.bounds.width, height: placeholder.bounds.height },
+      color: textColor,
+      textAlign,
+      fontSize
+    });
+
+    return referenceShape;
   }
 
   private formatReference(reference: string): string {
@@ -301,11 +313,12 @@ export class ScriptureTemplate extends SlideTemplate {
     // Apply typography from feature settings or use defaults
     const fontFamily = typography?.fontFamily || this.theme.fonts.secondary;
     const fontSize = typography?.translationFontSize || this.style.translationFontSize!;
-    const textColor = typography?.textColor || this.rgbToHex(this.theme.colors.textSecondary);
+    // CRITICAL: Use same text color as verse if provided, otherwise fallback to white for visibility
+    const textColor = typography?.textColor || '#ffffff';
     const textAlign = typography?.textAlign || (this.style.centerAlign ? 'center' : 'right');
 
     // Translation should stay fixed size - no auto-shrink
-    return new TextShape({
+    const translationShape = new TextShape({
       text: `— ${translation}`,
       position: {
         x: placeholder.bounds.x,
@@ -325,6 +338,18 @@ export class ScriptureTemplate extends SlideTemplate {
       textAlign: textAlign as any,
       opacity: 0.8
     });
+
+    console.log('📖 ScriptureTemplate: Created translation shape', {
+      text: `— ${translation}`,
+      position: { x: placeholder.bounds.x, y: placeholder.bounds.y },
+      size: { width: placeholder.bounds.width, height: placeholder.bounds.height },
+      color: textColor,
+      textAlign,
+      fontSize,
+      opacity: 0.8
+    });
+
+    return translationShape;
   }
 
   // Static factory methods for creating different types of scripture slides

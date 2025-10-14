@@ -60,26 +60,34 @@ export class CanvasRenderer {
   }
 
   private setupCanvas(): void {
-    const pixelRatio = this.getPixelRatio();
+    // CRITICAL FIX: If canvas already has dimensions set (e.g., 1920x1080 by SlideRenderer),
+    // DO NOT modify them. The buffer size should remain as set by the caller.
+    // DO NOT set canvas.style dimensions - let React's CSS handle responsive display sizing.
 
-    // CRITICAL FIX: Check if canvas already has dimensions set
-    // If canvas.width > 0, it means the caller (e.g., EditableSlidePreview) has
-    // already set it to a specific resolution (like 1920x1080). Respect that!
-    // Only use clientWidth as fallback if canvas is uninitialized.
-    let displayWidth = this.canvas.width;
-    let displayHeight = this.canvas.height;
+    // Check if canvas was already initialized with specific dimensions
+    const canvasAlreadyInitialized = this.canvas.width > 0 && this.canvas.height > 0;
 
-    // Only use clientWidth/clientHeight if canvas dimensions are not set
-    if (displayWidth === 0 || displayHeight === 0) {
-      displayWidth = this.canvas.clientWidth || 800;
-      displayHeight = this.canvas.clientHeight || 600;
+    if (canvasAlreadyInitialized) {
+      // Canvas dimensions already set by caller (e.g., SlideRenderer sets 1920x1080)
+      // Don't modify buffer size or style - respect the caller's setup
+      console.log('🎨 CanvasRenderer.setupCanvas: Canvas already initialized, skipping setup', {
+        canvasWidth: this.canvas.width,
+        canvasHeight: this.canvas.height,
+        reason: 'PRESET_BY_CALLER'
+      });
+      return;
     }
 
-    // Set actual canvas size accounting for device pixel ratio
+    // Fallback: Canvas not initialized, use client dimensions
+    const pixelRatio = this.getPixelRatio();
+    const displayWidth = this.canvas.clientWidth || 800;
+    const displayHeight = this.canvas.clientHeight || 600;
+
+    // Set canvas buffer size accounting for device pixel ratio
     this.canvas.width = displayWidth * pixelRatio;
     this.canvas.height = displayHeight * pixelRatio;
 
-    // Scale back down using CSS
+    // Set CSS dimensions for display
     this.canvas.style.width = displayWidth + 'px';
     this.canvas.style.height = displayHeight + 'px';
 

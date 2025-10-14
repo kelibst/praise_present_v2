@@ -1,0 +1,5 @@
+Add references to the scriptures, right now it is not showing anywhere. not on the previw windows or on the live screen.
+
+Update the toolbar for the scriptures preview so that users can specify specific positions they can put the references on the screen top left center right bottom left center right. We can also divide the reference into two. we will hve the book reference and the verse reference where the users can even select basic changes for it. for best user experience keep this references settings only on the settings page. 
+
+the image background feature is not working. add a small previw beside it so that it shows which image is selected. I want those changes to remain only on the settings that is adding image and adding video as background should only be on the settings page not on the toolbar. 

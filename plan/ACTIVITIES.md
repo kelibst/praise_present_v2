@@ -4,6 +4,67 @@ This file tracks major features and changes implemented in PraisePresent.
 
 ## 2025-10-14
 
+### 🔧 Fixed Scripture References Not Displaying in Preview Window
+**Time:** Evening
+**Description:** Fixed scripture references and translation names not appearing in preview window. References showed correctly on live display but were cut off/hidden in preview due to positioning outside visible area.
+
+**Root Causes:**
+1. **Color Contrast Issue:**
+   - Reference and translation shapes used theme accent colors
+   - Theme accent color had poor contrast against backgrounds (especially red)
+   - Verse text used typography textColor, but reference/translation ignored it
+   - Result: Even when positioned correctly, text was invisible
+
+2. **Positioning Issue (Primary):**
+   - References positioned at bottom-right corner: `{ x: 1200, y: 900 }`
+   - Translation positioned even lower: `{ x: 1200, y: 980 }`
+   - Preview window's aspect ratio fitting and container structure clipped this area
+   - Toolbar/clickable overlays in preview covered bottom-right region
+   - Live display has different container without these constraints
+
+3. **Canvas Scaling Issue:**
+   - `CanvasRenderer.setupCanvas()` was overriding React CSS styles
+   - Set explicit `canvas.style.width/height = '1920px/1080px'`
+   - Prevented responsive scaling to fit preview container properly
+
+**Solutions:**
+1. **Fixed Text Color** ([ScriptureTemplate.ts:264, 317](src/rendering/templates/ScriptureTemplate.ts)):
+   - Updated `createReferenceShape()` to use typography textColor when provided
+   - Updated `createTranslationShape()` to use typography textColor when provided
+   - Changed fallback from theme colors to white (#ffffff) for guaranteed visibility
+   - Reference and translation now use same color scheme as verse text
+
+2. **Repositioned References to Safe Visible Area** ([ScriptureTemplate.ts:52-74](src/rendering/templates/ScriptureTemplate.ts)):
+   - **Before:** Reference at `{ x: 1200, y: 900, width: 600 }` (bottom-right corner)
+   - **After:** Reference at `{ x: 100, y: 820, width: 1720 }` (centered, higher up)
+   - **Before:** Translation at `{ x: 1200, y: 980, width: 600 }` (very bottom)
+   - **After:** Translation at `{ x: 100, y: 920, width: 1720 }` (centered, well within bounds)
+   - Moved verse up slightly: `y: 180` (was 200) to make room
+   - Full-width positioning (100 to 1820) allows center alignment
+   - References now ~260px and ~160px from bottom edge (safer margins)
+
+3. **Fixed Canvas Responsive Scaling** ([CanvasRenderer.ts:62-93](src/rendering/core/CanvasRenderer.ts)):
+   - Modified `setupCanvas()` to detect when canvas already initialized
+   - When preset dimensions detected (1920x1080), skip ALL style modifications
+   - Let React CSS (`width: 100%`, `height: 100%`) handle responsive display
+   - Canvas buffer stays 1920x1080, CSS scales to fit any container
+
+**Technical Notes:**
+- References now positioned well within the "safe area" of the slide
+- Both use `textAlign: 'center'` (from style.centerAlign default)
+- Translation maintains opacity 0.8 for subtle appearance
+- Added debug logging to verify shape creation
+- Positioning follows title-safe broadcast standards (avoid extreme edges)
+
+**Impact:**
+- References visible in both preview and live display
+- No clipping regardless of preview window size or overlay elements
+- Professional centered layout instead of corner positioning
+- Better readability with full-width centering
+- Canvas scales responsively while maintaining 1920x1080 rendering quality
+
+## 2025-10-14
+
 ### 🎨 Fixed Gradient Background Rendering and Persistence (3 Bugs)
 **Time:** Afternoon
 **Description:** Fixed three critical bugs: gradient backgrounds not rendering in preview/live display, gradient settings not persisting or reflecting in toolbar, and gradient data being corrupted when creating slides.
