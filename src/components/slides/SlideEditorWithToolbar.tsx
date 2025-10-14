@@ -81,10 +81,10 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
       return;
     }
 
-    console.log('🎨 SlideEditorWithToolbar: Applying format changes', {
-      shapeId,
-      updates
-    });
+    // console.log('🎨 SlideEditorWithToolbar: Applying format changes', {
+    //   shapeId,
+    //   updates
+    // });
 
     // Find the shape in the slide
     const shapeIndex = slide.shapes.findIndex(s => s.id === shapeId);
@@ -134,7 +134,7 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
 
   // Handle background changes from BackgroundToolbar
   const handleBackgroundChange = useCallback((background: SlideBackground) => {
-    console.log('🎨 SlideEditorWithToolbar: Background changed', background);
+    // console.log('🎨 SlideEditorWithToolbar: Background changed', background);
 
     const updatedSlide: Slide = {
       ...slide,

@@ -80,8 +80,12 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
 
     // Convert Color object to hex string
     if (style.color) {
-      const hex = `#${style.color.r.toString(16).padStart(2, '0')}${style.color.g.toString(16).padStart(2, '0')}${style.color.b.toString(16).padStart(2, '0')}`;
-      setTextColor(hex);
+      if (typeof style.color === 'string') {
+        setTextColor(style.color);
+      } else {
+        const hex = `#${style.color.r.toString(16).padStart(2, '0')}${style.color.g.toString(16).padStart(2, '0')}${style.color.b.toString(16).padStart(2, '0')}`;
+        setTextColor(hex);
+      }
     }
   }, [selectedShape]);
 

@@ -362,14 +362,14 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
 
   // Handle verse selection from chapter list (auto-preview)
   const handleVerseSelectionFromList = useCallback(async (verseNumbers: number[]) => {
-    console.log('🟣 BibleSelector: handleVerseSelectionFromList called', {
-      verseNumbers,
-      hasReference: !!currentParsedReference,
-      hasVersion: !!selectedVersion
-    });
+    // console.log('🟣 BibleSelector: handleVerseSelectionFromList called', {
+    //   verseNumbers,
+    //   hasReference: !!currentParsedReference,
+    //   hasVersion: !!selectedVersion
+    // });
 
     if (!currentParsedReference?.book || !currentParsedReference.chapter || !selectedVersion || verseNumbers.length === 0) {
-      console.log('🟣 BibleSelector: Missing requirements, skipping');
+      // console.log('🟣 BibleSelector: Missing requirements, skipping');
       return;
     }
 
@@ -378,11 +378,11 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
     const newSelection = Array.from(verseNumbers).sort((a, b) => a - b).join(',');
 
     if (currentSelection === newSelection) {
-      console.log('🟣 BibleSelector: Selection unchanged, skipping');
+      // console.log('🟣 BibleSelector: Selection unchanged, skipping');
       return;
     }
 
-    console.log('🟣 BibleSelector: Setting selectedVersesFromList', verseNumbers);
+    // console.log('🟣 BibleSelector: Setting selectedVersesFromList', verseNumbers);
     setSelectedVersesFromList(verseNumbers);
 
     // Update the smart input to reflect the selection
@@ -402,7 +402,7 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
     // Auto-load and preview the selected verses
     // Note: Don't set loading state here - ChapterVerseList already has the verses loaded
     try {
-      console.log('🟣 BibleSelector: Loading verses from API');
+      // console.log('🟣 BibleSelector: Loading verses from API');
       const scriptureVerses = await bibleService.getVerses(
         selectedVersion,
         currentParsedReference.book.id,
@@ -410,12 +410,12 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
         verseNumbers
       );
 
-      console.log('🟣 BibleSelector: Verses loaded, count:', scriptureVerses.length);
+      // console.log('🟣 BibleSelector: Verses loaded, count:', scriptureVerses.length);
       setCurrentVerses(scriptureVerses);
 
       // Auto-send to preview
       if (onVerseSelect && scriptureVerses.length > 0) {
-        console.log('🟣 BibleSelector: Calling onVerseSelect to send to preview');
+        // console.log('🟣 BibleSelector: Calling onVerseSelect to send to preview');
         onVerseSelect(scriptureVerses);
       }
     } catch (err) {

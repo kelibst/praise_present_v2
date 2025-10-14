@@ -2,6 +2,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import presentationSlice from './presentationSlice';
 import bibleSlice from './bibleSlice';
 import settingsSlice from './settingSlice';
+import featureSettingsSlice from './featureSettingsSlice';
 
 // Store configuration with presentation slice
 export const store = configureStore({
@@ -9,6 +10,7 @@ export const store = configureStore({
     presentation: presentationSlice,
     bible: bibleSlice,
     settings: settingsSlice,
+    featureSettings: featureSettingsSlice,
   },
 });
 

@@ -117,21 +117,21 @@ export const ChapterVerseList: React.FC<ChapterVerseListProps> = ({
 
   // Effect to call parent handler when selection changes (avoiding setState during render)
   useEffect(() => {
-    console.log('🟡 ChapterVerseList: Selection state changed', {
-      selectedVerses: Array.from(selectionState.selectedVerses),
-      isUpdatingFromProps: isUpdatingFromPropsRef.current
-    });
+    // console.log('🟡 ChapterVerseList: Selection state changed', {
+    //   selectedVerses: Array.from(selectionState.selectedVerses),
+    //   isUpdatingFromProps: isUpdatingFromPropsRef.current
+    // });
 
     // Skip if this update came from props to prevent infinite loop
     if (isUpdatingFromPropsRef.current) {
-      console.log('🟢 ChapterVerseList: Skipping parent callback (update from props)');
+      // console.log('🟢 ChapterVerseList: Skipping parent callback (update from props)');
       isUpdatingFromPropsRef.current = false;
       return;
     }
 
     const selectedArray = Array.from(selectionState.selectedVerses).sort((a, b) => a - b);
     if (selectedArray.length > 0) {
-      console.log('🔴 ChapterVerseList: Calling parent onVerseSelection', selectedArray);
+      // console.log('🔴 ChapterVerseList: Calling parent onVerseSelection', selectedArray);
       // Use setTimeout to ensure this runs after render
       const timeoutId = setTimeout(() => {
         onVerseSelection(selectedArray);

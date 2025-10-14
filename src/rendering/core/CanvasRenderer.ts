@@ -214,15 +214,16 @@ export class CanvasRenderer {
     const width = this.canvas.width || 800;
     const height = this.canvas.height || 600;
 
-    console.log('🎨 CanvasRenderer.createRenderContext: PHASE 1 DIAGNOSTICS', {
-      canvasActualWidth: this.canvas.width,
-      canvasActualHeight: this.canvas.height,
-      canvasClientWidth: this.canvas.clientWidth,
-      canvasClientHeight: this.canvas.clientHeight,
-      contextWidth: width,
-      contextHeight: height,
-      decision: 'USING ACTUAL CANVAS RESOLUTION (not display size)'
-    });
+    // Diagnostic logging (disabled for production - uncomment if needed for debugging)
+    // console.log('🎨 CanvasRenderer.createRenderContext: PHASE 1 DIAGNOSTICS', {
+    //   canvasActualWidth: this.canvas.width,
+    //   canvasActualHeight: this.canvas.height,
+    //   canvasClientWidth: this.canvas.clientWidth,
+    //   canvasClientHeight: this.canvas.clientHeight,
+    //   contextWidth: width,
+    //   contextHeight: height,
+    //   decision: 'USING ACTUAL CANVAS RESOLUTION (not display size)'
+    // });
 
     return {
       canvas: this.canvas,

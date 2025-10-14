@@ -80,12 +80,13 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
       canvas.width = targetResolution.width;
       canvas.height = targetResolution.height;
 
-      console.log('🎨 SlideRenderer: Initializing engine', {
-        slideId: slide.id,
-        targetResolution,
-        canvasActualSize: { width: canvas.width, height: canvas.height },
-        canvasClientSize: { width: canvas.clientWidth, height: canvas.clientHeight }
-      });
+      // Diagnostic logging disabled for production
+      // console.log('🎨 SlideRenderer: Initializing engine', {
+      //   slideId: slide.id,
+      //   targetResolution,
+      //   canvasActualSize: { width: canvas.width, height: canvas.height },
+      //   canvasClientSize: { width: canvas.clientWidth, height: canvas.clientHeight }
+      // });
 
       // Create simple rendering engine (FIXED RESOLUTION MODE - NO responsive features)
       // Canvas is ALWAYS 1920x1080 - CSS handles all display scaling
@@ -104,7 +105,7 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
       engineRef.current = engine;
       resourceManager.registerEngine(resourceId, engine);
 
-      console.log('✅ SlideRenderer: Engine created successfully');
+      // console.log('✅ SlideRenderer: Engine created successfully');
 
       // Notify parent that canvas is ready
       if (onRendered) {
@@ -117,7 +118,7 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
 
     // Cleanup on unmount
     return () => {
-      console.log('🧹 SlideRenderer: Cleaning up', { slideId: slide.id });
+      // console.log('🧹 SlideRenderer: Cleaning up', { slideId: slide.id });
       resourceManager.cleanup(resourceId);
       engineRef.current = null;
     };
@@ -129,10 +130,11 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
     if (!engine || !canvasRef.current) return;
 
     try {
-      console.log('🎨 SlideRenderer: Rendering slide', {
-        slideId: slide.id,
-        shapeCount: slide.shapes.length
-      });
+      // Diagnostic logging disabled for production
+      // console.log('🎨 SlideRenderer: Rendering slide', {
+      //   slideId: slide.id,
+      //   shapeCount: slide.shapes.length
+      // });
 
       // Clear existing shapes
       engine.clearShapes();
@@ -187,35 +189,36 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
 
       // Reconstruct shapes if they've been serialized by React state
       const reconstructedShapes = ShapeReconstructor.ensureShapeInstances(slide.shapes);
-      
-      console.log('🔧 SlideRenderer: Shape reconstruction', {
-        originalCount: slide.shapes.length,
-        reconstructedCount: reconstructedShapes.length,
-        needsReconstruction: slide.shapes.some(shape => ShapeReconstructor.needsReconstruction(shape))
-      });
+
+      // Diagnostic logging disabled for production
+      // console.log('🔧 SlideRenderer: Shape reconstruction', {
+      //   originalCount: slide.shapes.length,
+      //   reconstructedCount: reconstructedShapes.length,
+      //   needsReconstruction: slide.shapes.some(shape => ShapeReconstructor.needsReconstruction(shape))
+      // });
 
       // Add all shapes to engine
       reconstructedShapes.forEach((shape: Shape, index: number) => {
-        console.log('🔍 SlideRenderer: Adding shape', {
-          index,
-          id: shape.id,
-          type: shape.type,
-          hasIsVisible: typeof shape.isVisible === 'function',
-          constructor: shape.constructor.name,
-          visible: shape.visible,
-          opacity: shape.opacity
-        });
-        
+        // console.log('🔍 SlideRenderer: Adding shape', {
+        //   index,
+        //   id: shape.id,
+        //   type: shape.type,
+        //   hasIsVisible: typeof shape.isVisible === 'function',
+        //   constructor: shape.constructor.name,
+        //   visible: shape.visible,
+        //   opacity: shape.opacity
+        // });
+
         engine.addShape(shape);
       });
 
       // Render once
       engine.render();
 
-      console.log('✅ SlideRenderer: Render complete', {
-        slideId: slide.id,
-        shapesRendered: slide.shapes.length
-      });
+      // console.log('✅ SlideRenderer: Render complete', {
+      //   slideId: slide.id,
+      //   shapesRendered: slide.shapes.length
+      // });
 
     } catch (error) {
       console.error('❌ SlideRenderer: Render error:', error);

@@ -15,6 +15,21 @@ export interface ScriptureSlideContent extends TemplateContent {
   theme?: 'reading' | 'meditation' | 'memory' | 'announcement';
   showTranslation?: boolean;
   emphasizeReference?: boolean;
+  // Optional settings override (from feature settings)
+  featureSettings?: {
+    background?: any; // SlideBackground type
+    typography?: {
+      verseFontSize?: number;
+      referenceFontSize?: number;
+      translationFontSize?: number;
+      fontFamily?: string;
+      textColor?: string;
+      textAlign?: 'left' | 'center' | 'right';
+      bold?: boolean;
+      italic?: boolean;
+      lineHeight?: number;
+    };
+  };
 }
 
 export interface ScriptureTemplateStyle {
@@ -90,24 +105,38 @@ export class ScriptureTemplate extends SlideTemplate {
   public generateSlide(content: ScriptureSlideContent): Shape[] {
     const shapes: Shape[] = [];
 
+    // Apply feature settings if provided (override template defaults)
+    if (content.featureSettings?.typography) {
+      const typo = content.featureSettings.typography;
+      this.style = {
+        ...this.style,
+        verseFontSize: typo.verseFontSize ?? this.style.verseFontSize,
+        referenceFontSize: typo.referenceFontSize ?? this.style.referenceFontSize,
+        translationFontSize: typo.translationFontSize ?? this.style.translationFontSize,
+        centerAlign: typo.textAlign === 'center',
+        lineSpacing: typo.lineHeight ?? this.style.lineSpacing
+      };
+    }
+
     // Background with solid color (simplified for PowerPoint pattern)
+    // Note: Background from featureSettings is handled by SlideRenderer
     shapes.push(this.createScriptureBackground(content.theme));
 
     // Main verse text
     if (content.verse) {
-      const verseShape = this.createVerseShape(content.verse);
+      const verseShape = this.createVerseShape(content.verse, content.featureSettings?.typography);
       shapes.push(verseShape);
     }
 
     // Reference
     if (content.reference) {
-      const referenceShape = this.createReferenceShape(content.reference);
+      const referenceShape = this.createReferenceShape(content.reference, content.featureSettings?.typography);
       shapes.push(referenceShape);
     }
 
     // Translation
     if (content.showTranslation && content.translation) {
-      const translationShape = this.createTranslationShape(content.translation);
+      const translationShape = this.createTranslationShape(content.translation, content.featureSettings?.typography);
       shapes.push(translationShape);
     }
 
@@ -142,11 +171,20 @@ export class ScriptureTemplate extends SlideTemplate {
     };
   }
 
-  private createVerseShape(verse: string): TextShape {
+  private createVerseShape(verse: string, typography?: any): TextShape {
     const placeholder = this.getPlaceholder('verse')!;
 
     // Process the verse text
     let processedVerse = this.processVerseText(verse);
+
+    // Apply typography from feature settings or use defaults
+    const fontFamily = typography?.fontFamily || this.theme.fonts.primary;
+    const fontSize = typography?.verseFontSize || this.style.verseFontSize!;
+    const textColor = typography?.textColor || this.rgbToHex(this.theme.colors.text);
+    const textAlign = typography?.textAlign || (this.style.centerAlign ? 'center' : 'left');
+    const fontWeight = typography?.bold ? 'bold' : 'normal';
+    const fontStyle = typography?.italic ? 'italic' : 'normal';
+    const lineHeight = typography?.lineHeight || this.style.lineSpacing;
 
     // Create TextShape with shrink-to-fit behavior (PowerPoint-style)
     const textShape = new TextShape({
@@ -163,27 +201,34 @@ export class ScriptureTemplate extends SlideTemplate {
       autoSize: false, // Fixed bounds - never expand
       overflowBehavior: 'shrink-to-fit', // PowerPoint-style: shrink font if text overflows
       minFontSize: 24, // Don't shrink smaller than 24px for readability
-      maxFontSize: this.style.verseFontSize // User's preferred size is the max
+      maxFontSize: fontSize // User's preferred size is the max
     }, {
-      fontFamily: this.theme.fonts.primary,
-      fontSize: this.style.verseFontSize!,
-      color: this.theme.colors.text,
-      textAlign: this.style.centerAlign ? 'center' : 'left',
+      fontFamily,
+      fontSize,
+      color: textColor,
+      textAlign: textAlign as any,
       verticalAlign: 'middle',
-      fontWeight: 'normal',
-      lineHeight: this.style.lineSpacing
+      fontWeight: fontWeight as any,
+      fontStyle: fontStyle as any,
+      lineHeight
     });
 
-    console.log('🔍 ScriptureTemplate: Created verse shape with shrink-to-fit', {
+    console.log('🔍 ScriptureTemplate: Created verse shape with feature settings', {
       id: textShape.id,
       type: textShape.type,
       overflowBehavior: textShape.overflowBehavior,
-      fontSize: this.style.verseFontSize,
-      minFontSize: 24,
+      fontSize,
+      fontFamily,
+      textColor,
       text: processedVerse.substring(0, 30)
     });
 
     return textShape;
+  }
+
+  private rgbToHex(color: Color | string): string {
+    if (typeof color === 'string') return color;
+    return `#${((1 << 24) + (color.r << 16) + (color.g << 8) + color.b).toString(16).slice(1)}`;
   }
 
   private processVerseText(verse: string): string {
@@ -203,11 +248,17 @@ export class ScriptureTemplate extends SlideTemplate {
     return processed;
   }
 
-  private createReferenceShape(reference: string): TextShape {
+  private createReferenceShape(reference: string, typography?: any): TextShape {
     const placeholder = this.getPlaceholder('reference')!;
 
     // Format the reference nicely
     const formattedReference = this.formatReference(reference);
+
+    // Apply typography from feature settings or use defaults
+    const fontFamily = typography?.fontFamily || this.theme.fonts.display;
+    const fontSize = typography?.referenceFontSize || this.style.referenceFontSize!;
+    const textColor = typography?.textColor || this.rgbToHex(this.theme.colors.accent);
+    const textAlign = typography?.textAlign || (this.style.centerAlign ? 'center' : 'right');
 
     // Reference should stay fixed size - no auto-shrink (user expects consistent reference size)
     return new TextShape({
@@ -224,10 +275,10 @@ export class ScriptureTemplate extends SlideTemplate {
       autoSize: false,
       overflowBehavior: 'clip' // Reference stays fixed size
     }, {
-      fontFamily: this.theme.fonts.display,
-      fontSize: this.style.referenceFontSize!,
-      color: this.theme.colors.accent,
-      textAlign: this.style.centerAlign ? 'center' : 'right',
+      fontFamily,
+      fontSize,
+      color: textColor,
+      textAlign: textAlign as any,
       fontWeight: 'bold',
       fontStyle: 'italic'
     });
@@ -241,8 +292,14 @@ export class ScriptureTemplate extends SlideTemplate {
       .replace(/(\d+):(\d+)/g, '$1:$2'); // Ensure proper verse formatting
   }
 
-  private createTranslationShape(translation: string): TextShape {
+  private createTranslationShape(translation: string, typography?: any): TextShape {
     const placeholder = this.getPlaceholder('translation')!;
+
+    // Apply typography from feature settings or use defaults
+    const fontFamily = typography?.fontFamily || this.theme.fonts.secondary;
+    const fontSize = typography?.translationFontSize || this.style.translationFontSize!;
+    const textColor = typography?.textColor || this.rgbToHex(this.theme.colors.textSecondary);
+    const textAlign = typography?.textAlign || (this.style.centerAlign ? 'center' : 'right');
 
     // Translation should stay fixed size - no auto-shrink
     return new TextShape({
@@ -259,10 +316,10 @@ export class ScriptureTemplate extends SlideTemplate {
       autoSize: false,
       overflowBehavior: 'clip' // Translation stays fixed size
     }, {
-      fontFamily: this.theme.fonts.secondary,
-      fontSize: this.style.translationFontSize!,
-      color: this.theme.colors.textSecondary,
-      textAlign: this.style.centerAlign ? 'center' : 'right',
+      fontFamily,
+      fontSize,
+      color: textColor,
+      textAlign: textAlign as any,
       opacity: 0.8
     });
   }

@@ -49,6 +49,10 @@ import { useLiveDisplay, LiveDisplayControls } from '../components/live/LiveDisp
 import BibleSelector from '../components/bible/BibleSelector';
 import { ScriptureVerse } from '../lib/services/bibleService';
 
+// Import settings modal
+import { FeatureSettingsModal } from '../components/settings/FeatureSettingsModal';
+import { useFeatureSettings } from '../hooks/useFeatureSettings';
+
 // Use the new Slide interface from SlideRenderer
 interface Slide extends NewSlide {
   duration?: number;
@@ -68,6 +72,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const [isPresenting, setIsPresenting] = useState(false);
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
   const [presentationMode, setPresentationMode] = useState<'preview' | 'live'>('preview');
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+
+  // Feature settings hook
+  const { scriptureSettings, songSettings } = useFeatureSettings();
 
   // Service management for plan functionality
   const [currentServiceId, setCurrentServiceId] = useState<string | null>(null);
@@ -790,11 +798,11 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const handleSlideUpdate = React.useCallback((updatedSlide: Slide) => {
     if (!selectedItem || !selectedItem.slides) return;
 
-    console.log('🎨 LivePresentationPage: Slide updated', {
-      slideId: updatedSlide.id,
-      shapeCount: updatedSlide.shapes.length,
-      currentSlideIndex
-    });
+    // console.log('🎨 LivePresentationPage: Slide updated', {
+    //   slideId: updatedSlide.id,
+    //   shapeCount: updatedSlide.shapes.length,
+    //   currentSlideIndex
+    // });
 
     // Update the slide in the service item
     const updatedSlides = [...selectedItem.slides];
@@ -824,19 +832,38 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             <h1 className="text-2xl font-bold">Live Presentation</h1>
           </div>
 
-          {/* Live Display Controls */}
-          {window.electronAPI && (
-            <LiveDisplayControls
-              liveDisplayActive={liveDisplayActive}
-              liveDisplayStatus={liveDisplayStatus}
-              onCreateDisplay={createLiveDisplay}
-              onCloseDisplay={closeLiveDisplay}
-              onClearDisplay={clearLiveDisplay}
-              onShowBlack={showBlackScreen}
-            />
-          )}
+          <div className="flex items-center gap-3">
+            {/* Settings Button */}
+            <button
+              onClick={() => setSettingsModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg border border-gray-600 transition-colors"
+              title="Feature Settings"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="text-sm font-medium">Settings</span>
+            </button>
+
+            {/* Live Display Controls */}
+            {window.electronAPI && (
+              <LiveDisplayControls
+                liveDisplayActive={liveDisplayActive}
+                liveDisplayStatus={liveDisplayStatus}
+                onCreateDisplay={createLiveDisplay}
+                onCloseDisplay={closeLiveDisplay}
+                onClearDisplay={clearLiveDisplay}
+                onShowBlack={showBlackScreen}
+              />
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Feature Settings Modal */}
+      <FeatureSettingsModal
+        isOpen={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        initialTab={activeTab === 'scripture' ? 'scriptures' : 'songs'}
+      />
 
       {/* Keyboard Shortcuts Help & Panel Controls */}
       <div className="bg-card border-b border-border px-4 py-2">

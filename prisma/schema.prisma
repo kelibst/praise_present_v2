@@ -297,8 +297,19 @@ model Setting {
   category    String? // "display", "audio", "backup", "general"
   description String?
   updatedAt   DateTime @updatedAt
-  
+
   @@map("settings")
+}
+
+// Feature-specific presentation settings (backgrounds, typography, etc.)
+model FeatureSettings {
+  id        String @id @default(cuid())
+  feature   String @unique // "scriptures", "songs", "announcements", "custom"
+  settings  String // JSON blob containing background, typography, and other feature-specific settings
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("feature_settings")
 }
 
 // Backup and Import/Export Models
