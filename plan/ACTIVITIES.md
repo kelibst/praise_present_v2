@@ -4,6 +4,82 @@ This file tracks major features and changes implemented in PraisePresent.
 
 ## 2025-10-14
 
+### ✅ Drag and Resize Text Shapes (Canva/PowerPoint Style)
+**Time:** Evening (Latest)
+**Description:** Implemented full drag-and-drop and resize functionality for text shapes with 8-handle resize system, coordinate transformation, and visual feedback.
+
+**Features Added:**
+1. **Drag Functionality:**
+   - Click and drag text shapes to reposition them
+   - Smooth drag with coordinate transformation (display ↔ canvas)
+   - Boundary constraints keep shapes within canvas (1920×1080)
+   - Real-time position feedback during drag
+
+2. **8-Handle Resize System:**
+   - 4 corner handles (nw, ne, sw, se) for proportional resize
+   - 4 edge handles (n, s, e, w) for width/height-only resize
+   - Each handle has proper cursor (nwse-resize, nesw-resize, ns-resize, ew-resize)
+   - Hit detection with 12px radius for easy grabbing
+
+3. **Smart Constraints:**
+   - Minimum size: 50×50px (prevents tiny uneditable shapes)
+   - Boundary enforcement: Shapes stay within canvas bounds
+   - Position clamping during drag
+   - Size clamping during resize
+
+4. **Visual Feedback:**
+   - Dynamic cursor changes (move, resize cursors)
+   - Real-time position display during drag ("Moving: X × Y")
+   - Real-time size display during resize ("Size: W × H")
+   - All 8 resize handles clearly visible with blue borders
+   - User instructions: "Click text to select • Drag to move • Drag handles to resize"
+
+**Technical Implementation:**
+- [SlideEditor.tsx:7](src/components/slides/SlideEditor.tsx#L7): Added ResizeHandle type for 8-handle system
+- [SlideEditor.tsx:74-85](src/components/slides/SlideEditor.tsx#L74): State management for drag/resize
+- [SlideEditor.tsx:111-124](src/components/slides/SlideEditor.tsx#L111): Coordinate transformation helper
+- [SlideEditor.tsx:126-154](src/components/slides/SlideEditor.tsx#L126): Resize handle detection
+- [SlideEditor.tsx:157-167](src/components/slides/SlideEditor.tsx#L157): Cursor management
+- [SlideEditor.tsx:169-256](src/components/slides/SlideEditor.tsx#L169): Mouse down handler (selection + drag/resize start)
+- [SlideEditor.tsx:258-405](src/components/slides/SlideEditor.tsx#L258): Mouse move handler (perform drag/resize)
+- [SlideEditor.tsx:407-418](src/components/slides/SlideEditor.tsx#L407): Mouse up handler (end drag/resize)
+- [SlideEditor.tsx:493-502](src/components/slides/SlideEditor.tsx#L493): 8 interactive resize handles in JSX
+
+**Coordinate Transformation:**
+```
+Mouse Event (clientX, clientY)
+  ↓ getBoundingClientRect()
+Display Coords (displayX, displayY)
+  ↓ scaleX = 1920 / displayWidth
+Canvas Coords (canvasX, canvasY @ 1920×1080)
+  ↓ Update shape.position/size
+Shape Updated
+  ↓ Re-render via continuous render loop
+Visual Update on Screen
+```
+
+**Resize Logic by Handle:**
+- **nw**: Adjust x, y, width, height (top-left origin moves)
+- **ne**: Adjust y, width, height (top-right)
+- **sw**: Adjust x, width, height (bottom-left)
+- **se**: Adjust width, height only (bottom-right)
+- **n**: Adjust y, height (top edge)
+- **s**: Adjust height only (bottom edge)
+- **e**: Adjust width only (right edge)
+- **w**: Adjust x, width (left edge)
+
+**Impact:**
+- Full PowerPoint/Canva-like editing experience
+- Precise shape positioning and sizing
+- Works at any display resolution (coordinate transformation)
+- Smooth 60fps interaction via continuous render loop
+- Professional UI with proper cursors and feedback
+- Minimum size prevents user errors
+- Boundary constraints prevent shapes going off-canvas
+- Enhances scripture slide customization workflow
+
+## 2025-10-14
+
 ### ✅ Media Background Upload with Image Preview for Scripture Settings + Rendering Fix
 **Time:** Evening (Latest)
 **Description:** Added image upload functionality with base64 conversion and live preview to scripture background settings. Fixed critical rendering issue where image backgrounds appeared as white placeholders due to render loop not running continuously.

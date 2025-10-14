@@ -3,6 +3,9 @@ import { SlideRenderer, Slide } from './SlideRenderer';
 import { TextShape } from '../../rendering/shapes/TextShape';
 import { isTextShape } from '../../rendering/utils/shapeTypeGuards';
 
+// Resize handle types (8-handle system: 4 corners + 4 edges)
+type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
+
 interface SlideEditorProps {
   /**
    * The slide to edit
@@ -68,6 +71,19 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
   const [selectedShape, setSelectedShape] = useState<TextShape | null>(null);
   const [selectedShapeIndex, setSelectedShapeIndex] = useState<number>(-1);
 
+  // Drag state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [draggedShapeOriginalPos, setDraggedShapeOriginalPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Resize state
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<ResizeHandle | null>(null);
+  const [resizeStart, setResizeStart] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+
+  // Cursor state
+  const [cursor, setCursor] = useState<string>('default');
+
   // CRITICAL: Update selected shape when slide changes
   // This ensures the selected shape stays in sync with the slide's shape array
   useEffect(() => {
@@ -92,8 +108,66 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
     canvasRef.current = canvas;
   }, []);
 
-  // Handle canvas click - find clicked shape and start editing
-  const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+  // Helper: Transform display coordinates to canvas coordinates
+  const displayToCanvas = useCallback((displayX: number, displayY: number): { x: number; y: number } => {
+    if (!canvasRef.current) return { x: 0, y: 0 };
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = targetResolution.width / rect.width;
+    const scaleY = targetResolution.height / rect.height;
+
+    return {
+      x: displayX * scaleX,
+      y: displayY * scaleY
+    };
+  }, [targetResolution]);
+
+  // Helper: Get resize handle at position (canvas coordinates)
+  const getResizeHandleAtPosition = useCallback((canvasX: number, canvasY: number, bounds: { x: number; y: number; width: number; height: number }): ResizeHandle | null => {
+    const handleSize = 12; // Hit zone radius in canvas pixels
+
+    // Helper to check if point is within handle radius
+    const isNear = (px: number, py: number, targetX: number, targetY: number) => {
+      const dx = px - targetX;
+      const dy = py - targetY;
+      return Math.sqrt(dx * dx + dy * dy) <= handleSize;
+    };
+
+    const { x, y, width, height } = bounds;
+    const centerX = x + width / 2;
+    const centerY = y + height / 2;
+
+    // Check corners first (priority over edges)
+    if (isNear(canvasX, canvasY, x, y)) return 'nw';
+    if (isNear(canvasX, canvasY, x + width, y)) return 'ne';
+    if (isNear(canvasX, canvasY, x, y + height)) return 'sw';
+    if (isNear(canvasX, canvasY, x + width, y + height)) return 'se';
+
+    // Check edges
+    if (isNear(canvasX, canvasY, centerX, y)) return 'n';
+    if (isNear(canvasX, canvasY, centerX, y + height)) return 's';
+    if (isNear(canvasX, canvasY, x + width, centerY)) return 'e';
+    if (isNear(canvasX, canvasY, x, centerY)) return 'w';
+
+    return null;
+  }, []);
+
+  // Helper: Get cursor for resize handle
+  const getCursorForHandle = (handle: ResizeHandle | null): string => {
+    if (!handle) return 'move';
+
+    switch (handle) {
+      case 'nw': case 'se': return 'nwse-resize';
+      case 'ne': case 'sw': return 'nesw-resize';
+      case 'n': case 's': return 'ns-resize';
+      case 'e': case 'w': return 'ew-resize';
+      default: return 'move';
+    }
+  };
+
+  // Handle mouse down - start drag or resize
+  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (!editable || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
@@ -103,23 +177,43 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
     const displayX = event.clientX - rect.left;
     const displayY = event.clientY - rect.top;
 
-    // Transform display coordinates to canvas coordinates (1920x1080)
-    // This is the KEY to making click-to-edit work at any display size
-    const scaleX = targetResolution.width / rect.width;
-    const scaleY = targetResolution.height / rect.height;
+    // Transform to canvas coordinates
+    const canvasPos = displayToCanvas(displayX, displayY);
 
-    const canvasX = displayX * scaleX;
-    const canvasY = displayY * scaleY;
+    // If there's a selected shape, check if clicking on resize handle
+    if (selectedShape) {
+      const bounds = selectedShape.getBounds();
+      const handle = getResizeHandleAtPosition(canvasPos.x, canvasPos.y, bounds);
 
-    console.log('🖱️ SlideEditor: Click detected', {
-      display: { x: displayX, y: displayY },
-      canvas: { x: canvasX, y: canvasY },
-      scale: { x: scaleX, y: scaleY },
-      displaySize: { width: rect.width, height: rect.height },
-      canvasSize: targetResolution
-    });
+      if (handle) {
+        // Start resizing
+        setIsResizing(true);
+        setResizeHandle(handle);
+        setResizeStart({
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height
+        });
+        setDragStart({ x: canvasPos.x, y: canvasPos.y });
+        return;
+      }
 
-    // Find clicked shape
+      // Check if clicking within shape bounds (start drag)
+      if (
+        canvasPos.x >= bounds.x &&
+        canvasPos.x <= bounds.x + bounds.width &&
+        canvasPos.y >= bounds.y &&
+        canvasPos.y <= bounds.y + bounds.height
+      ) {
+        setIsDragging(true);
+        setDragStart({ x: canvasPos.x, y: canvasPos.y });
+        setDraggedShapeOriginalPos({ x: selectedShape.position.x, y: selectedShape.position.y });
+        return;
+      }
+    }
+
+    // Find clicked shape for selection
     let clickedShape: TextShape | null = null;
     let clickedShapeIndex = -1;
 
@@ -129,12 +223,11 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
       if (isTextShape(shape)) {
         const bounds = shape.getBounds();
 
-        // Check if click is within shape bounds (using canvas coordinates)
         if (
-          canvasX >= bounds.x &&
-          canvasX <= bounds.x + bounds.width &&
-          canvasY >= bounds.y &&
-          canvasY <= bounds.y + bounds.height
+          canvasPos.x >= bounds.x &&
+          canvasPos.x <= bounds.x + bounds.width &&
+          canvasPos.y >= bounds.y &&
+          canvasPos.y <= bounds.y + bounds.height
         ) {
           clickedShape = shape as TextShape;
           clickedShapeIndex = i;
@@ -144,13 +237,7 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
     }
 
     if (clickedShape) {
-      console.log('🎯 SlideEditor: Shape selected', {
-        shapeId: clickedShape.id,
-        text: clickedShape.text?.substring(0, 30),
-        bounds: clickedShape.getBounds()
-      });
-
-      // Update selected shape for formatting toolbar (PowerPoint pattern)
+      // Select shape
       setSelectedShape(clickedShape);
       setSelectedShapeIndex(clickedShapeIndex);
 
@@ -166,7 +253,169 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
         onShapeSelect(null);
       }
     }
-  }, [editable, slide.shapes, targetResolution, onShapeSelect]);
+  }, [editable, selectedShape, slide.shapes, displayToCanvas, getResizeHandleAtPosition, onShapeSelect]);
+
+  // Handle mouse move - perform drag or resize
+  const handleMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const displayX = event.clientX - rect.left;
+    const displayY = event.clientY - rect.top;
+    const canvasPos = displayToCanvas(displayX, displayY);
+
+    // Update cursor based on hover state
+    if (!isDragging && !isResizing && selectedShape) {
+      const bounds = selectedShape.getBounds();
+      const handle = getResizeHandleAtPosition(canvasPos.x, canvasPos.y, bounds);
+
+      if (handle) {
+        setCursor(getCursorForHandle(handle));
+      } else if (
+        canvasPos.x >= bounds.x &&
+        canvasPos.x <= bounds.x + bounds.width &&
+        canvasPos.y >= bounds.y &&
+        canvasPos.y <= bounds.y + bounds.height
+      ) {
+        setCursor('move');
+      } else {
+        setCursor('default');
+      }
+    }
+
+    // Perform drag
+    if (isDragging && dragStart && draggedShapeOriginalPos && selectedShape && onSlideChange) {
+      const deltaX = canvasPos.x - dragStart.x;
+      const deltaY = canvasPos.y - dragStart.y;
+
+      const newX = Math.max(0, Math.min(targetResolution.width - selectedShape.size.width, draggedShapeOriginalPos.x + deltaX));
+      const newY = Math.max(0, Math.min(targetResolution.height - selectedShape.size.height, draggedShapeOriginalPos.y + deltaY));
+
+      // Create updated slide with new shape position
+      const updatedShapes = [...slide.shapes];
+      const shapeToUpdate = updatedShapes[selectedShapeIndex] as TextShape;
+      shapeToUpdate.position.x = newX;
+      shapeToUpdate.position.y = newY;
+
+      onSlideChange({
+        ...slide,
+        shapes: updatedShapes
+      });
+    }
+
+    // Perform resize
+    if (isResizing && resizeHandle && resizeStart && dragStart && selectedShape && onSlideChange) {
+      const deltaX = canvasPos.x - dragStart.x;
+      const deltaY = canvasPos.y - dragStart.y;
+
+      let newX = resizeStart.x;
+      let newY = resizeStart.y;
+      let newWidth = resizeStart.width;
+      let newHeight = resizeStart.height;
+
+      const minSize = 50; // Minimum size constraint
+
+      // Apply resize based on handle
+      switch (resizeHandle) {
+        case 'nw':
+          newX = resizeStart.x + deltaX;
+          newY = resizeStart.y + deltaY;
+          newWidth = resizeStart.width - deltaX;
+          newHeight = resizeStart.height - deltaY;
+          break;
+        case 'ne':
+          newY = resizeStart.y + deltaY;
+          newWidth = resizeStart.width + deltaX;
+          newHeight = resizeStart.height - deltaY;
+          break;
+        case 'sw':
+          newX = resizeStart.x + deltaX;
+          newWidth = resizeStart.width - deltaX;
+          newHeight = resizeStart.height + deltaY;
+          break;
+        case 'se':
+          newWidth = resizeStart.width + deltaX;
+          newHeight = resizeStart.height + deltaY;
+          break;
+        case 'n':
+          newY = resizeStart.y + deltaY;
+          newHeight = resizeStart.height - deltaY;
+          break;
+        case 's':
+          newHeight = resizeStart.height + deltaY;
+          break;
+        case 'e':
+          newWidth = resizeStart.width + deltaX;
+          break;
+        case 'w':
+          newX = resizeStart.x + deltaX;
+          newWidth = resizeStart.width - deltaX;
+          break;
+      }
+
+      // Apply constraints
+      if (newWidth < minSize) {
+        newWidth = minSize;
+        if (resizeHandle.includes('w')) {
+          newX = resizeStart.x + resizeStart.width - minSize;
+        }
+      }
+
+      if (newHeight < minSize) {
+        newHeight = minSize;
+        if (resizeHandle.includes('n')) {
+          newY = resizeStart.y + resizeStart.height - minSize;
+        }
+      }
+
+      // Boundary constraints
+      newX = Math.max(0, Math.min(targetResolution.width - newWidth, newX));
+      newY = Math.max(0, Math.min(targetResolution.height - newHeight, newY));
+
+      // Create updated slide with new shape size
+      const updatedShapes = [...slide.shapes];
+      const shapeToUpdate = updatedShapes[selectedShapeIndex] as TextShape;
+      shapeToUpdate.position.x = newX;
+      shapeToUpdate.position.y = newY;
+      shapeToUpdate.size.width = newWidth;
+      shapeToUpdate.size.height = newHeight;
+
+      onSlideChange({
+        ...slide,
+        shapes: updatedShapes
+      });
+    }
+  }, [
+    canvasRef,
+    displayToCanvas,
+    isDragging,
+    isResizing,
+    selectedShape,
+    dragStart,
+    draggedShapeOriginalPos,
+    resizeHandle,
+    resizeStart,
+    selectedShapeIndex,
+    slide,
+    onSlideChange,
+    targetResolution,
+    getResizeHandleAtPosition,
+    getCursorForHandle
+  ]);
+
+  // Handle mouse up - end drag or resize
+  const handleMouseUp = useCallback(() => {
+    if (isDragging || isResizing) {
+      setIsDragging(false);
+      setIsResizing(false);
+      setDragStart(null);
+      setDraggedShapeOriginalPos(null);
+      setResizeHandle(null);
+      setResizeStart(null);
+      setCursor('default');
+    }
+  }, [isDragging, isResizing]);
 
   // Get selection bounds for visual indicator
   const getSelectionBounds = (): { x: number; y: number; width: number; height: number } | null => {
@@ -193,12 +442,16 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
   return (
     <div
       className={`relative w-full h-full ${className}`}
-      onClick={handleCanvasClick}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
       style={{
-        cursor: editable ? 'pointer' : 'default',
+        cursor: editable ? cursor : 'default',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        userSelect: 'none' // Prevent text selection during drag
       }}
     >
       <div
@@ -223,23 +476,30 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
         {/* Visual Selection Indicator (PowerPoint-style blue border) */}
         {selectedShape && selectionBounds && (
           <div
-            className="absolute pointer-events-none"
+            className="absolute"
             style={{
               left: `${selectionBounds.x}px`,
               top: `${selectionBounds.y}px`,
               width: `${selectionBounds.width}px`,
               height: `${selectionBounds.height}px`,
-              border: '3px solid #0078D4',
+              border: '2px solid #0078D4',
               borderRadius: '2px',
               boxShadow: '0 0 0 1px rgba(0, 120, 212, 0.3)',
-              animation: 'pulseSelection 2s ease-in-out infinite'
+              pointerEvents: 'none'
             }}
           >
-            {/* Selection corners (resize handles - visual only for now) */}
-            <div className="absolute -top-1 -left-1 w-2 h-2 bg-white border-2 border-blue-600 rounded-full" />
-            <div className="absolute -top-1 -right-1 w-2 h-2 bg-white border-2 border-blue-600 rounded-full" />
-            <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-white border-2 border-blue-600 rounded-full" />
-            <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-white border-2 border-blue-600 rounded-full" />
+            {/* 8 Resize Handles - Now interactive via mouse events */}
+            {/* Corner handles */}
+            <div className="absolute -top-1 -left-1 w-3 h-3 bg-white border-2 border-blue-600 rounded-full pointer-events-auto cursor-nwse-resize" style={{ pointerEvents: 'auto' }} />
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-white border-2 border-blue-600 rounded-full pointer-events-auto cursor-nesw-resize" style={{ pointerEvents: 'auto' }} />
+            <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border-2 border-blue-600 rounded-full pointer-events-auto cursor-nesw-resize" style={{ pointerEvents: 'auto' }} />
+            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border-2 border-blue-600 rounded-full pointer-events-auto cursor-nwse-resize" style={{ pointerEvents: 'auto' }} />
+
+            {/* Edge handles */}
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-2 border-blue-600 rounded-full pointer-events-auto cursor-ns-resize" style={{ pointerEvents: 'auto' }} />
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-2 border-blue-600 rounded-full pointer-events-auto cursor-ns-resize" style={{ pointerEvents: 'auto' }} />
+            <div className="absolute top-1/2 -translate-y-1/2 -left-1 w-3 h-3 bg-white border-2 border-blue-600 rounded-full pointer-events-auto cursor-ew-resize" style={{ pointerEvents: 'auto' }} />
+            <div className="absolute top-1/2 -translate-y-1/2 -right-1 w-3 h-3 bg-white border-2 border-blue-600 rounded-full pointer-events-auto cursor-ew-resize" style={{ pointerEvents: 'auto' }} />
           </div>
         )}
       </div>
@@ -247,17 +507,23 @@ export const SlideEditor: React.FC<SlideEditorProps> = ({
       {/* Selection Instructions */}
       {editable && !selectedShape && (
         <div className="absolute bottom-2 left-2 text-xs text-gray-400 bg-black/50 px-2 py-1 rounded pointer-events-none">
-          💡 Click text to select and format
+          💡 Click text to select • Drag to move • Drag handles to resize
         </div>
       )}
 
-      {/* Add subtle pulse animation */}
-      <style>{`
-        @keyframes pulseSelection {
-          0%, 100% { box-shadow: 0 0 0 1px rgba(0, 120, 212, 0.3); }
-          50% { box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.5); }
-        }
-      `}</style>
+      {/* Dragging feedback */}
+      {isDragging && selectedShape && (
+        <div className="absolute top-2 right-2 text-xs text-white bg-blue-600 px-2 py-1 rounded pointer-events-none">
+          Moving: {Math.round(selectedShape.position.x)} × {Math.round(selectedShape.position.y)}
+        </div>
+      )}
+
+      {/* Resizing feedback */}
+      {isResizing && selectedShape && (
+        <div className="absolute top-2 right-2 text-xs text-white bg-green-600 px-2 py-1 rounded pointer-events-none">
+          Size: {Math.round(selectedShape.size.width)} × {Math.round(selectedShape.size.height)}
+        </div>
+      )}
     </div>
   );
 };
