@@ -160,10 +160,33 @@ function convertTemplateSlide(content: LiveContent, slideSize: { width: number; 
     if (slide.background) {
       let backgroundShape: Shape | null = null;
 
-      if (slide.background.type === 'color') {
+      if (slide.background.type === 'color' && slide.background.value) {
         const color = parseColor(slide.background.value);
         backgroundShape = BackgroundShape.createSolidColor(color, slideSize.width, slideSize.height);
+      } else if (slide.background.type === 'gradient' && slide.background.gradient) {
+        // Handle gradient with start/end colors
+        const { start, end, direction } = slide.background.gradient as any;
+
+        // Parse colors
+        const startColor = parseColor(start);
+        const endColor = parseColor(end);
+
+        // Determine angle from direction
+        let angle = 90; // vertical (default)
+        if (direction === 'horizontal') angle = 0;
+        if (direction === 'diagonal') angle = 45;
+
+        backgroundShape = BackgroundShape.createLinearGradient(
+          [
+            { offset: 0, color: startColor },
+            { offset: 1, color: endColor }
+          ],
+          angle,
+          slideSize.width,
+          slideSize.height
+        );
       } else if (slide.background.type === 'gradient' && Array.isArray(slide.background.value)) {
+        // Fallback: Handle old format with value array (for backwards compatibility)
         backgroundShape = BackgroundShape.createLinearGradient(
           slide.background.value,
           slide.background.angle || 90,

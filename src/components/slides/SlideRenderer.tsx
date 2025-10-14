@@ -143,13 +143,13 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<RenderingEngine | null>(null);
 
-  // Initialize rendering engine once
+  // Initialize rendering engine once (only when component mounts or resolution changes)
   useEffect(() => {
     if (!canvasRef.current) return;
 
     const canvas = canvasRef.current;
     const resourceManager = ResourceManager.getInstance();
-    const resourceId = `slide-renderer-${slide.id}-${Date.now()}`;
+    const resourceId = `slide-renderer-${Date.now()}`; // Remove slide.id from resourceId
 
     try {
       // CRITICAL: Set canvas to target resolution BEFORE creating engine
@@ -195,11 +195,11 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
 
     // Cleanup on unmount
     return () => {
-      // console.log('🧹 SlideRenderer: Cleaning up', { slideId: slide.id });
+      // console.log('🧹 SlideRenderer: Cleaning up');
       resourceManager.cleanup(resourceId);
       engineRef.current = null;
     };
-  }, [slide.id, targetResolution, onRendered]);
+  }, [targetResolution.width, targetResolution.height]); // Only recreate if resolution changes
 
   // Render slide when it changes
   useEffect(() => {
@@ -239,25 +239,25 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
       const reconstructedShapes = ShapeReconstructor.ensureShapeInstances(slide.shapes);
       allShapes = [...allShapes, ...reconstructedShapes];
 
-      // Diagnostic logging disabled for production
-      // console.log('🔧 SlideRenderer: Shape reconstruction', {
-      //   originalCount: slide.shapes.length,
-      //   reconstructedCount: reconstructedShapes.length,
-      //   totalWithBackground: allShapes.length,
-      //   needsReconstruction: slide.shapes.some(shape => ShapeReconstructor.needsReconstruction(shape))
-      // });
+      console.log('🔧 SlideRenderer: Shape reconstruction', {
+        slideId: slide.id,
+        originalCount: slide.shapes.length,
+        reconstructedCount: reconstructedShapes.length,
+        totalWithBackground: allShapes.length,
+        needsReconstruction: slide.shapes.some(shape => ShapeReconstructor.needsReconstruction(shape))
+      });
 
       // Add all shapes to engine (background first, then content shapes)
       allShapes.forEach((shape: Shape, index: number) => {
-        // console.log('🔍 SlideRenderer: Adding shape', {
-        //   index,
-        //   id: shape.id,
-        //   type: shape.type,
-        //   hasIsVisible: typeof shape.isVisible === 'function',
-        //   constructor: shape.constructor.name,
-        //   visible: shape.visible,
-        //   opacity: shape.opacity
-        // });
+        console.log('🔍 SlideRenderer: Adding shape', {
+          index,
+          id: shape.id,
+          type: shape.type,
+          zIndex: shape.zIndex,
+          visible: shape.visible,
+          opacity: shape.opacity,
+          constructor: shape.constructor.name
+        });
 
         engine.addShape(shape);
       });

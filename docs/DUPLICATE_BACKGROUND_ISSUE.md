@@ -120,6 +120,62 @@ Render order:
 Result: Text invisible, only background visible
 ```
 
+### Part 3: Race Condition - Rapid Engine Creation/Disposal (Preview Window Issue)
+
+**Location:** `src/components/slides/SlideRenderer.tsx` (useEffect dependencies)
+
+**What was happening:**
+
+User reported that when selecting a scripture verse:
+- **Preview window** showed ONLY background color (no text)
+- **Live display** showed correct rendering (text + background)
+- **After selecting another verse**, preview would fix itself
+
+**Console Log Evidence:**
+```
+ResourceManager: Registered engine slide-renderer-scripture-...-1760432036424
+CanvasRenderer.setupCanvas: Canvas setup complete
+ResourceManager: Disposed engine slide-renderer-scripture-...-1760432036424
+ResourceManager: Registered engine slide-renderer-scripture-...-1760432044571
+CanvasRenderer.setupCanvas: Canvas setup complete
+ResourceManager: Disposed engine slide-renderer-scripture-...-1760432044571
+[... pattern repeats 10+ times in under 1 second]
+```
+
+**The flaw:**
+1. SlideRenderer had `slide.id` in the useEffect dependency array
+2. Every time a new slide was selected, it had a new ID
+3. This triggered the useEffect, which disposed the old engine and created a new one
+4. But React was re-rendering the component multiple times rapidly (React batching, state updates)
+5. Each re-render created and immediately disposed an engine
+6. Result: Engines were created/disposed before they could finish rendering shapes
+
+**The race condition:**
+```typescript
+// OLD CODE - PROBLEMATIC
+useEffect(() => {
+  const resourceId = `slide-renderer-${slide.id}-${Date.now()}`;
+  // ... create engine
+  return () => {
+    resourceManager.cleanup(resourceId); // Cleanup on unmount OR dependency change
+  };
+}, [slide.id, targetResolution, onRendered]); // ❌ slide.id changes on every selection!
+```
+
+**What happened:**
+1. Slide selected → new slide.id
+2. useEffect cleanup runs → disposes engine
+3. useEffect runs → creates new engine
+4. React re-renders (state propagation) → repeats steps 2-3
+5. Background shape gets added and rendered (fast operation)
+6. Engine disposed before text shapes can be added/rendered
+7. Next render: background visible, text missing
+
+**Why live display worked but preview didn't:**
+- Live display has fewer React re-renders (different component tree)
+- Preview window is deeply nested with more state dependencies
+- More re-renders = more opportunities for race condition to occur
+
 ## The Fix
 
 ### Solution 1: Use BackgroundShape in Rendering Engine
@@ -187,6 +243,63 @@ if (!content.featureSettings?.background) {
 - If user has configured a background via feature settings → Don't create template background
 - If no background configured → Use template's default background
 - This respects user choices while providing sensible defaults
+
+### Solution 3: Fix Race Condition - Stabilize Engine Lifecycle
+
+**File:** `src/components/slides/SlideRenderer.tsx`
+
+**Change:**
+```typescript
+// OLD CODE - Engine recreated on every slide change
+useEffect(() => {
+  const resourceId = `slide-renderer-${slide.id}-${Date.now()}`;
+  // ... create engine
+  return () => {
+    resourceManager.cleanup(resourceId);
+  };
+}, [slide.id, targetResolution, onRendered]); // ❌ Recreates engine constantly!
+
+// NEW CODE - Engine created once, reused for all slides
+useEffect(() => {
+  const resourceId = `slide-renderer-${Date.now()}`; // ✓ No slide.id
+  // ... create engine
+  return () => {
+    resourceManager.cleanup(resourceId);
+  };
+}, [targetResolution.width, targetResolution.height]); // ✓ Only resolution changes
+```
+
+**Key changes:**
+1. **Removed `slide.id` from dependency array** - prevents recreation on slide change
+2. **Removed `slide.id` from resourceId** - makes ID stable across slides
+3. **Changed dependencies to specific resolution values** - only recreate if resolution actually changes
+4. **Separate useEffect handles slide content updates** - renders new content using existing engine
+
+**Architecture:**
+```
+Component Mount:
+  └─> Create engine (once)
+      └─> Register with ResourceManager
+
+Slide Change (new slide.id):
+  └─> Second useEffect fires
+      └─> Clears shapes from engine
+      └─> Adds new BackgroundShape
+      └─> Adds new text shapes
+      └─> Calls engine.render()
+      └─> Engine persists! ✓
+
+Component Unmount:
+  └─> Cleanup function runs
+      └─> Dispose engine
+      └─> Unregister from ResourceManager
+```
+
+**Benefits:**
+- **No more race conditions** - engine lifecycle is stable
+- **Better performance** - engine reused instead of recreated
+- **Consistent rendering** - all slides use the same engine instance
+- **Proper cleanup** - engine only disposed when component unmounts
 
 ## Why This Pattern Matters
 
@@ -259,6 +372,28 @@ Background rendering works in:
 - ✓ All background types (color, gradient, image)
 - ✓ Opacity settings
 
+### 5. Manage React Component Lifecycle Carefully
+**Problem:** useEffect dependencies causing rapid engine recreation
+
+**Key insights:**
+- Don't put frequently-changing values in effect dependencies if they don't need to trigger recreation
+- `slide.id` changes on every slide selection - causes constant recreation
+- Use separate effects: one for initialization (runs once), one for updates (runs on changes)
+- Resource cleanup should only happen on unmount, not on every prop change
+
+**Solution:**
+```typescript
+// Initialization effect - runs once on mount
+useEffect(() => {
+  // Create long-lived resources
+}, [stable.dependencies.only]);
+
+// Update effect - runs on content changes
+useEffect(() => {
+  // Update content using existing resources
+}, [content.that.changes]);
+```
+
 ## Related Code Locations
 
 ### Fixed Files
@@ -318,10 +453,24 @@ Canvas (final output)
    - What's the default behavior?
    - How do user settings override defaults?
 
+6. **Be careful with React useEffect dependencies**
+   - Only include dependencies that should trigger the effect
+   - Avoid putting IDs or frequently-changing values unless necessary
+   - Use useRef for values that shouldn't trigger re-runs
+   - Separate initialization effects from update effects
+   - Log when effects run to catch unexpected behavior
+
+7. **Watch for race conditions**
+   - Monitor resource creation/disposal patterns in console
+   - Look for repeated create→dispose cycles
+   - Test in different rendering contexts (preview, live, different components)
+   - Use React DevTools Profiler to see re-render patterns
+
 ## Testing Checklist
 
 When modifying background rendering:
 
+**Functionality:**
 - [ ] Background color changes in settings apply immediately
 - [ ] Background color changes in toolbar apply immediately
 - [ ] Background persists when switching between slides
@@ -329,22 +478,57 @@ When modifying background rendering:
 - [ ] Gradients render correctly (all directions)
 - [ ] Images load and display properly
 - [ ] Opacity settings work (0.0 to 1.0)
-- [ ] Works in preview window
+
+**Rendering Contexts:**
+- [ ] Works in preview window (shows text + background immediately)
 - [ ] Works in live display window
 - [ ] Works on live screen (projector)
+- [ ] Works when switching between different verses rapidly
+- [ ] Works after multiple slide selections
+
+**Performance & Stability:**
 - [ ] No console errors or warnings
 - [ ] Performance is acceptable (no lag)
+- [ ] No rapid engine creation/disposal in console
+- [ ] No "flashing" or "blank" slides during transitions
+- [ ] Preview and live display stay in sync
+- [ ] Text never disappears (covered by background)
 
 ## References
 
-- **Issue Reports:** Background not rendering, text covered by background
-- **Console Logs:** Showed duplicate BackgroundShape rendering
+- **Issue Reports:**
+  - Background not rendering (Part 1 & 2)
+  - Text covered by background (Part 2)
+  - Preview window showing only background, no text (Part 3)
+- **Console Logs:**
+  - Showed duplicate BackgroundShape rendering (Part 2)
+  - Showed rapid engine creation/disposal cycles (Part 3)
 - **Fix Commits:** See ACTIVITIES.md for 2025-10-14
 - **Related Docs:** See rendering architecture documentation
 
 ---
 
 **Document Created:** 2025-10-14
-**Last Updated:** 2025-10-14
-**Status:** Issue Resolved
+**Last Updated:** 2025-10-14 (Added Part 3: Race Condition Fix)
+**Status:** All Issues Resolved
+**Issues Fixed:** 3 (Manual drawing, Duplicate backgrounds, Race condition)
 **Author:** Development Team
+
+## Summary
+
+This document covered **three interconnected issues** that all manifested as background rendering problems:
+
+1. **Manual Canvas Drawing** - Background drawn outside engine, gets cleared
+2. **Duplicate Backgrounds** - Template creating second background that covers user's choice
+3. **Race Condition** - Rapid engine recreation preventing text from rendering
+
+The root causes were:
+- Not following the shape-based rendering pattern (everything must be a shape)
+- Creating shapes in multiple places without coordination
+- React useEffect dependencies causing unnecessary recreation
+
+The fixes ensure:
+- All backgrounds are BackgroundShape objects managed by the rendering engine
+- Only one background per slide (user settings take precedence)
+- Engine lifecycle is stable (created once, reused for all slides)
+- Proper rendering order (background → text → overlays)

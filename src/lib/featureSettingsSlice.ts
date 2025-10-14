@@ -131,11 +131,37 @@ const loadSettingsFromStorage = (): AllFeatureSettings => {
     const stored = localStorage.getItem("praisePresent_featureSettings");
     if (stored) {
       const parsedSettings = JSON.parse(stored);
-      // Merge with defaults to ensure all properties exist
+
+      // Deep merge with defaults to ensure all properties exist
+      // This is critical for gradient backgrounds which have nested structure
       return {
-        scriptures: { ...defaultScriptureSettings, ...parsedSettings.scriptures },
-        songs: { ...defaultSongSettings, ...parsedSettings.songs },
-        announcements: { ...defaultAnnouncementSettings, ...parsedSettings.announcements }
+        scriptures: {
+          ...defaultScriptureSettings,
+          ...parsedSettings.scriptures,
+          background: parsedSettings.scriptures?.background || defaultScriptureSettings.background,
+          typography: {
+            ...defaultScriptureSettings.typography,
+            ...(parsedSettings.scriptures?.typography || {})
+          }
+        },
+        songs: {
+          ...defaultSongSettings,
+          ...parsedSettings.songs,
+          background: parsedSettings.songs?.background || defaultSongSettings.background,
+          typography: {
+            ...defaultSongSettings.typography,
+            ...(parsedSettings.songs?.typography || {})
+          }
+        },
+        announcements: {
+          ...defaultAnnouncementSettings,
+          ...parsedSettings.announcements,
+          background: parsedSettings.announcements?.background || defaultAnnouncementSettings.background,
+          typography: {
+            ...defaultAnnouncementSettings.typography,
+            ...(parsedSettings.announcements?.typography || {})
+          }
+        }
       };
     }
   } catch (error) {

@@ -69,6 +69,8 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
   const [opacity, setOpacity] = useState(currentBackground.opacity || 1.0);
 
   // Sync local state with current background
+  // IMPORTANT: Use JSON.stringify for gradient to detect deep changes in nested object
+  // Without this, React won't detect when gradient.start/end/direction change
   useEffect(() => {
     setBgType(currentBackground.type || 'color');
     if (currentBackground.type === 'color') {
@@ -81,7 +83,14 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
       setImageUrl(currentBackground.value || '');
     }
     setOpacity(currentBackground.opacity || 1.0);
-  }, [currentBackground]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentBackground.type,
+    currentBackground.value,
+    currentBackground.opacity,
+    // Use JSON.stringify to detect deep changes in gradient object
+    JSON.stringify(currentBackground.gradient)
+  ]);
 
   // Apply background change
   const applyBackground = (updates: Partial<SlideBackground>) => {

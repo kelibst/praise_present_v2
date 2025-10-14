@@ -415,9 +415,22 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             const shapes = scriptureTemplate.generateSlide(scriptureContent);
 
             // Convert SlideBackground to Slide background format
-            const slideBackground = scriptureSettings.background.type === 'gradient'
-              ? { type: 'gradient' as const, value: `${scriptureSettings.background.gradient?.start || '#000000'},${scriptureSettings.background.gradient?.end || '#000000'}` }
-              : { type: scriptureSettings.background.type as 'color' | 'image', value: scriptureSettings.background.value || '#1a1a1a' };
+            // IMPORTANT: Maintain gradient structure with start/end/direction, not comma-separated string
+            const slideBackground = scriptureSettings.background.type === 'gradient' && scriptureSettings.background.gradient
+              ? {
+                  type: 'gradient' as const,
+                  gradient: {
+                    start: scriptureSettings.background.gradient.start,
+                    end: scriptureSettings.background.gradient.end,
+                    direction: scriptureSettings.background.gradient.direction
+                  },
+                  opacity: scriptureSettings.background.opacity
+                }
+              : {
+                  type: scriptureSettings.background.type as 'color' | 'image',
+                  value: scriptureSettings.background.value || '#1a1a1a',
+                  opacity: scriptureSettings.background.opacity
+                };
 
             slides.push({
               id: `scripture-${verse.id || Date.now()}`,
@@ -450,9 +463,22 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             const shapes = scriptureTemplate.generateSlide(scriptureContent);
 
             // Convert SlideBackground to Slide background format
-            const slideBackground = scriptureSettings.background.type === 'gradient'
-              ? { type: 'gradient' as const, value: `${scriptureSettings.background.gradient?.start || '#000000'},${scriptureSettings.background.gradient?.end || '#000000'}` }
-              : { type: scriptureSettings.background.type as 'color' | 'image', value: scriptureSettings.background.value || '#1a1a1a' };
+            // IMPORTANT: Maintain gradient structure with start/end/direction, not comma-separated string
+            const slideBackground = scriptureSettings.background.type === 'gradient' && scriptureSettings.background.gradient
+              ? {
+                  type: 'gradient' as const,
+                  gradient: {
+                    start: scriptureSettings.background.gradient.start,
+                    end: scriptureSettings.background.gradient.end,
+                    direction: scriptureSettings.background.gradient.direction
+                  },
+                  opacity: scriptureSettings.background.opacity
+                }
+              : {
+                  type: scriptureSettings.background.type as 'color' | 'image',
+                  value: scriptureSettings.background.value || '#1a1a1a',
+                  opacity: scriptureSettings.background.opacity
+                };
 
             slides.push({
               id: `scripture-group-${firstVerse.id}-${lastVerse.id}`,
@@ -485,10 +511,28 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             };
 
             const shapes = songTemplate.generateSlide(songSlideContent);
+
+            // Convert SlideBackground to Slide background format
+            const slideBackground = songSettings.background.type === 'gradient' && songSettings.background.gradient
+              ? {
+                  type: 'gradient' as const,
+                  gradient: {
+                    start: songSettings.background.gradient.start,
+                    end: songSettings.background.gradient.end,
+                    direction: songSettings.background.gradient.direction
+                  },
+                  opacity: songSettings.background.opacity
+                }
+              : {
+                  type: songSettings.background.type as 'color' | 'image',
+                  value: songSettings.background.value || '#1a1a1a',
+                  opacity: songSettings.background.opacity
+                };
+
             slides.push({
               id: `song-verse-${index}`,
               shapes: shapes,
-              background: { type: 'color', value: '#1a1a1a' }
+              background: slideBackground
             });
           });
 
@@ -507,10 +551,28 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             };
 
             const shapes = songTemplate.generateSlide(chorusContent);
+
+            // Convert SlideBackground to Slide background format
+            const slideBackground = songSettings.background.type === 'gradient' && songSettings.background.gradient
+              ? {
+                  type: 'gradient' as const,
+                  gradient: {
+                    start: songSettings.background.gradient.start,
+                    end: songSettings.background.gradient.end,
+                    direction: songSettings.background.gradient.direction
+                  },
+                  opacity: songSettings.background.opacity
+                }
+              : {
+                  type: songSettings.background.type as 'color' | 'image',
+                  value: songSettings.background.value || '#1a1a1a',
+                  opacity: songSettings.background.opacity
+                };
+
             slides.push({
               id: 'song-chorus',
               shapes: shapes,
-              background: { type: 'color', value: '#1a1a1a' }
+              background: slideBackground
             });
           }
         } else {
@@ -530,10 +592,28 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           };
 
           const shapes = songTemplate.generateSlide(songSlideContent);
+
+          // Convert SlideBackground to Slide background format
+          const slideBackground = songSettings.background.type === 'gradient' && songSettings.background.gradient
+            ? {
+                type: 'gradient' as const,
+                gradient: {
+                  start: songSettings.background.gradient.start,
+                  end: songSettings.background.gradient.end,
+                  direction: songSettings.background.gradient.direction
+                },
+                opacity: songSettings.background.opacity
+              }
+            : {
+                type: songSettings.background.type as 'color' | 'image',
+                value: songSettings.background.value || '#1a1a1a',
+                opacity: songSettings.background.opacity
+              };
+
           slides.push({
             id: 'song-slide',
             shapes: shapes,
-            background: { type: 'color', value: '#1a1a1a' }
+            background: slideBackground
           });
         }
       }
