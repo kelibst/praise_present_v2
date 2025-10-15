@@ -2,6 +2,272 @@
 
 This file tracks major features and changes implemented in PraisePresent.
 
+## 2025-10-15
+
+### ✅ Added Video Background Support to Settings
+**Time:** Evening
+**Description:** Implemented complete video background support for scripture/song/announcement slides. Videos can be uploaded (base64) or loaded from URLs, with automatic looping and muted playback. Follows the same architecture as image backgrounds for seamless persistence.
+
+**Features Added:**
+1. **VideoShape Class:**
+   - Created [VideoShape.ts](src/rendering/shapes/VideoShape.ts) similar to ImageShape pattern
+   - Handles HTMLVideoElement loading, rendering, and playback control
+   - Supports objectFit modes: fill, contain, cover, scale-down, none
+   - Auto-plays muted videos with looping enabled by default
+   - Load states: UNLOADED, LOADING, LOADED, ERROR
+   - Methods: play(), pause(), stop(), setVolume(), setMuted(), setPlaybackRate()
+
+2. **Background Type System:**
+   - Extended `SlideBackground` interface in [BackgroundToolbar.tsx](src/components/formatting/BackgroundToolbar.tsx#L12) to include 'video' type
+   - Extended `BackgroundStyle` interface in [shapes.ts](src/rendering/types/shapes.ts#L62) with videoUrl field
+   - Updated BackgroundToolbar state management to handle video URLs
+
+3. **BackgroundToolbar UI:**
+   - Added Video button alongside Color/Gradient/Image buttons with VideoIcon
+   - Video upload handler accepts MP4, WebM, OGG, MOV formats (max 50MB)
+   - URL input field for external video sources
+   - Clear button to remove video
+   - Informational note: "Videos will loop automatically and play muted"
+   - Error handling for invalid file types and sizes
+
+4. **BackgroundShape Rendering:**
+   - Added VideoShape integration to [BackgroundShape.ts](src/rendering/shapes/BackgroundShape.ts)
+   - Creates VideoShape instance when type is 'video'
+   - Renders video frames via Canvas drawImage() in continuous render loop
+   - Placeholder with play icon shown during loading/error states
+   - Public methods: setBackgroundVideo(), isVideoLoaded(), isVideoLoading(), hasVideoError(), waitForVideoLoad()
+   - Static factory: createVideoBackground()
+
+5. **SlideRenderer Conversion:**
+   - Updated [SlideRenderer.tsx](src/components/slides/SlideRenderer.tsx#L119-125) to convert video backgrounds
+   - Converts Slide.background format to BackgroundStyle with videoUrl
+   - Integrates with existing background conversion pipeline
+
+**Technical Implementation:**
+- [VideoShape.ts](src/rendering/shapes/VideoShape.ts): Complete video rendering class (480 lines)
+  - HTMLVideoElement management with proper loading and error handling
+  - Canvas rendering via drawImage() during continuous render loop
+  - objectFit calculation logic (same as ImageShape)
+  - Autoplay, loop, muted, playbackRate configuration
+  - Play icon placeholder during loading
+- [BackgroundToolbar.tsx](src/components/formatting/BackgroundToolbar.tsx#L1-8,12-13,61,69): Video type support
+  - Added VideoIcon import from lucide-react
+  - Extended type unions to include 'video'
+  - Added videoUrl state variable
+  - Updated useEffect to sync video URLs
+- [BackgroundToolbar.tsx](src/components/formatting/BackgroundToolbar.tsx#L110-141,183-260,329-340,490-547): Video handlers and UI
+  - handleTypeChange() supports 'video' type
+  - handleVideoChange() applies video background
+  - handleFileUpload() validates video files (MP4/WebM/OGG/MOV, max 50MB)
+  - Converts videos to base64 for storage
+  - Video controls section with upload button, URL input, clear button
+- [shapes.ts](src/rendering/types/shapes.ts#L62-68): Extended BackgroundStyle type
+  - Added 'video' to type union
+  - Added videoUrl?: string field
+- [BackgroundShape.ts](src/rendering/shapes/BackgroundShape.ts): Full video support
+  - Import VideoShape and VideoLoadState (line 6)
+  - videoShape property (line 16)
+  - createVideoShape() method (lines 55-71)
+  - renderVideoBackground() method (lines 177-192)
+  - renderVideoPlaceholder() with play icon (lines 226-272)
+  - setBackgroundVideo() method (lines 307-319)
+  - Video state methods: isVideoLoaded(), isVideoLoading(), hasVideoError(), waitForVideoLoad() (lines 342-357)
+  - Static factory: createVideoBackground() (lines 474-488)
+- [SlideRenderer.tsx](src/components/slides/SlideRenderer.tsx#L119-125): Video conversion logic
+  - Converts Slide.background.type === 'video' to BackgroundStyle with videoUrl
+
+**Persistence Architecture (No Changes Needed):**
+Video backgrounds persist automatically through existing architecture:
+1. **User uploads/sets video** → BackgroundToolbar calls onBackgroundChange
+2. **Flows to Redux** → updateFeatureBackground action in featureSettingsSlice
+3. **Auto-saves to localStorage** → Line 340 in featureSettingsSlice.ts
+4. **Slides capture background** → When generated, slides store background settings in their data
+5. **ServiceItem stores slides** → Redux updateServiceItem saves to localStorage (serviceItemsSlice.ts:139)
+6. **Regeneration prevented** → LivePresentationPage.tsx:402 checks if slides exist before regenerating
+7. **Videos preserved** → Same flow as images (documented in 2025-10-14 entry)
+
+**User Workflow:**
+1. Open Settings → Scripture/Song/Announcement Settings
+2. Click Video button in BackgroundToolbar
+3. Either:
+   - Click "Upload Video" → select MP4/WebM/MOV file (max 50MB) → converts to base64
+   - Enter video URL → paste external video URL
+4. Video appears in preview with loading placeholder
+5. Once loaded, video plays automatically (muted, looped)
+6. Settings auto-save to Redux → localStorage
+7. All future slides use video background
+8. Video persists across page refreshes and verse/song changes
+
+**File Size Limits:**
+- Images: 2MB (unchanged)
+- Videos: 50MB (new)
+- Base64 encoding increases storage by ~33%
+- localStorage limit typically 5-10MB per domain
+- Consider external URLs for larger videos
+
+**Browser Compatibility:**
+- MP4: All modern browsers
+- WebM: Chrome, Firefox, Edge (not Safari)
+- OGG: Firefox only
+- MOV (QuickTime): Limited browser support
+- Recommend MP4 for best compatibility
+
+**Impact:**
+- Full video background support matching image functionality
+- No additional persistence work needed (leverages existing architecture)
+- Videos loop automatically for continuous playback during presentations
+- Muted by default to avoid audio issues
+- Same object-fit options as images (fill, contain, cover, scale-down, none)
+- Base64 storage eliminates file path issues
+- Works in preview, live display, and presentation modes
+
+## 2025-10-14
+
+### ✅ Implemented Full Persistent State with Redux and Database Schema
+**Time:** Late Evening (Latest)
+**Description:** Implemented complete persistence architecture for slide customizations (backgrounds, sizes, positions) using Redux state management, localStorage, and database schema updates. Ensures all user customizations survive page refreshes and session changes.
+
+**Architecture Changes:**
+1. **Database Schema (Prisma):**
+   - Added `slides` field to ServiceItem model (String, JSON)
+   - Stores serialized slide data with shape customizations
+   - Generated and pushed schema changes to database
+
+2. **Redux State Management:**
+   - Created [serviceItemsSlice.ts](src/lib/serviceItemsSlice.ts) Redux slice
+   - Manages service items with full CRUD operations
+   - Automatic localStorage synchronization
+   - Actions: addServiceItem, updateServiceItem, updateServiceItemSlides, removeServiceItem, reorderServiceItems, setServiceItems, clearServiceItems
+   - Selectors: selectServiceItems, selectServiceItemById, selectServiceItemsLoading, etc.
+   - Integrated with Redux store in [store.ts](src/lib/store.ts)
+
+3. **LivePresentationPage Integration:**
+   - Replaced local useState with Redux useSelector for serviceItems
+   - Updated all state mutations to use Redux dispatch actions
+   - Removed manual localStorage save useEffect (Redux handles it)
+   - All service item operations now flow through Redux
+
+**Technical Implementation:**
+- [prisma/schema.prisma:264](prisma/schema.prisma#L264): Added slides field to ServiceItem model
+- [src/lib/utils/shapeSerializer.ts](src/lib/utils/shapeSerializer.ts): Shape serialization utilities for localStorage
+- [src/lib/serviceItemsSlice.ts](src/lib/serviceItemsSlice.ts): Complete Redux slice with shape serialization
+  - `serializeSlides()`: Converts TextShape instances to plain objects before localStorage save
+  - `deserializeSlides()`: Converts plain objects back to TextShape instances on load
+  - Automatic serialization in `saveServiceItemsToStorage()` and `loadServiceItemsFromStorage()`
+- [src/lib/store.ts:6,15](src/lib/store.ts#L6): Added serviceItemsSlice to Redux store
+- [src/lib/store.ts:17-26](src/lib/store.ts#L17): Disabled serializability checks for serviceItems (shapes stay as class instances in memory)
+- [LivePresentationPage.tsx:4-14](src/pages/LivePresentationPage.tsx#L4): Added Redux imports
+- [LivePresentationPage.tsx:77-78](src/pages/LivePresentationPage.tsx#L77): Use Redux selector instead of local state
+- [LivePresentationPage.tsx:666,775,1014](src/pages/LivePresentationPage.tsx): Updated all mutations to dispatch Redux actions
+
+**Persistence Flow:**
+1. User edits slide (background, size, position) → handleSlideUpdate
+2. Update dispatched to Redux → updateServiceItem action
+3. Redux reducer updates state (keeps TextShape instances in memory)
+4. Redux auto-saves to localStorage (serializes shapes to plain objects)
+5. On page refresh → Redux loads from localStorage (deserializes back to TextShape instances)
+6. Shapes render correctly with all customizations preserved
+7. Future: Database sync via IPC (schema ready, TODOs in place)
+
+**Benefits:**
+- Full state persistence across page refreshes
+- Centralized state management with Redux
+- Automatic localStorage sync
+- Database-ready architecture
+- Type-safe with TypeScript
+- Proper React rendering optimization
+
+### ✅ Background Color and Opacity for Text Shapes + Persistence Fix
+**Time:** Evening
+**Description:** Added background color and opacity controls to the TypographyToolbar, allowing users to add colored backgrounds to individual text shapes (verse, reference, translation) with adjustable opacity. Fixed critical issue where customizations were lost when switching between verses.
+
+**Features Added:**
+1. **Background Toggle Button:**
+   - Square icon button in TypographyToolbar to enable/disable background
+   - Visual feedback when background is active (blue highlight)
+   - Quick on/off without losing color settings
+
+2. **Background Color Picker:**
+   - Color picker input (visual swatch)
+   - Hex input field for precise color entry
+   - Only visible when background is enabled
+   - Separate from text color (can have different colors)
+
+3. **Background Opacity Slider:**
+   - Range slider from 0% to 100%
+   - 5% step increments for smooth control
+   - Real-time visual feedback showing percentage
+   - Allows semi-transparent backgrounds
+
+4. **Background Rendering:**
+   - Renders as filled rectangle behind text
+   - Respects shape bounds (width × height)
+   - Supports both solid colors and gradients
+   - Applied before text rendering (proper layering)
+
+**Technical Implementation:**
+- [TextShape.ts:4](src/rendering/shapes/TextShape.ts#L4): Added Gradient import
+- [TextShape.ts:95](src/rendering/shapes/TextShape.ts#L95): Call renderBackground() before rendering text
+- [TextShape.ts:363-440](src/rendering/shapes/TextShape.ts#L363): Implemented renderBackground() and createGradientFill() methods
+- [TypographyToolbar.tsx:14](src/components/formatting/TypographyToolbar.tsx#L14): Added Square icon import
+- [TypographyToolbar.tsx:73-75](src/components/formatting/TypographyToolbar.tsx#L73): Added background state (color, hasBackground, opacity)
+- [TypographyToolbar.tsx:109-120](src/components/formatting/TypographyToolbar.tsx#L109): Sync background state from shape.textStyle.fill
+- [TypographyToolbar.tsx:217-254](src/components/formatting/TypographyToolbar.tsx#L217): Background toggle, color, and opacity handlers
+- [TypographyToolbar.tsx:473-524](src/components/formatting/TypographyToolbar.tsx#L473): Background UI controls in toolbar
+
+**How It Works:**
+- Uses existing `textStyle.fill` property (Color object) for background color
+- Uses `textStyle.opacity` for background transparency
+- Background renders as `ctx.fillRect()` before text
+- Toggle button adds/removes fill property from textStyle
+- Changes apply immediately via existing format pipeline
+
+**User Workflow:**
+1. Select text shape (verse, reference, or translation)
+2. Click square icon button to enable background
+3. Choose background color from picker or enter hex
+4. Adjust opacity slider (0-100%)
+5. Changes apply instantly to selected shape
+6. Can disable background by clicking square icon again
+
+**Use Cases:**
+- Add colored boxes behind verse numbers
+- Highlight references with semi-transparent background
+- Create pill-shaped backgrounds for translations
+- Match brand colors for specific elements
+- Improve text readability on busy image backgrounds
+
+**Critical Bug Fix - Customization Persistence:**
+**Problem:**
+- User adds background color or resizes shapes
+- Switching to another verse in the same passage regenerated slides from template
+- All customizations (backgrounds, sizes, positions) were lost
+- `generateSlidesForItem()` was called on every item selection
+
+**Solution:**
+- [LivePresentationPage.tsx:386-401](src/pages/LivePresentationPage.tsx#L386): Check if item already has slides
+- If slides exist, reuse them instead of regenerating
+- Only generate slides when item.slides is null/empty
+- Preserves ALL customizations: backgrounds, colors, sizes, positions
+
+**Technical Details:**
+- `handleSlideUpdate()` was correctly saving changes to `selectedItem.slides`
+- Problem was `generateSlidesForItem()` overwriting saved slides
+- Solution: Early return if `item.slides && item.slides.length > 0`
+- Template generation only happens once per service item
+- Subsequent selections reuse existing slides with customizations
+
+**Impact:**
+- Enhanced visual customization for scripture slides
+- Element-specific backgrounds (not global)
+- Professional-looking slide designs
+- Improved readability options
+- Works seamlessly with drag/resize functionality
+- Works seamlessly with existing rendering pipeline
+- **Customizations now persist when switching between verses**
+- **Background colors, shape sizes, and positions saved permanently**
+- Stored in service item data (persists in session state)
+
 ## 2025-10-14
 
 ### ✅ Drag and Resize Text Shapes (Canva/PowerPoint Style)

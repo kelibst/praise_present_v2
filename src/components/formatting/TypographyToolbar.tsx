@@ -10,7 +10,8 @@ import {
   Minus,
   Plus,
   Palette,
-  Save
+  Save,
+  Square
 } from 'lucide-react';
 import { TextShape } from '../../rendering/shapes/TextShape';
 import { TextStyle } from '../../rendering/types/shapes';
@@ -69,6 +70,9 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
   const [textAlign, setTextAlign] = useState<'left' | 'center' | 'right'>('center');
   const [textColor, setTextColor] = useState('#ffffff');
   const [lineHeight, setLineHeight] = useState(1.5);
+  const [backgroundColor, setBackgroundColor] = useState('#000000');
+  const [hasBackground, setHasBackground] = useState(false);
+  const [backgroundOpacity, setBackgroundOpacity] = useState(1.0);
 
   // Sync local state with selected shape
   useEffect(() => {
@@ -100,6 +104,19 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
         const hex = `#${style.color.r.toString(16).padStart(2, '0')}${style.color.g.toString(16).padStart(2, '0')}${style.color.b.toString(16).padStart(2, '0')}`;
         setTextColor(hex);
       }
+    }
+
+    // Sync background color and opacity
+    const fill = style.fill || selectedShape.style?.fill;
+    if (fill && typeof fill === 'object' && 'r' in fill) {
+      const bgColor = fill as any;
+      const bgHex = `#${bgColor.r.toString(16).padStart(2, '0')}${bgColor.g.toString(16).padStart(2, '0')}${bgColor.b.toString(16).padStart(2, '0')}`;
+      setBackgroundColor(bgHex);
+      setHasBackground(true);
+      setBackgroundOpacity(style.opacity !== undefined ? style.opacity : 1.0);
+    } else {
+      setHasBackground(false);
+      setBackgroundOpacity(1.0);
     }
   }, [selectedShape]);
 
@@ -195,6 +212,45 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
     const clampedHeight = Math.max(0.8, Math.min(3.0, height));
     setLineHeight(clampedHeight);
     applyFormat({ lineHeight: clampedHeight });
+  };
+
+  // Background color toggle
+  const toggleBackground = () => {
+    const newHasBackground = !hasBackground;
+    setHasBackground(newHasBackground);
+
+    if (newHasBackground) {
+      // Enable background with current color
+      const bgColor = hexToColor(backgroundColor);
+      applyFormat({
+        fill: bgColor,
+        opacity: backgroundOpacity
+      });
+    } else {
+      // Disable background
+      applyFormat({
+        fill: undefined as any,
+        opacity: undefined as any
+      });
+    }
+  };
+
+  // Background color handler
+  const handleBackgroundColorChange = (hex: string) => {
+    setBackgroundColor(hex);
+    if (hasBackground) {
+      const bgColor = hexToColor(hex);
+      applyFormat({ fill: bgColor });
+    }
+  };
+
+  // Background opacity handler
+  const handleBackgroundOpacityChange = (opacity: number) => {
+    const clampedOpacity = Math.max(0, Math.min(1, opacity));
+    setBackgroundOpacity(clampedOpacity);
+    if (hasBackground) {
+      applyFormat({ opacity: clampedOpacity });
+    }
   };
 
   // Common presentation fonts
@@ -409,6 +465,62 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
             title={`Line height: ${lineHeight.toFixed(1)}`}
           />
           <span className="text-xs text-white w-8">{lineHeight.toFixed(1)}</span>
+        </div>
+
+        {/* Divider */}
+        <div className="h-6 w-px bg-gray-600" />
+
+        {/* Background Controls */}
+        <div className="flex items-center gap-2">
+          {/* Background toggle button */}
+          <button
+            onClick={toggleBackground}
+            className={`p-2 rounded border transition-colors ${
+              hasBackground
+                ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+            }`}
+            title={hasBackground ? 'Remove background' : 'Add background'}
+          >
+            <Square className="w-4 h-4" />
+          </button>
+
+          {/* Background color picker (only when background is enabled) */}
+          {hasBackground && (
+            <>
+              <input
+                type="color"
+                value={backgroundColor}
+                onChange={(e) => handleBackgroundColorChange(e.target.value)}
+                className="w-10 h-8 bg-gray-800 border border-gray-600 rounded cursor-pointer"
+                title="Background color"
+              />
+              <input
+                type="text"
+                value={backgroundColor.toUpperCase()}
+                onChange={(e) => handleBackgroundColorChange(e.target.value)}
+                className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-2 py-1 w-20 uppercase font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="#000000"
+                maxLength={7}
+              />
+
+              {/* Background opacity slider */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">BG:</span>
+                <input
+                  type="range"
+                  value={backgroundOpacity}
+                  onChange={(e) => handleBackgroundOpacityChange(parseFloat(e.target.value))}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  className="w-20 accent-blue-500"
+                  title={`Background opacity: ${Math.round(backgroundOpacity * 100)}%`}
+                />
+                <span className="text-xs text-white w-8">{Math.round(backgroundOpacity * 100)}%</span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Save as Default Button */}

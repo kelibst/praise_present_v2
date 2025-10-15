@@ -261,15 +261,16 @@ model ServiceItem {
   duration       Int? // Estimated duration in minutes
   notes          String?
   settings       String? // JSON settings specific to the item type
-  
+  slides         String? // JSON array of slides with shape customizations (position, size, background, etc.)
+
   // Relationships to content
   songId         String?
   presentationId String?
-  
+
   service        Service @relation(fields: [serviceId], references: [id])
   song           Song? @relation(fields: [songId], references: [id])
   presentation   Presentation? @relation(fields: [presentationId], references: [id])
-  
+
   @@index([serviceId, order])
   @@map("service_items")
 }

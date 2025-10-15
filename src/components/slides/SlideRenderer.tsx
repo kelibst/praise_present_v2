@@ -116,6 +116,14 @@ const convertSlideBackgroundToBackgroundStyle = (
     };
   }
 
+  if (type === 'video' && value) {
+    return {
+      type: 'video',
+      videoUrl: value,
+      imageStyle: { objectFit: 'cover' }
+    };
+  }
+
   return null;
 };
 

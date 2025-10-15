@@ -4,13 +4,14 @@ import {
   Image as ImageIcon,
   Droplet,
   Upload,
-  Trash2
+  Trash2,
+  Video as VideoIcon
 } from 'lucide-react';
 import { Color } from '../../rendering/types/geometry';
 
 export interface SlideBackground {
-  type: 'color' | 'gradient' | 'image';
-  value?: string; // Hex color for solid, or image URL
+  type: 'color' | 'gradient' | 'image' | 'video';
+  value?: string; // Hex color for solid, image URL, or video URL
   gradient?: {
     start: string; // Hex color
     end: string;   // Hex color
@@ -58,7 +59,7 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
   onBackgroundChange,
   className = ''
 }) => {
-  const [bgType, setBgType] = useState<'color' | 'gradient' | 'image'>(currentBackground.type || 'color');
+  const [bgType, setBgType] = useState<'color' | 'gradient' | 'image' | 'video'>(currentBackground.type || 'color');
   const [solidColor, setSolidColor] = useState(currentBackground.value || '#1a1a1a');
   const [gradientStart, setGradientStart] = useState(currentBackground.gradient?.start || '#1a1a1a');
   const [gradientEnd, setGradientEnd] = useState(currentBackground.gradient?.end || '#4a4a4a');
@@ -66,6 +67,7 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
     currentBackground.gradient?.direction || 'vertical'
   );
   const [imageUrl, setImageUrl] = useState(currentBackground.value || '');
+  const [videoUrl, setVideoUrl] = useState(currentBackground.value || '');
   const [opacity, setOpacity] = useState(currentBackground.opacity || 1.0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -83,6 +85,8 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
       setGradientDirection(currentBackground.gradient.direction || 'vertical');
     } else if (currentBackground.type === 'image') {
       setImageUrl(currentBackground.value || '');
+    } else if (currentBackground.type === 'video') {
+      setVideoUrl(currentBackground.value || '');
     }
     setOpacity(currentBackground.opacity || 1.0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -104,7 +108,7 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
   };
 
   // Handle type change
-  const handleTypeChange = (type: 'color' | 'gradient' | 'image') => {
+  const handleTypeChange = (type: 'color' | 'gradient' | 'image' | 'video') => {
     setBgType(type);
 
     if (type === 'color') {
@@ -127,6 +131,12 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
       applyBackground({
         type: 'image',
         value: imageUrl,
+        opacity
+      });
+    } else if (type === 'video') {
+      applyBackground({
+        type: 'video',
+        value: videoUrl,
         opacity
       });
     }
@@ -171,23 +181,57 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
     });
   };
 
-  // Handle file upload
+  // Handle video change
+  const handleVideoChange = (url: string) => {
+    setVideoUrl(url);
+    setUploadError(null);
+    applyBackground({
+      type: 'video',
+      value: url
+    });
+  };
+
+  // Handle file upload (images and videos)
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
-    if (!validTypes.includes(file.type)) {
-      setUploadError('Invalid file type. Please upload JPG, PNG, WebP, or GIF.');
+    const fileType = file.type;
+    const isImage = fileType.startsWith('image/');
+    const isVideo = fileType.startsWith('video/');
+
+    if (!isImage && !isVideo) {
+      setUploadError('Invalid file type. Please upload an image or video file.');
       return;
     }
 
-    // Validate file size (max 2MB)
-    const maxSize = 2 * 1024 * 1024; // 2MB in bytes
-    if (file.size > maxSize) {
-      setUploadError('File too large. Maximum size is 2MB.');
-      return;
+    // Validate file type
+    if (isImage) {
+      const validImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+      if (!validImageTypes.includes(fileType)) {
+        setUploadError('Invalid image type. Please upload JPG, PNG, WebP, or GIF.');
+        return;
+      }
+
+      // Validate file size (max 2MB for images)
+      const maxSize = 2 * 1024 * 1024; // 2MB in bytes
+      if (file.size > maxSize) {
+        setUploadError('Image too large. Maximum size is 2MB.');
+        return;
+      }
+    } else if (isVideo) {
+      const validVideoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
+      if (!validVideoTypes.includes(fileType)) {
+        setUploadError('Invalid video type. Please upload MP4, WebM, or MOV.');
+        return;
+      }
+
+      // Validate file size (max 50MB for videos)
+      const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+      if (file.size > maxSize) {
+        setUploadError('Video too large. Maximum size is 50MB.');
+        return;
+      }
     }
 
     setIsUploading(true);
@@ -198,7 +242,11 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
       const reader = new FileReader();
       reader.onload = () => {
         const base64String = reader.result as string;
-        handleImageChange(base64String);
+        if (isImage) {
+          handleImageChange(base64String);
+        } else if (isVideo) {
+          handleVideoChange(base64String);
+        }
         setIsUploading(false);
       };
       reader.onerror = () => {
@@ -276,6 +324,19 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
             >
               <ImageIcon className="w-3 h-3 inline mr-1" />
               Image
+            </button>
+
+            <button
+              onClick={() => handleTypeChange('video')}
+              className={`px-3 py-1 text-xs rounded border transition-colors ${
+                bgType === 'video'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+              }`}
+              title="Video"
+            >
+              <VideoIcon className="w-3 h-3 inline mr-1" />
+              Video
             </button>
           </div>
         </div>
@@ -423,6 +484,65 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
                 <span>{uploadError}</span>
               </div>
             )}
+          </>
+        )}
+
+        {/* Video Controls */}
+        {bgType === 'video' && (
+          <>
+            <div className="flex items-center gap-2">
+              {/* Upload Button */}
+              <label className={`px-3 py-1 text-xs rounded border transition-colors cursor-pointer flex items-center gap-1 ${
+                isUploading
+                  ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-wait'
+                  : 'bg-blue-600 hover:bg-blue-700 border-blue-500 text-white'
+              }`}>
+                <Upload className="w-3 h-3" />
+                {isUploading ? 'Uploading...' : 'Upload Video'}
+                <input
+                  type="file"
+                  accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                  className="hidden"
+                />
+              </label>
+
+              {/* URL Input */}
+              <span className="text-xs text-gray-400">or</span>
+              <input
+                type="text"
+                value={videoUrl}
+                onChange={(e) => handleVideoChange(e.target.value)}
+                placeholder="Enter video URL..."
+                className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-3 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
+              {/* Clear Button */}
+              {videoUrl && (
+                <button
+                  onClick={() => handleVideoChange('')}
+                  className="p-1 bg-gray-800 hover:bg-red-600 text-gray-300 rounded border border-gray-600 transition-colors"
+                  title="Clear video"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Error Message */}
+            {uploadError && (
+              <div className="text-xs text-red-400 flex items-center gap-1">
+                <span>⚠️</span>
+                <span>{uploadError}</span>
+              </div>
+            )}
+
+            {/* Video Note */}
+            <div className="text-xs text-yellow-400 flex items-center gap-1">
+              <span>ℹ️</span>
+              <span>Videos will loop automatically and play muted</span>
+            </div>
           </>
         )}
 

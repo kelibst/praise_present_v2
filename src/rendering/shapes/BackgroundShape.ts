@@ -3,6 +3,7 @@ import { RenderContext } from '../types/rendering';
 import { ShapeType, ShapeProps, BackgroundStyle } from '../types/shapes';
 import { Color, Gradient, colorToString } from '../types/geometry';
 import { ImageShape, ImageLoadState } from './ImageShape';
+import { VideoShape, VideoLoadState } from './VideoShape';
 
 export interface BackgroundShapeProps extends ShapeProps {
   backgroundStyle: BackgroundStyle;
@@ -12,6 +13,7 @@ export class BackgroundShape extends Shape {
   public readonly type = ShapeType.BACKGROUND;
   public backgroundStyle: BackgroundStyle;
   private imageShape: ImageShape | null = null;
+  private videoShape: VideoShape | null = null;
 
   constructor(props: BackgroundShapeProps) {
     // Background shapes typically fill the entire canvas/slide
@@ -25,6 +27,11 @@ export class BackgroundShape extends Shape {
     // Do this AFTER setting zIndex so initialization is complete
     if (this.backgroundStyle.type === 'image' && this.backgroundStyle.imageUrl) {
       this.createImageShape();
+    }
+
+    // Initialize video shape if background type is video
+    if (this.backgroundStyle.type === 'video' && this.backgroundStyle.videoUrl) {
+      this.createVideoShape();
     }
   }
 
@@ -43,6 +50,24 @@ export class BackgroundShape extends Shape {
 
     // Start loading the image (rendering engine loop will pick it up when loaded)
     this.imageShape.setSrc(this.backgroundStyle.imageUrl);
+  }
+
+  private createVideoShape(): void {
+    if (!this.backgroundStyle.videoUrl) return;
+
+    this.videoShape = new VideoShape(
+      {
+        position: this.position,
+        size: this.size,
+        visible: true,
+        opacity: this.opacity,
+        src: this.backgroundStyle.videoUrl,
+        loop: true,
+        muted: true,
+        autoplay: true,
+        videoStyle: this.backgroundStyle.imageStyle || { objectFit: 'cover' }
+      }
+    );
   }
 
   public render(context: RenderContext): void {
@@ -69,6 +94,9 @@ export class BackgroundShape extends Shape {
         break;
       case 'image':
         this.renderImageBackground(ctx, context);
+        break;
+      case 'video':
+        this.renderVideoBackground(ctx, context);
         break;
     }
 
@@ -146,6 +174,23 @@ export class BackgroundShape extends Shape {
     }
   }
 
+  private renderVideoBackground(ctx: CanvasRenderingContext2D, context: RenderContext): void {
+    if (!this.videoShape) return;
+
+    if (this.videoShape.getLoadState() === VideoLoadState.LOADED) {
+      // Update video shape properties to match background
+      this.videoShape.position = this.position;
+      this.videoShape.size = this.size;
+      this.videoShape.opacity = this.opacity;
+
+      // Render the video
+      this.videoShape.render(context);
+    } else {
+      // Render placeholder while loading
+      this.renderVideoPlaceholder(ctx);
+    }
+  }
+
   private renderImagePlaceholder(ctx: CanvasRenderingContext2D): void {
     // Light gray background while image loads
     ctx.fillStyle = '#f5f5f5';
@@ -178,6 +223,54 @@ export class BackgroundShape extends Shape {
     ctx.fillText(message, centerX, centerY);
   }
 
+  private renderVideoPlaceholder(ctx: CanvasRenderingContext2D): void {
+    // Dark background while video loads
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(0, 0, this.size.width, this.size.height);
+
+    // Loading indicator
+    const centerX = this.size.width / 2;
+    const centerY = this.size.height / 2;
+
+    ctx.fillStyle = '#aaa';
+    ctx.font = '16px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const loadState = this.videoShape?.getLoadState();
+    let message = 'Loading video...';
+
+    switch (loadState) {
+      case VideoLoadState.ERROR:
+        message = 'Failed to load video';
+        ctx.fillStyle = '#d32f2f';
+        break;
+      case VideoLoadState.LOADING:
+        message = 'Loading video...';
+        break;
+      default:
+        message = 'No background video';
+    }
+
+    ctx.fillText(message, centerX, centerY);
+
+    // Draw play icon
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY - 30, 25, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Play triangle
+    ctx.fillStyle = '#aaa';
+    ctx.beginPath();
+    ctx.moveTo(centerX - 10, centerY - 40);
+    ctx.lineTo(centerX - 10, centerY - 20);
+    ctx.lineTo(centerX + 10, centerY - 30);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   // Public methods
   public setBackgroundColor(color: Color): void {
     this.backgroundStyle = {
@@ -185,6 +278,7 @@ export class BackgroundShape extends Shape {
       color
     };
     this.imageShape = null;
+    this.videoShape = null;
   }
 
   public setBackgroundGradient(gradient: Gradient): void {
@@ -193,6 +287,7 @@ export class BackgroundShape extends Shape {
       gradient
     };
     this.imageShape = null;
+    this.videoShape = null;
   }
 
   public async setBackgroundImage(imageUrl: string, imageStyle?: any): Promise<void> {
@@ -202,13 +297,28 @@ export class BackgroundShape extends Shape {
       imageStyle: imageStyle || { objectFit: 'cover' }
     };
 
+    this.videoShape = null;
     this.createImageShape();
     if (this.imageShape) {
       await this.imageShape.waitForLoad();
     }
   }
 
-  public getBackgroundType(): 'color' | 'gradient' | 'image' {
+  public async setBackgroundVideo(videoUrl: string, videoStyle?: any): Promise<void> {
+    this.backgroundStyle = {
+      type: 'video',
+      videoUrl,
+      imageStyle: videoStyle || { objectFit: 'cover' }
+    };
+
+    this.imageShape = null;
+    this.createVideoShape();
+    if (this.videoShape) {
+      await this.videoShape.waitForLoad();
+    }
+  }
+
+  public getBackgroundType(): 'color' | 'gradient' | 'image' | 'video' {
     return this.backgroundStyle.type;
   }
 
@@ -227,6 +337,23 @@ export class BackgroundShape extends Shape {
   public async waitForImageLoad(): Promise<boolean> {
     if (!this.imageShape) return false;
     return this.imageShape.waitForLoad();
+  }
+
+  public isVideoLoaded(): boolean {
+    return this.videoShape?.isLoaded() || false;
+  }
+
+  public isVideoLoading(): boolean {
+    return this.videoShape?.isLoading() || false;
+  }
+
+  public hasVideoError(): boolean {
+    return this.videoShape?.hasError() || false;
+  }
+
+  public async waitForVideoLoad(): Promise<boolean> {
+    if (!this.videoShape) return false;
+    return this.videoShape.waitForLoad();
   }
 
   public clone(): BackgroundShape {
@@ -339,6 +466,22 @@ export class BackgroundShape extends Shape {
       backgroundStyle: {
         type: 'image',
         imageUrl,
+        imageStyle: { objectFit }
+      }
+    });
+  }
+
+  public static createVideoBackground(
+    videoUrl: string,
+    width: number,
+    height: number,
+    objectFit: 'fill' | 'contain' | 'cover' | 'scale-down' | 'none' = 'cover'
+  ): BackgroundShape {
+    return new BackgroundShape({
+      size: { width, height },
+      backgroundStyle: {
+        type: 'video',
+        videoUrl,
         imageStyle: { objectFit }
       }
     });

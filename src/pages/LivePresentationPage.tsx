@@ -1,6 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Play, MonitorSpeaker, SkipBack, SkipForward, Settings, Calendar, ChevronLeft, ChevronRight, Maximize2, ExternalLink, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  selectServiceItems,
+  updateServiceItem,
+  updateServiceItemSlides,
+  addServiceItem as addServiceItemAction,
+  reorderServiceItems,
+  clearServiceItems,
+  setServiceItems
+} from '../lib/serviceItemsSlice';
+import { RootState, AppDispatch } from '../lib/store';
 
 // Import drag and drop utilities
 import {
@@ -64,9 +75,13 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // Navigation
   const navigate = useNavigate();
 
+  // Redux hooks
+  const dispatch = useDispatch<AppDispatch>();
+  const serviceItems = useSelector(selectServiceItems);
+
   // State management
   const [activeTab, setActiveTab] = useState<'scripture' | 'plan' | 'plans'>('scripture');
-  const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
+
   const [selectedItem, setSelectedItem] = useState<ServiceItem | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isPresenting, setIsPresenting] = useState(false);
@@ -98,16 +113,16 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Plan integration management
   const { handlePlanSelect, handlePlanCreate } = usePlanIntegration({
-    onPlanLoaded: (serviceItems, plan) => {
+    onPlanLoaded: (items, plan) => {
       setSelectedPlan(plan);
-      setServiceItems(serviceItems);
+      dispatch(setServiceItems(items));
       setIsPlanLoading(false);
       setPlanError(null);
 
       // Auto-switch to Current Service tab and select first item
       setActiveTab('plan');
-      if (serviceItems.length > 0) {
-        generateSlidesForItem(serviceItems[0]);
+      if (items.length > 0) {
+        generateSlidesForItem(items[0]);
       }
     },
     onPlanCreated: (plan) => {
@@ -197,10 +212,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   });
   const [slideGenerator] = useState(() => new SlideGenerator());
 
-  // Initialize with empty service items and check for pending items from other pages
+  // Initialize and check for pending items from other pages
   useEffect(() => {
-    setServiceItems([]);
-
     // Check for pending service items from other pages (like SongsPage)
     const checkPendingItems = () => {
       const pendingItems = localStorage.getItem('pendingServiceItems');
@@ -208,7 +221,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         try {
           const items = JSON.parse(pendingItems);
           if (Array.isArray(items) && items.length > 0) {
-            setServiceItems(prev => [...prev, ...items]);
+            // Add pending items to Redux store
+            items.forEach((item: ServiceItem) => {
+              dispatch(addServiceItemAction(item));
+            });
             localStorage.removeItem('pendingServiceItems'); // Clear after loading
 
             // Auto-select the first added item
@@ -380,6 +396,25 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // Generate slides for selected item
   const generateSlidesForItem = async (item: ServiceItem, autoPresent = false) => {
     if (isGeneratingSlides) return; // Prevent multiple concurrent generations
+
+    // IMPORTANT: If this item already has slides, use them instead of regenerating
+    // This preserves user customizations (background colors, shape sizes/positions, etc.)
+    if (item.slides && item.slides.length > 0) {
+      console.log('📋 Using existing slides for item (preserving customizations):', {
+        itemId: item.id,
+        slideCount: item.slides.length
+      });
+      setSelectedItem(item);
+      setCurrentSlideIndex(0);
+
+      // Auto-present if requested
+      if (autoPresent && item.slides[0] && liveDisplayActive) {
+        await sendSlideToLive(item.slides[0], item, 0);
+      }
+
+      console.log('✅ Scripture preview generated/updated');
+      return;
+    }
 
     try {
       setIsGeneratingSlides(true);
@@ -630,10 +665,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       setCurrentSlideIndex(0);
       setPresentationMode(autoPresent ? 'live' : 'preview');
 
-      // Update the item in service items list
-      setServiceItems(prev =>
-        prev.map(p => p.id === item.id ? updatedItem : p)
-      );
+      // Update the item in Redux store
+      dispatch(updateServiceItem(updatedItem));
 
       // Auto-present if double-clicked
       if (autoPresent && slides.length > 0 && liveDisplayActive) {
@@ -742,7 +775,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       id: `${item.type}-${Date.now()}`,
       order: serviceItems.length + 1
     };
-    setServiceItems(prev => [...prev, newItem]);
+    dispatch(addServiceItemAction(newItem));
   };
 
   // Handle scripture selection from BibleSelector (Preview only)
@@ -835,18 +868,18 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       return;
     }
 
-    setServiceItems((items) => {
-      const oldIndex = items.findIndex((item) => item.id === active.id);
-      const newIndex = items.findIndex((item) => item.id === over.id);
+    const oldIndex = serviceItems.findIndex((item) => item.id === active.id);
+    const newIndex = serviceItems.findIndex((item) => item.id === over.id);
 
-      const reorderedItems = arrayMove(items, oldIndex, newIndex);
+    const reorderedItems = arrayMove(serviceItems, oldIndex, newIndex);
 
-      // Update order numbers
-      return reorderedItems.map((item, index) => ({
-        ...item,
-        order: index + 1
-      }));
-    });
+    // Update order numbers and dispatch to Redux
+    const itemsWithOrder = reorderedItems.map((item, index) => ({
+      ...item,
+      order: index + 1
+    }));
+
+    dispatch(reorderServiceItems(itemsWithOrder));
   };
 
   // Panel management functions
@@ -946,7 +979,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Session management functions
   const clearAllItems = () => {
-    setServiceItems([]);
+    dispatch(clearServiceItems());
     setSelectedItem(null);
     setSelectedPlan(null);
   };
@@ -980,14 +1013,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       slides: updatedSlides
     };
 
-    // Update the service items array
-    setServiceItems(prev => prev.map(item => 
-      item.id === selectedItem.id ? updatedServiceItem : item
-    ));
+    // Update Redux store with new slides
+    dispatch(updateServiceItem(updatedServiceItem));
 
     // Update selected item
     setSelectedItem(updatedServiceItem);
-  }, [selectedItem, currentSlideIndex]);
+  }, [selectedItem, currentSlideIndex, dispatch]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -1306,7 +1337,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                             console.log('Plan deleted:', planId);
                             if (selectedPlan?.id === planId) {
                               setSelectedPlan(null);
-                              setServiceItems([]);
+                              dispatch(clearServiceItems());
                               setSelectedItem(null);
                             }
                           }}

@@ -1,7 +1,7 @@
 import { Shape } from '../core/Shape';
 import { RenderContext } from '../types/rendering';
 import { ShapeType, ShapeProps, TextStyle, defaultTextStyle } from '../types/shapes';
-import { Color, colorToString, Point } from '../types/geometry';
+import { Color, colorToString, Point, Gradient } from '../types/geometry';
 
 export interface TextShapeProps extends ShapeProps {
   text?: string;
@@ -90,6 +90,9 @@ export class TextShape extends Shape {
     try {
       // Apply all transformations and styles in one go
       this.applyAllStyles(ctx);
+
+      // Render background if fill is specified
+      this.renderBackground(ctx);
 
       // Get initial text metrics at current font size
       let metrics = this.getTextMetrics(ctx);
@@ -355,6 +358,85 @@ export class TextShape extends Shape {
     }
 
     return lines;
+  }
+
+  /**
+   * Render background fill for text shape (if specified)
+   */
+  private renderBackground(ctx: CanvasRenderingContext2D): void {
+    if (!this.textStyle.fill && !this.style.fill) return;
+
+    const fill = this.textStyle.fill || this.style.fill;
+    if (!fill) return;
+
+    // Save current state
+    const currentGlobalAlpha = ctx.globalAlpha;
+
+    // Apply background opacity if specified (separate from text opacity)
+    if (this.textStyle.opacity !== undefined) {
+      ctx.globalAlpha = this.textStyle.opacity;
+    }
+
+    // Check if fill is a Color or Gradient
+    if ('r' in fill && 'g' in fill && 'b' in fill) {
+      // It's a Color
+      const color = fill as Color;
+      ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a !== undefined ? color.a : 1})`;
+      ctx.fillRect(0, 0, this.size.width, this.size.height);
+    } else {
+      // It's a Gradient
+      const gradient = fill as Gradient;
+      const canvasGradient = this.createGradientFill(ctx, gradient);
+      ctx.fillStyle = canvasGradient;
+      ctx.fillRect(0, 0, this.size.width, this.size.height);
+    }
+
+    // Restore alpha
+    ctx.globalAlpha = currentGlobalAlpha;
+  }
+
+  /**
+   * Create canvas gradient from Gradient object
+   */
+  private createGradientFill(ctx: CanvasRenderingContext2D, gradient: Gradient): CanvasGradient {
+    const { width, height } = this.size;
+    let canvasGradient: CanvasGradient;
+
+    if (gradient.type === 'linear') {
+      const angle = gradient.angle || 0;
+      const radians = (angle * Math.PI) / 180;
+      const cos = Math.cos(radians);
+      const sin = Math.sin(radians);
+
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const length = Math.sqrt(width * width + height * height) / 2;
+
+      const x1 = centerX - cos * length;
+      const y1 = centerY - sin * length;
+      const x2 = centerX + cos * length;
+      const y2 = centerY + sin * length;
+
+      canvasGradient = ctx.createLinearGradient(x1, y1, x2, y2);
+    } else {
+      // Radial gradient
+      const centerX = gradient.centerX !== undefined ? gradient.centerX * width : width / 2;
+      const centerY = gradient.centerY !== undefined ? gradient.centerY * height : height / 2;
+      const radius = Math.max(width, height) / 2;
+
+      canvasGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+    }
+
+    // Add color stops
+    for (const stop of gradient.stops) {
+      const color = stop.color;
+      canvasGradient.addColorStop(
+        stop.offset,
+        `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a !== undefined ? color.a : 1})`
+      );
+    }
+
+    return canvasGradient;
   }
 
   private renderText(ctx: CanvasRenderingContext2D, metrics: TextMetrics): void {

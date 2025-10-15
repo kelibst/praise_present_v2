@@ -59,10 +59,11 @@ export interface RectangleStyle extends ShapeStyle {
 }
 
 export interface BackgroundStyle {
-  type: 'color' | 'gradient' | 'image';
+  type: 'color' | 'gradient' | 'image' | 'video';
   color?: Color;
   gradient?: Gradient;
   imageUrl?: string;
+  videoUrl?: string;
   imageStyle?: ImageStyle;
 }
 
