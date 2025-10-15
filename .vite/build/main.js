@@ -7,19 +7,37 @@ const fs = require("fs");
 const path = require("path");
 const child_process = require("child_process");
 const os = require("os");
-let prisma;
-function initializeDatabase() {
-  if (prisma) {
-    return prisma;
+function _interopNamespaceDefault(e) {
+  const n = Object.create(null, { [Symbol.toStringTag]: { value: "Module" } });
+  if (e) {
+    for (const k in e) {
+      if (k !== "default") {
+        const d = Object.getOwnPropertyDescriptor(e, k);
+        Object.defineProperty(n, k, d.get ? d : {
+          enumerable: true,
+          get: () => e[k]
+        });
+      }
+    }
   }
-  prisma = new client.PrismaClient();
-  return prisma;
+  n.default = e;
+  return Object.freeze(n);
+}
+const fs__namespace = /* @__PURE__ */ _interopNamespaceDefault(fs);
+const path__namespace = /* @__PURE__ */ _interopNamespaceDefault(path);
+let prisma$1;
+function initializeDatabase() {
+  if (prisma$1) {
+    return prisma$1;
+  }
+  prisma$1 = new client.PrismaClient();
+  return prisma$1;
 }
 function getDatabase() {
-  if (!prisma) {
+  if (!prisma$1) {
     return initializeDatabase();
   }
-  return prisma;
+  return prisma$1;
 }
 async function seedDatabase() {
   const db2 = getDatabase();
@@ -4235,6 +4253,389 @@ function initializeWindowMain() {
   });
   console.log("Window control IPC handlers initialized");
 }
+const prisma = new client.PrismaClient();
+class MediaService {
+  /**
+   * Create a new media item
+   */
+  static async createMediaItem(input) {
+    const tagsJson = input.tags ? JSON.stringify(input.tags) : null;
+    return await prisma.mediaItem.create({
+      data: {
+        filename: input.filename,
+        originalName: input.originalName,
+        path: input.path,
+        type: input.type,
+        mimeType: input.mimeType,
+        size: input.size,
+        duration: input.duration,
+        width: input.width,
+        height: input.height,
+        tags: tagsJson,
+        category: input.category,
+        description: input.description
+      }
+    });
+  }
+  /**
+   * Get all media items with optional filtering
+   */
+  static async getMediaItems(options = {}) {
+    const {
+      type,
+      category,
+      tags,
+      search,
+      limit = 50,
+      offset = 0,
+      sortBy = "createdAt",
+      sortOrder = "desc"
+    } = options;
+    const where = {};
+    if (type) {
+      where.type = type;
+    }
+    if (category) {
+      where.category = category;
+    }
+    if (search) {
+      where.OR = [
+        { originalName: { contains: search } },
+        { filename: { contains: search } },
+        { description: { contains: search } }
+      ];
+    }
+    const items = await prisma.mediaItem.findMany({
+      where,
+      orderBy: { [sortBy]: sortOrder },
+      take: limit,
+      skip: offset
+    });
+    if (tags && tags.length > 0) {
+      return items.filter((item) => {
+        if (!item.tags) return false;
+        const itemTags = JSON.parse(item.tags);
+        return tags.some((tag) => itemTags.includes(tag));
+      });
+    }
+    return items;
+  }
+  /**
+   * Get a single media item by ID
+   */
+  static async getMediaItemById(id) {
+    return await prisma.mediaItem.findUnique({
+      where: { id }
+    });
+  }
+  /**
+   * Update a media item
+   */
+  static async updateMediaItem(id, input) {
+    const tagsJson = input.tags ? JSON.stringify(input.tags) : void 0;
+    return await prisma.mediaItem.update({
+      where: { id },
+      data: {
+        tags: tagsJson,
+        category: input.category,
+        description: input.description,
+        updatedAt: /* @__PURE__ */ new Date()
+      }
+    });
+  }
+  /**
+   * Update last used timestamp
+   */
+  static async markMediaItemUsed(id) {
+    return await prisma.mediaItem.update({
+      where: { id },
+      data: {
+        lastUsed: /* @__PURE__ */ new Date()
+      }
+    });
+  }
+  /**
+   * Delete a media item
+   */
+  static async deleteMediaItem(id) {
+    return await prisma.mediaItem.delete({
+      where: { id }
+    });
+  }
+  /**
+   * Delete multiple media items
+   */
+  static async deleteMediaItems(ids) {
+    const result = await prisma.mediaItem.deleteMany({
+      where: {
+        id: {
+          in: ids
+        }
+      }
+    });
+    return result.count;
+  }
+  /**
+   * Get media statistics
+   */
+  static async getMediaStats() {
+    const images = await prisma.mediaItem.count({
+      where: { type: "image" }
+    });
+    const videos = await prisma.mediaItem.count({
+      where: { type: "video" }
+    });
+    const allMedia = await prisma.mediaItem.findMany({
+      select: { size: true }
+    });
+    const totalSize = allMedia.reduce((sum, item) => sum + item.size, 0);
+    return {
+      totalImages: images,
+      totalVideos: videos,
+      totalSize
+    };
+  }
+  /**
+   * Get all unique categories
+   */
+  static async getCategories() {
+    const items = await prisma.mediaItem.findMany({
+      where: {
+        category: {
+          not: null
+        }
+      },
+      select: { category: true },
+      distinct: ["category"]
+    });
+    return items.map((item) => item.category).filter((cat) => cat !== null);
+  }
+  /**
+   * Get all unique tags
+   */
+  static async getTags() {
+    const items = await prisma.mediaItem.findMany({
+      where: {
+        tags: {
+          not: null
+        }
+      },
+      select: { tags: true }
+    });
+    const allTags = /* @__PURE__ */ new Set();
+    items.forEach((item) => {
+      if (item.tags) {
+        const tags = JSON.parse(item.tags);
+        tags.forEach((tag) => allTags.add(tag));
+      }
+    });
+    return Array.from(allTags);
+  }
+}
+const SMALL_FILE_THRESHOLD = 2 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+function getMediaDirectory(type) {
+  const userDataPath = electron.app.getPath("userData");
+  const mediaPath = path__namespace.join(userDataPath, "media", type);
+  if (!fs__namespace.existsSync(mediaPath)) {
+    fs__namespace.mkdirSync(mediaPath, { recursive: true });
+  }
+  return mediaPath;
+}
+function generateUniqueFilename(originalName) {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 8);
+  const ext = path__namespace.extname(originalName);
+  const basename = path__namespace.basename(originalName, ext);
+  const sanitized = basename.replace(/[^a-zA-Z0-9]/g, "_");
+  return `${sanitized}_${timestamp}_${random}${ext}`;
+}
+async function getImageDimensions(filePath) {
+  return null;
+}
+async function getVideoMetadata(filePath) {
+  return null;
+}
+async function saveFileToFilesystem(dataUrl, originalName, type) {
+  const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!matches) {
+    throw new Error("Invalid data URL");
+  }
+  matches[1];
+  const base64Data = matches[2];
+  const buffer = Buffer.from(base64Data, "base64");
+  const size = buffer.length;
+  const maxSize = type === "image" ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE;
+  if (size > maxSize) {
+    throw new Error(`File too large. Maximum size: ${maxSize / (1024 * 1024)}MB`);
+  }
+  let storagePath;
+  if (size < SMALL_FILE_THRESHOLD) {
+    storagePath = dataUrl;
+  } else {
+    const mediaDir = getMediaDirectory(type === "image" ? "images" : "videos");
+    const filename = generateUniqueFilename(originalName);
+    const filePath = path__namespace.join(mediaDir, filename);
+    fs__namespace.writeFileSync(filePath, buffer);
+    storagePath = filePath;
+  }
+  return { path: storagePath, size };
+}
+function deleteFileFromFilesystem(filePath) {
+  if (!filePath.startsWith("data:")) {
+    try {
+      if (fs__namespace.existsSync(filePath)) {
+        fs__namespace.unlinkSync(filePath);
+      }
+    } catch (error) {
+      console.error("Error deleting file:", error);
+    }
+  }
+}
+function initializeMediaHandlers() {
+  electron.ipcMain.handle("media:upload", async (event, data) => {
+    try {
+      const { filePath, type, category } = data;
+      let originalName = "untitled";
+      if (filePath.startsWith("data:")) {
+        originalName = `${type}_${Date.now()}`;
+      } else {
+        originalName = path__namespace.basename(filePath);
+      }
+      let mimeType = "";
+      if (filePath.startsWith("data:")) {
+        const match = filePath.match(/^data:([^;]+);/);
+        mimeType = match ? match[1] : "";
+      } else {
+        const ext = path__namespace.extname(originalName).toLowerCase();
+        if (ext === ".jpg" || ext === ".jpeg") mimeType = "image/jpeg";
+        else if (ext === ".png") mimeType = "image/png";
+        else if (ext === ".webp") mimeType = "image/webp";
+        else if (ext === ".gif") mimeType = "image/gif";
+        else if (ext === ".mp4") mimeType = "video/mp4";
+        else if (ext === ".webm") mimeType = "video/webm";
+        else if (ext === ".ogg") mimeType = "video/ogg";
+        else if (ext === ".mov") mimeType = "video/quicktime";
+      }
+      const { path: storagePath, size } = await saveFileToFilesystem(
+        filePath,
+        originalName,
+        type
+      );
+      let width;
+      let height;
+      let duration;
+      if (type === "image") {
+        const dims = await getImageDimensions(storagePath);
+        if (dims) {
+          width = dims.width;
+          height = dims.height;
+        }
+      } else {
+        const meta = await getVideoMetadata(storagePath);
+        if (meta) {
+          width = meta.width;
+          height = meta.height;
+          duration = meta.duration;
+        }
+      }
+      const mediaItem = await MediaService.createMediaItem({
+        filename: path__namespace.basename(storagePath),
+        originalName,
+        path: storagePath,
+        type,
+        mimeType,
+        size,
+        width,
+        height,
+        duration,
+        category
+      });
+      return { success: true, data: mediaItem };
+    } catch (error) {
+      console.error("Error uploading media:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Upload failed"
+      };
+    }
+  });
+  electron.ipcMain.handle("media:list", async (event, options) => {
+    try {
+      const items = await MediaService.getMediaItems(options);
+      return { success: true, data: items };
+    } catch (error) {
+      console.error("Error listing media:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to list media"
+      };
+    }
+  });
+  electron.ipcMain.handle("media:get", async (event, id) => {
+    try {
+      const item = await MediaService.getMediaItemById(id);
+      if (!item) {
+        return { success: false, error: "Media item not found" };
+      }
+      return { success: true, data: item };
+    } catch (error) {
+      console.error("Error getting media:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to get media"
+      };
+    }
+  });
+  electron.ipcMain.handle("media:update", async (event, data) => {
+    try {
+      const { id, updates } = data;
+      const item = await MediaService.updateMediaItem(id, updates);
+      return { success: true, data: item };
+    } catch (error) {
+      console.error("Error updating media:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to update media"
+      };
+    }
+  });
+  electron.ipcMain.handle("media:delete", async (event, data) => {
+    try {
+      const { ids } = data;
+      const itemsToDelete = await Promise.all(
+        ids.map((id) => MediaService.getMediaItemById(id))
+      );
+      await MediaService.deleteMediaItems(ids);
+      itemsToDelete.forEach((item) => {
+        if (item) {
+          deleteFileFromFilesystem(item.path);
+        }
+      });
+      return { success: true, data: { deleted: ids.length } };
+    } catch (error) {
+      console.error("Error deleting media:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to delete media"
+      };
+    }
+  });
+  electron.ipcMain.handle("media:stats", async () => {
+    try {
+      const stats = await MediaService.getMediaStats();
+      return { success: true, data: stats };
+    } catch (error) {
+      console.error("Error getting media stats:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to get stats"
+      };
+    }
+  });
+  console.log("Media IPC handlers initialized");
+}
 if (started) {
   electron.app.quit();
 }
@@ -4314,6 +4715,12 @@ electron.app.on("ready", async () => {
     console.log("Window controls initialized successfully");
   } catch (error) {
     console.error("Failed to initialize window controls:", error);
+  }
+  try {
+    initializeMediaHandlers();
+    console.log("Media handlers initialized successfully");
+  } catch (error) {
+    console.error("Failed to initialize media handlers:", error);
   }
   createWindow();
 });

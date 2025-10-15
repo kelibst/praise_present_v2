@@ -161,6 +161,42 @@ export const useLiveDisplay = () => {
     await window.electronAPI?.invoke('live-display:showBlack');
   };
 
+  const sendMediaToLive = async (mediaItem: any, options: {
+    fit?: 'contain' | 'cover' | 'fill';
+    autoPlay?: boolean;
+    loop?: boolean;
+  } = {}) => {
+    if (!liveDisplayActive) return;
+
+    try {
+      const content = {
+        type: 'media',
+        mediaType: mediaItem.type,
+        mediaItem: {
+          id: mediaItem.id,
+          path: mediaItem.path,
+          originalName: mediaItem.originalName,
+          width: mediaItem.width,
+          height: mediaItem.height,
+          duration: mediaItem.duration,
+        },
+        displayOptions: {
+          fit: options.fit || 'contain',
+          autoPlay: options.autoPlay !== false, // Default to true
+          loop: options.loop || false,
+        },
+        metadata: {
+          timestamp: Date.now(),
+        },
+      };
+
+      console.log('📤 LiveDisplayManager: Sending media to live display:', mediaItem.originalName);
+      await window.electronAPI?.invoke('live-display:sendContent', content);
+    } catch (error) {
+      console.error('Failed to send media to live display:', error);
+    }
+  };
+
   return {
     liveDisplayActive,
     liveDisplayStatus,
@@ -169,6 +205,7 @@ export const useLiveDisplay = () => {
     sendSlideToLive,
     clearLiveDisplay,
     showBlackScreen,
+    sendMediaToLive,
   };
 };
 

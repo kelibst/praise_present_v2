@@ -738,15 +738,35 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   };
 
   // Navigation functions
-  const goToPreviousSlide = () => {
+  const goToPreviousSlide = async () => {
+    console.log('⬅️ goToPreviousSlide called', { currentSlideIndex, hasSlides: !!selectedItem?.slides });
     if (selectedItem?.slides && currentSlideIndex > 0) {
-      setCurrentSlideIndex(currentSlideIndex - 1);
+      const newIndex = currentSlideIndex - 1;
+      console.log('⬅️ Moving to slide:', newIndex);
+      setCurrentSlideIndex(newIndex);
+      // Send to live display if in presentation mode
+      if (presentationMode === 'live' && liveDisplayActive && selectedItem.slides[newIndex]) {
+        console.log('⬅️ Sending slide to live display');
+        await sendSlideToLive(selectedItem.slides[newIndex], selectedItem, newIndex);
+      }
+    } else {
+      console.log('⬅️ Cannot go to previous slide - at first slide or no slides');
     }
   };
 
-  const goToNextSlide = () => {
+  const goToNextSlide = async () => {
+    console.log('➡️ goToNextSlide called', { currentSlideIndex, totalSlides: selectedItem?.slides?.length });
     if (selectedItem?.slides && currentSlideIndex < selectedItem.slides.length - 1) {
-      setCurrentSlideIndex(currentSlideIndex + 1);
+      const newIndex = currentSlideIndex + 1;
+      console.log('➡️ Moving to slide:', newIndex);
+      setCurrentSlideIndex(newIndex);
+      // Send to live display if in presentation mode
+      if (presentationMode === 'live' && liveDisplayActive && selectedItem.slides[newIndex]) {
+        console.log('➡️ Sending slide to live display');
+        await sendSlideToLive(selectedItem.slides[newIndex], selectedItem, newIndex);
+      }
+    } else {
+      console.log('➡️ Cannot go to next slide - at last slide or no slides');
     }
   };
 
@@ -754,6 +774,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const presentCurrentSlide = async () => {
     if (selectedItem?.slides && selectedItem.slides[currentSlideIndex]) {
       await sendSlideToLive(selectedItem.slides[currentSlideIndex], selectedItem, currentSlideIndex);
+      setPresentationMode('live');
       setIsPresenting(true);
     }
   };
@@ -993,6 +1014,16 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   };
 
   const currentSlide = selectedItem?.slides?.[currentSlideIndex];
+
+  // Debug: Log currentSlideIndex changes
+  useEffect(() => {
+    console.log('🔍 DEBUG: currentSlideIndex changed to:', currentSlideIndex, {
+      selectedItem: selectedItem?.title,
+      totalSlides: selectedItem?.slides?.length,
+      presentationMode,
+      isPresenting
+    });
+  }, [currentSlideIndex, selectedItem, presentationMode, isPresenting]);
 
   // Handle slide updates from SlideEditor (PowerPoint pattern)
   const handleSlideUpdate = React.useCallback((updatedSlide: Slide) => {
@@ -1517,7 +1548,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     <div className="flex items-center justify-center gap-4 mb-3">
                       <button
                         onClick={goToPreviousSlide}
-                        disabled={currentSlideIndex === 0}
+                        disabled={!selectedItem?.slides || currentSlideIndex === 0}
                         className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
                         <SkipBack className="w-4 h-4" />
@@ -1539,7 +1570,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                       <button
                         onClick={goToNextSlide}
-                        disabled={currentSlideIndex >= (selectedItem.slides?.length || 1) - 1}
+                        disabled={!selectedItem?.slides || currentSlideIndex >= selectedItem.slides.length - 1}
                         className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
                         Next

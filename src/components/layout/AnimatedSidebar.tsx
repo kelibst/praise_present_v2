@@ -31,7 +31,7 @@ const menu = [
   // },
   { label: "Scripture", icon: <FiBook />, path: "/scripture" },
   { label: 'Songs', icon: <FiMusic />, path: '/songs' },
-  // { label: 'Media', icon: <FiImage />, path: '/media' },
+  { label: 'Media', icon: <FiImage />, path: '/media' },
   // { label: 'Presentations', icon: <FiMonitor />, path: '/presentations' },
   { label: "Live Presentation", icon: <FiVideo />, path: "/live" },
   { label: "Settings", icon: <FiSettings />, path: "/settings" },

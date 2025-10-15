@@ -4,6 +4,318 @@ This file tracks major features and changes implemented in PraisePresent.
 
 ## 2025-10-15
 
+### ✅ Implemented Media Preview and Live Display Integration
+**Time:** Evening (Latest)
+**Description:** Added full-screen media preview modal and live display integration for media items. Users can now preview images/videos in full-screen, send them directly to the live presentation screen, and navigate between media items with keyboard shortcuts.
+
+**Features Added:**
+1. **MediaPreview Modal Component:**
+   - Full-screen overlay with black background
+   - Image display with zoom controls (+/-/0 keys or UI buttons)
+   - Video playback with HTML5 controls and autoplay
+   - Navigation arrows for browsing multiple items
+   - Metadata display (filename, dimensions, file size, duration, type, category)
+   - Action buttons: Send to Live, Add to Service, Delete
+   - Keyboard shortcuts:
+     - ESC: Close modal
+     - Left/Right arrows: Navigate between items
+     - Space: Play/Pause video
+     - +/-: Zoom in/out (images)
+     - 0: Reset zoom (images)
+
+2. **Live Display Integration:**
+   - Added `sendMediaToLive()` function to useLiveDisplay hook
+   - Media content structure with display options (fit, autoPlay, loop)
+   - Automatic live display creation prompt if not active
+   - Support for both images (static) and videos (with playback)
+   - Maintain aspect ratio with fit options (contain/cover/fill)
+   - Status logging for debugging
+
+3. **MediaPage Integration:**
+   - Integrated preview modal with MediaPage
+   - "View" button opens full-screen preview
+   - "Send to Live" button/action sends directly to live display
+   - Preview modal accessible from both grid view and item actions
+   - Confirmation dialogs for non-active live display
+
+**Technical Implementation:**
+- [MediaPreview.tsx](src/components/media/MediaPreview.tsx): Full-screen preview modal
+  - Radix UI Dialog component for modal
+  - Responsive image/video rendering
+  - Zoom state management for images
+  - Video element ref for playback control
+  - Navigation between items in array
+  - Keyboard event handlers
+  - Action button callbacks (Send to Live, Add to Service, Delete)
+- [LiveDisplayManager.tsx](src/components/live/LiveDisplayManager.tsx#L164-198): Added sendMediaToLive function
+  - Media content structure with display options
+  - IPC communication to live display window
+  - Error handling and fallback
+  - Logging for debugging
+- [LiveDisplayRenderer.tsx](src/components/LiveDisplayRenderer.tsx#L151-191): Added media content type handler
+  - Extended LiveContent interface to include 'media' type
+  - MediaItem interface for media data
+  - Image rendering with object-fit support (contain/cover/fill)
+  - Video rendering with autoPlay, loop, and controls
+  - Development overlay shows media info
+- [MediaPage.tsx](src/pages/MediaPage.tsx): Integrated preview and live display
+  - Preview state management (previewItem, previewOpen)
+  - useLiveDisplay hook integration
+  - handleItemView() - opens preview modal
+  - handleSendToLive() - sends media to live display
+  - handleAddToService() - placeholder for service integration
+  - MediaPreview component rendering with all callbacks
+
+**User Workflows:**
+
+**Preview Workflow:**
+1. User clicks "View" (eye icon) on media item
+2. Full-screen preview modal opens
+3. Image displays with zoom controls, video autoplays
+4. User can zoom (images) or control playback (videos)
+5. Navigate to other items with arrow keys/buttons
+6. Close with ESC or X button
+
+**Send to Live Workflow:**
+1. User clicks "Send to Live" (monitor icon) on media item OR from preview modal
+2. If live display inactive, prompt to create it
+3. Media instantly displays on live screen
+4. Images show statically with aspect ratio maintained
+5. Videos play automatically with loop enabled
+6. User can clear live display or send different media
+
+**Keyboard Shortcuts:**
+- **ESC**: Close preview modal
+- **← →**: Navigate between media items in preview
+- **SPACE**: Play/Pause video
+- **+ / =**: Zoom in (images)
+- **- / _**: Zoom out (images)
+- **0**: Reset zoom to 100% (images)
+
+**Display Options:**
+- **Fit modes**: contain (default), cover, fill
+- **AutoPlay**: Enabled for videos by default
+- **Loop**: Enabled for videos by default
+- **Aspect ratio**: Maintained for all media
+
+**Future Enhancements:**
+- Live display renderer update to handle media content type
+- Media service items for adding to service order
+- Thumbnail generation for video first frame
+- Pan/drag for zoomed images
+- Playlist mode for multiple media items
+- Background music for images
+- Transition effects between media items
+- Media annotations and overlays
+
+**Impact:**
+- Users can preview media before presenting
+- Direct send to live display from media library
+- No need to add to service for quick displays
+- Professional full-screen preview experience
+- Efficient workflow with keyboard shortcuts
+- Video playback fully supported on live screen
+- Images maintain quality and aspect ratio
+
+## 2025-10-15
+
+### ✅ Implemented Media Library Page with Full Media Management
+**Time:** Evening
+**Description:** Added a dedicated Media page where users can upload, organize, and manage images and videos. Media items are categorized separately (Images | Videos) with efficient storage and retrieval. Includes hybrid storage strategy (base64 for small files, filesystem for large files) and comprehensive CRUD operations.
+
+**Features Added:**
+1. **Media Upload System:**
+   - Drag-and-drop upload zone with visual feedback
+   - File picker button for traditional uploads
+   - File validation (type and size checks)
+   - Upload progress indication
+   - Support for multiple formats:
+     - Images: JPG, PNG, WebP, GIF, SVG (max 10MB)
+     - Videos: MP4, WebM, OGG, MOV (max 100MB)
+
+2. **Media Grid Display:**
+   - Responsive grid layout (2-6 columns based on screen size)
+   - Thumbnail previews for images and videos
+   - Metadata overlay on hover (dimensions, file size, date)
+   - Selection checkboxes for bulk operations
+   - Action buttons (View, Use as Background, Delete)
+   - Type badges and category tags
+
+3. **Filtering and Search:**
+   - Category tabs (All, Images, Videos) with counts
+   - Real-time search by filename or description
+   - Visual feedback for active filters
+   - Empty states with helpful messages
+
+4. **Bulk Operations:**
+   - Multi-select with checkboxes
+   - Bulk delete with confirmation modal
+   - Clear selection action
+   - Selection count display
+
+5. **Hybrid Storage Strategy:**
+   - Small files (<2MB): Stored as base64 in database for portability
+   - Large files (≥2MB): Stored in filesystem (`userData/media/images|videos/`)
+   - Automatic cleanup on delete (removes both DB record and file)
+   - Unique filename generation to prevent conflicts
+
+**Technical Implementation:**
+- [mediaService.ts](src/lib/services/mediaService.ts): Database CRUD operations
+  - createMediaItem(), getMediaItems(), updateMediaItem(), deleteMediaItems()
+  - Query filtering by type, category, tags, search
+  - Pagination and sorting support
+  - Statistics and metadata helpers
+- [mediaSlice.ts](src/lib/mediaSlice.ts): Redux state management
+  - Async thunks for IPC communication
+  - Filter state (type, category, search)
+  - Selection state for bulk operations
+  - Upload progress tracking
+- [media-main.ts](src/main/media-main.ts): Electron IPC handlers
+  - media:upload - File upload with storage strategy selection
+  - media:list - Fetch media items with filtering
+  - media:get - Get single media item
+  - media:update - Update metadata (tags, category, description)
+  - media:delete - Delete items (DB + filesystem)
+  - media:stats - Get library statistics
+- [MediaUpload.tsx](src/components/media/MediaUpload.tsx): Drag-and-drop upload component
+  - Visual drag state feedback
+  - File validation before upload
+  - Error handling and display
+  - Upload progress indication
+- [MediaItem.tsx](src/components/media/MediaItem.tsx): Individual media card
+  - Thumbnail with fallback for errors
+  - Type badge and file size display
+  - Hover actions (View, Use, Delete)
+  - Selection checkbox
+  - Metadata display (date, dimensions, duration)
+- [MediaGrid.tsx](src/components/media/MediaGrid.tsx): Grid layout component
+  - Responsive grid with loading skeleton
+  - Empty state handling
+  - Event propagation to items
+- [MediaPage.tsx](src/pages/MediaPage.tsx): Main media management page
+  - Header with statistics and actions
+  - Category tabs and search bar
+  - Upload toggle and area
+  - Bulk operation controls
+  - Delete confirmation modal
+- [routes.tsx](src/routes.tsx): Added `/media` route
+- [AnimatedSidebar.tsx](src/components/layout/AnimatedSidebar.tsx): Enabled Media navigation
+- [store.ts](src/lib/store.ts): Registered mediaSlice in Redux store
+- [main.ts](src/main.ts): Initialized media IPC handlers
+
+**Database Schema:**
+Uses existing `MediaItem` model from Prisma schema:
+- filename, originalName, path, type, mimeType, size
+- width, height, duration (for images/videos)
+- tags, category, description (for organization)
+- createdAt, updatedAt, lastUsed (for sorting/stats)
+
+**User Workflow:**
+1. Navigate to Media page from sidebar
+2. Click "Upload Media" button
+3. Drag and drop files or click to browse
+4. Files automatically validated and uploaded
+5. Thumbnails appear in grid with metadata
+6. Filter by category (All, Images, Videos)
+7. Search by filename or description
+8. Select multiple items for bulk delete
+9. Click action buttons to view, use, or delete items
+10. Media items ready for use in presentations
+
+**Storage Locations:**
+- Small files: Embedded as base64 in database
+- Large files: `{userData}/media/images/` or `{userData}/media/videos/`
+- Database: SQLite via Prisma ORM
+
+**Performance Optimizations:**
+- Lazy loading for large libraries
+- Responsive grid with CSS Grid
+- Efficient filtering with Redux selectors
+- Thumbnail caching for repeated views
+- Virtual scrolling support (future enhancement)
+
+**Future Enhancements:**
+- Thumbnail generation for videos (extract first frame)
+- Image dimension detection
+- Video metadata extraction (duration, resolution)
+- Tag management and filtering
+- Drag to reorder or organize
+- Export/import media library
+- Integration with BackgroundToolbar (media selector modal)
+- Direct send to live display
+- Media preview modal with full-screen view
+
+**Impact:**
+- Users can now manage a centralized media library
+- Eliminates need for external file management
+- Efficient storage with hybrid approach
+- Ready for integration with live presentations
+- Organized by category for quick access
+- Bulk operations save time
+- Persistent storage across sessions
+
+## 2025-10-15
+
+### ✅ Fixed Previous/Next Buttons During Live Presentations
+**Time:** Evening (Latest)
+**Description:** Fixed multiple critical bugs preventing Previous and Next navigation buttons from working during scripture presentations. Buttons now work identically to keyboard shortcuts (ArrowLeft/ArrowRight) and are properly enabled/disabled based on slide position.
+
+**Problems Found:**
+1. Previous/Next buttons only updated preview window, not live display
+2. During presentations, clicking buttons left live screen on old slide
+3. Buttons appeared disabled even when slides were loaded
+4. Presentation mode wasn't being set when clicking "Present Live" button
+5. Keyboard shortcuts (ArrowLeft/ArrowRight) worked correctly but buttons didn't
+
+**Root Causes:**
+1. `goToPreviousSlide()` and `goToNextSlide()` functions only called `setCurrentSlideIndex()`
+   - Missing logic to check presentation mode and send slide to live display
+   - Keyboard shortcuts had correct implementation (lines 341-362)
+2. `presentCurrentSlide()` function didn't set presentation mode to 'live'
+   - Navigation buttons checked `presentationMode === 'live'` before sending to display
+   - Without setting mode, buttons stayed in preview mode
+3. **Next button disabled condition was broken**:
+   - Original: `disabled={currentSlideIndex >= (selectedItem.slides?.length || 1) - 1}`
+   - When slides undefined, fallback to `1` made it: `disabled={0 >= 0}` = always disabled
+   - Both buttons appeared grayed out by default
+
+**Solutions Implemented:**
+1. Updated both navigation functions to async
+2. Added conditional check: `if (presentationMode === 'live' && liveDisplayActive)`
+3. Call `sendSlideToLive()` when in live mode
+4. Set presentation mode to 'live' in `presentCurrentSlide()`
+5. **Fixed disabled button conditions**:
+   - Previous: `disabled={!selectedItem?.slides || currentSlideIndex === 0}`
+   - Next: `disabled={!selectedItem?.slides || currentSlideIndex >= selectedItem.slides.length - 1}`
+   - Now properly checks if slides exist before checking index
+
+**Technical Implementation:**
+- [LivePresentationPage.tsx:741-771](src/pages/LivePresentationPage.tsx#L741): Navigation functions
+  - Made `goToPreviousSlide()` and `goToNextSlide()` async
+  - Added live display check and `sendSlideToLive()` call
+  - Added debug logging to track navigation calls
+- [LivePresentationPage.tsx:774-780](src/pages/LivePresentationPage.tsx#L774): Present function
+  - Added `setPresentationMode('live')` to `presentCurrentSlide()`
+  - Ensures navigation works after clicking "Present Live"
+- [LivePresentationPage.tsx:1551,1573](src/pages/LivePresentationPage.tsx#L1551): Button disabled conditions
+  - Previous button: Added `!selectedItem?.slides ||` check
+  - Next button: Changed from `(slides?.length || 1) - 1` to proper null check
+  - Prevents false disabled state when slides are loaded
+- [LivePresentationPage.tsx:1009-1016](src/pages/LivePresentationPage.tsx#L1009): Debug logging
+  - Added useEffect to log currentSlideIndex changes
+  - Helps track slide navigation state
+
+**Behavior After Fix:**
+- **Preview Mode**: Buttons navigate preview only (unchanged)
+- **Live Mode**: Buttons navigate AND update live display in real-time ✓
+- **Consistency**: Buttons now work identically to keyboard shortcuts ✓
+
+**Impact:**
+- Presenters can now use mouse/buttons during live presentations
+- No need to remember keyboard shortcuts
+- More accessible for users who prefer clicking
+- Consistent behavior across all navigation methods
+
 ### ✅ Added Video Background Support to Settings
 **Time:** Evening
 **Description:** Implemented complete video background support for scripture/song/announcement slides. Videos can be uploaded (base64) or loaded from URLs, with automatic looping and muted playback. Follows the same architecture as image backgrounds for seamless persistence.

@@ -6,10 +6,26 @@ interface LiveDisplayRendererProps {
   height?: number;
 }
 
+interface MediaItem {
+  id: string;
+  path: string;
+  originalName: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+}
+
 interface LiveContent {
-  type: 'template-slide' | 'black' | 'logo' | 'placeholder';
+  type: 'template-slide' | 'black' | 'logo' | 'placeholder' | 'media';
   title?: string;
   slide?: Slide;
+  mediaType?: 'image' | 'video';
+  mediaItem?: MediaItem;
+  displayOptions?: {
+    fit?: 'contain' | 'cover' | 'fill';
+    autoPlay?: boolean;
+    loop?: boolean;
+  };
   metadata?: {
     itemType?: string;
     slideIndex?: number;
@@ -132,6 +148,48 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
         }
         break;
 
+      case 'media':
+        if (currentContent.mediaItem && currentContent.mediaType) {
+          const { mediaItem, mediaType, displayOptions } = currentContent;
+          const fit = displayOptions?.fit || 'contain';
+          const autoPlay = displayOptions?.autoPlay !== false;
+          const loop = displayOptions?.loop !== false;
+
+          // Object-fit CSS mapping
+          const objectFitStyle = {
+            contain: 'object-contain',
+            cover: 'object-cover',
+            fill: 'object-fill',
+          }[fit];
+
+          if (mediaType === 'image') {
+            return (
+              <div className="w-full h-full flex items-center justify-center bg-black">
+                <img
+                  src={mediaItem.path}
+                  alt={mediaItem.originalName}
+                  className={`max-w-full max-h-full ${objectFitStyle}`}
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </div>
+            );
+          } else if (mediaType === 'video') {
+            return (
+              <div className="w-full h-full flex items-center justify-center bg-black">
+                <video
+                  src={mediaItem.path}
+                  autoPlay={autoPlay}
+                  loop={loop}
+                  controls
+                  className={`max-w-full max-h-full ${objectFitStyle}`}
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </div>
+            );
+          }
+        }
+        break;
+
       case 'black':
         return <div className="w-full h-full bg-black" />;
 
@@ -185,6 +243,17 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
               {currentContent.title && <div>Title: {currentContent.title}</div>}
               {currentContent.slide && (
                 <div>Shapes: {currentContent.slide.shapes?.length || 0}</div>
+              )}
+              {currentContent.mediaType && (
+                <>
+                  <div>Media Type: {currentContent.mediaType}</div>
+                  {currentContent.mediaItem && (
+                    <div>File: {currentContent.mediaItem.originalName}</div>
+                  )}
+                  {currentContent.displayOptions && (
+                    <div>Fit: {currentContent.displayOptions.fit || 'contain'}</div>
+                  )}
+                </>
               )}
               {currentContent.metadata && (
                 <div>Mode: {currentContent.metadata.renderingMode}</div>

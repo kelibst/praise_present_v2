@@ -4,6 +4,7 @@ import started from "electron-squirrel-startup";
 import { initializeDatabaseMain } from "./main/database-main";
 import { initializeDisplayMain } from "./main/display-main";
 import { initializeWindowMain } from "./main/window-main";
+import { initializeMediaHandlers } from "./main/media-main";
 
 // These constants are injected by Electron Forge and Vite
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -115,6 +116,14 @@ app.on("ready", async () => {
     console.log("Window controls initialized successfully");
   } catch (error) {
     console.error("Failed to initialize window controls:", error);
+  }
+
+  // Initialize media handlers
+  try {
+    initializeMediaHandlers();
+    console.log("Media handlers initialized successfully");
+  } catch (error) {
+    console.error("Failed to initialize media handlers:", error);
   }
 
   createWindow();
