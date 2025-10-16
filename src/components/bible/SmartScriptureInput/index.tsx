@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Book, Loader2, AlertCircle, BookOpen, Check, ChevronDown } from 'lucide-react';
+import { Book, Loader2, AlertCircle, BookOpen, Check, ChevronDown, Clock } from 'lucide-react';
 import { Book as BibleBook } from '../../../lib/bibleSlice';
 import {
   SmartScriptureInputProps,
@@ -18,6 +18,7 @@ import { useReferenceParser } from './hooks/useReferenceParser';
 import { useValidation } from './hooks/useValidation';
 import { useBookMatcher } from './hooks/useBookMatcher';
 import { formatReference, getDisplayText } from './referenceFormatter';
+import { scriptureContext } from '../../../lib/services/scriptureContext';
 
 export const SmartScriptureInput: React.FC<SmartScriptureInputProps> = ({
   onReferenceSelect,
@@ -68,11 +69,26 @@ export const SmartScriptureInput: React.FC<SmartScriptureInputProps> = ({
 
   // Parse reference when input changes
   const updateParsedReference = useCallback((value: string) => {
-    const parsed = parseReference(value);
+    // Reset inactivity timer on user interaction
+    scriptureContext.resetTimer();
 
+    // Check if input is chapter:verse only (e.g., "3:16")
+    let parseValue = value;
+    if (scriptureContext.isChapterVerseOnly(value)) {
+      const autoCompleted = scriptureContext.autoCompleteWithLastBook(value);
+      if (autoCompleted) {
+        parseValue = autoCompleted;
+        // Show hint that we auto-completed with last book
+        console.log(`Auto-completed "${value}" to "${autoCompleted}" using last book`);
+      }
+    }
+
+    const parsed = parseReference(parseValue);
+
+    // If auto-completed, keep original value in input but use parsed reference from completed
     setInputState(prev => ({
       ...prev,
-      value,
+      value: value, // Keep original input (e.g., "3:16")
       parsedReference: parsed,
       hasInteracted: true
     }));
@@ -84,7 +100,7 @@ export const SmartScriptureInput: React.FC<SmartScriptureInputProps> = ({
 
     // Generate suggestions for autocomplete
     if (autoComplete && value.trim()) {
-      const newSuggestions = generateSuggestions(value, parsed);
+      const newSuggestions = generateSuggestions(parseValue, parsed);
       setInputState(prev => ({
         ...prev,
         showSuggestions: newSuggestions.length > 0,
@@ -147,6 +163,11 @@ export const SmartScriptureInput: React.FC<SmartScriptureInputProps> = ({
       selectedSuggestionIndex: -1
     }));
 
+    // Save to context if book is present
+    if (suggestion.reference.book) {
+      scriptureContext.setLastBook(suggestion.reference.book, suggestion.text);
+    }
+
     if (onReferenceSelect && suggestion.reference.isComplete) {
       onReferenceSelect(suggestion.reference);
     }
@@ -193,6 +214,10 @@ export const SmartScriptureInput: React.FC<SmartScriptureInputProps> = ({
         if (inputState.selectedSuggestionIndex >= 0) {
           handleSuggestionSelect(suggestions[inputState.selectedSuggestionIndex]);
         } else if (inputState.parsedReference.isValid && onReferenceSelect) {
+          // Save to context when Enter is pressed
+          if (inputState.parsedReference.book) {
+            scriptureContext.setLastBook(inputState.parsedReference.book, inputState.value);
+          }
           onReferenceSelect(inputState.parsedReference);
           setInputState(prev => ({ ...prev, showSuggestions: false }));
         }
@@ -271,6 +296,15 @@ export const SmartScriptureInput: React.FC<SmartScriptureInputProps> = ({
     return `${baseClasses} bg-gray-800 border-gray-600 text-white focus:border-blue-500 focus:ring-blue-500/20`;
   }, [disabled, inputState.hasInteracted, inputState.isValidating, validationResult, inputState.parsedReference.isValid]);
 
+  // Get dynamic placeholder with last book hint
+  const dynamicPlaceholder = useMemo(() => {
+    const lastBook = scriptureContext.getLastBook();
+    if (lastBook) {
+      return `Enter reference (Last: ${lastBook.name}) e.g., 3:16, john 3:16`;
+    }
+    return placeholder;
+  }, [placeholder]);
+
   return (
     <div className={`relative ${className}`}>
       {/* Input Field */}
@@ -283,7 +317,7 @@ export const SmartScriptureInput: React.FC<SmartScriptureInputProps> = ({
           onKeyDown={handleKeyDown}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          placeholder={placeholder}
+          placeholder={dynamicPlaceholder}
           disabled={disabled}
           className={getInputStyling}
           autoComplete="off"
@@ -292,6 +326,13 @@ export const SmartScriptureInput: React.FC<SmartScriptureInputProps> = ({
 
         {/* Status Indicators */}
         <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center space-x-2">
+          {/* Last book context indicator */}
+          {scriptureContext.getLastBook() && !inputState.hasInteracted && (
+            <div className="flex items-center space-x-1 text-xs text-blue-400" title={`Last book: ${scriptureContext.getLastBook()?.name}`}>
+              <Clock className="w-3 h-3" />
+            </div>
+          )}
+
           {inputState.isValidating && (
             <Loader2 className="w-4 h-4 animate-spin text-yellow-400" />
           )}
@@ -316,23 +357,37 @@ export const SmartScriptureInput: React.FC<SmartScriptureInputProps> = ({
           ref={suggestionsRef}
           className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto"
         >
-          {suggestions.map((suggestion, index) => (
-            <button
-              key={`${suggestion.text}-${index}`}
-              onClick={() => handleSuggestionSelect(suggestion)}
-              className={`w-full px-3 py-2 text-left hover:bg-gray-700 focus:bg-gray-700 focus:outline-none ${
-                index === inputState.selectedSuggestionIndex ? 'bg-gray-700' : ''
-              }`}
-            >
-              <div className="flex items-center space-x-2">
-                <BookOpen className="w-4 h-4 text-gray-400" />
-                <span className="text-white">{suggestion.text}</span>
-                <span className="text-xs text-gray-400 ml-auto">
-                  {suggestion.type === 'complete' ? '✓' : '→'}
-                </span>
-              </div>
-            </button>
-          ))}
+          {suggestions.map((suggestion, index) => {
+            // Get book number from books array
+            const bookNumber = suggestion.reference.book?.id || null;
+
+            return (
+              <button
+                key={`${suggestion.text}-${index}`}
+                onClick={() => handleSuggestionSelect(suggestion)}
+                className={`w-full px-3 py-2 text-left hover:bg-gray-700 focus:bg-gray-700 focus:outline-none transition-colors ${
+                  index === inputState.selectedSuggestionIndex ? 'bg-gray-700' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 flex-1">
+                    <BookOpen className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <span className="text-white">{suggestion.text}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 ml-2">
+                    {bookNumber && (
+                      <span className="text-xs text-gray-500 font-mono">
+                        ({bookNumber})
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-400">
+                      {suggestion.type === 'complete' ? '✓' : '→'}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 

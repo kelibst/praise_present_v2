@@ -163,62 +163,6 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
             fill: 'object-fill',
           }[fit];
 
-          if (mediaType === 'image') {
-            return (
-              <div className="w-full h-full flex items-center justify-center bg-black">
-                <img
-                  src={mediaItem.path}
-                  alt={mediaItem.originalName}
-                  className={`max-w-full max-h-full ${objectFitStyle}`}
-                  style={{ width: '100%', height: '100%' }}
-                />
-              </div>
-            );
-          } else if (mediaType === 'video') {
-            return (
-              <div className="w-full h-full flex items-center justify-center bg-black">
-                <video
-                  src={mediaItem.path}
-                  autoPlay={autoPlay}
-                  loop={loop}
-                  muted={false}
-                  playsInline
-                  controls
-                  preload="auto"
-                  className={`max-w-full max-h-full ${objectFitStyle}`}
-                  style={{ width: '100%', height: '100%' }}
-                  onLoadStart={() => {
-                    console.log('🎥 Video loading started:', mediaItem.originalName);
-                  }}
-                  onCanPlay={() => {
-                    console.log('✅ Video can play:', mediaItem.originalName);
-                  }}
-                  onError={(e) => {
-                    const videoElement = e.currentTarget;
-                    console.error('❌ Video error:', {
-                      name: mediaItem.originalName,
-                      error: videoElement.error,
-                      networkState: videoElement.networkState,
-                      readyState: videoElement.readyState,
-                      pathLength: mediaItem.path.length,
-                      pathPreview: mediaItem.path.substring(0, 100) + '...'
-                    });
-                  }}
-                  onWaiting={() => {
-                    console.log('⏳ Video buffering:', mediaItem.originalName);
-                  }}
-                  onStalled={() => {
-                    console.warn('⚠️ Video stalled:', mediaItem.originalName);
-                  }}
-                  onPlay={() => {
-                    console.log('▶️ Video playing:', mediaItem.originalName);
-                  }}
-                >
-                  Your browser does not support the video tag.
-                </video>
-              </div>
-            );
-          }
         }
         break;
 

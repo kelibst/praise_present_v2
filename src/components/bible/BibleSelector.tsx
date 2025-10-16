@@ -5,6 +5,7 @@ import { Translation, Version, Book as BibleBook } from '../../lib/bibleSlice';
 import { SmartScriptureInput } from './SmartScriptureInput';
 import { ParsedReference } from './SmartScriptureInput/types';
 import { ChapterVerseList } from './ChapterVerseList';
+import { scriptureContext } from '../../lib/services/scriptureContext';
 
 interface BibleSelectorProps {
   onVerseSelect?: (verses: ScriptureVerse[]) => void;
@@ -326,6 +327,9 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
 
       // Add to recent references
       addToRecentReferences(formattedReference);
+
+      // Save to context for EasyWorship-style behavior
+      scriptureContext.setLastBook(reference.book, formattedReference);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load verses');

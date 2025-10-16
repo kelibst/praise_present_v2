@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '../ui/dialog';
 
 interface MediaPreviewProps {
@@ -192,6 +193,16 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-screen-2xl w-full h-screen p-0 bg-black/95 border-none">
+        {/* Hidden title and description for accessibility */}
+        <DialogTitle className="sr-only">
+          {item.originalName}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          Preview of {item.type} file: {item.originalName}.
+          {isImage && 'Use +/- keys to zoom, arrow keys to navigate.'}
+          {isVideo && 'Use space to play/pause, arrow keys to navigate.'}
+        </DialogDescription>
+
         {/* Close Button */}
         <button
           onClick={onClose}
