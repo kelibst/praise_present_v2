@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Book, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import BibleSelector from '../bible/BibleSelector';
 import { ScriptureVerse } from '../../lib/services/bibleService';
+import { formatScriptureReference } from '../../lib/services/scriptureReferenceFormatter';
 
 // ServiceItem interface (matching the one in LivePresentationPage)
 interface ServiceItem {
@@ -30,38 +31,16 @@ export const PlanScriptureSelector: React.FC<PlanScriptureSelectorProps> = ({
   const handleVerseSelect = (verses: ScriptureVerse[]) => {
     if (verses.length === 0) return;
 
-    // Create scripture reference from verses
-    const firstVerse = verses[0];
-
-    // Build title from the verses
-    let title = `${firstVerse.book} ${firstVerse.chapter}:${firstVerse.verse}`;
-    if (verses.length > 1) {
-      // Check if verses are consecutive
-      const verseNumbers = verses.map(v => v.verse).sort((a, b) => a - b);
-      const isConsecutive = verseNumbers.every((v, i) => i === 0 || v === verseNumbers[i - 1] + 1);
-
-      if (isConsecutive && verseNumbers.length > 1) {
-        title = `${firstVerse.book} ${firstVerse.chapter}:${verseNumbers[0]}-${verseNumbers[verseNumbers.length - 1]}`;
-      } else {
-        title = `${firstVerse.book} ${firstVerse.chapter}:${verseNumbers.join(',')}`;
-      }
-    }
+    // Use centralized reference formatter
+    const title = formatScriptureReference(verses);
 
     const scriptureItem: ServiceItem = {
       id: `scripture-${Date.now()}`,
       type: 'scripture',
       title,
       content: {
-        verses: verses.map(v => ({
-          id: v.id,
-          book: v.book,
-          chapter: v.chapter,
-          verse: v.verse,
-          text: v.text,
-          translation: v.translation,
-          bookId: v.bookId,
-          versionId: v.versionId
-        }))
+        // Preserve all verse properties including navigation metadata
+        verses: verses.map(v => ({ ...v }))
       }
     };
 

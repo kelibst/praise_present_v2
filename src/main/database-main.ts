@@ -159,6 +159,55 @@ function setupDatabaseIPC() {
   });
 
   // Verse operations
+  ipcMain.handle("verses:getById", async (event, { id }: { id: string }) => {
+    try {
+      const verse = await db.verse.findUnique({
+        where: { id },
+        include: {
+          book: true,
+          version: {
+            include: {
+              translation: true,
+            },
+          },
+        },
+      });
+
+      if (!verse) {
+        return null;
+      }
+
+      // Serialize dates to avoid non-serializable values in Redux
+      return {
+        ...verse,
+        book: verse.book
+          ? {
+              ...verse.book,
+            }
+          : null,
+        version: verse.version
+          ? {
+              ...verse.version,
+              createdAt: verse.version.createdAt?.toISOString(),
+              updatedAt: verse.version.updatedAt?.toISOString(),
+              translation: verse.version.translation
+                ? {
+                    ...verse.version.translation,
+                    createdAt:
+                      verse.version.translation.createdAt?.toISOString(),
+                    updatedAt:
+                      verse.version.translation.updatedAt?.toISOString(),
+                  }
+                : null,
+            }
+          : null,
+      };
+    } catch (error) {
+      console.error("Error loading verse by ID:", error);
+      throw error;
+    }
+  });
+
   ipcMain.handle(
     "db:loadVerses",
     async (

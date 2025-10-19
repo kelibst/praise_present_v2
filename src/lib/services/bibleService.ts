@@ -26,6 +26,14 @@ export interface ScriptureVerse {
   translation: string;
   bookId?: number;
   versionId?: string;
+  // Navigation metadata - prospective architecture
+  globalIndex?: number | null;
+  previousId?: string | null;
+  nextId?: string | null;
+  chapterFirstVerseId?: string | null;
+  chapterLastVerseId?: string | null;
+  bookFirstVerseId?: string | null;
+  bookLastVerseId?: string | null;
 }
 
 export interface ScriptureSelection {
@@ -236,8 +244,8 @@ export class BibleService {
         filteredVerses = allVerses.filter((v: Verse) => verses.includes(v.verse));
       }
 
-      // Convert to ScriptureVerse format
-      const scriptureVerses: ScriptureVerse[] = filteredVerses.map((v: Verse) => ({
+      // Convert to ScriptureVerse format (preserve navigation metadata)
+      const scriptureVerses: ScriptureVerse[] = filteredVerses.map((v: any) => ({
         id: v.id,
         book: book.name,
         chapter: v.chapter,
@@ -245,7 +253,15 @@ export class BibleService {
         text: v.text,
         translation: version.name,
         bookId: v.bookId,
-        versionId: v.versionId
+        versionId: v.versionId,
+        // Preserve navigation metadata from prospective architecture
+        globalIndex: v.globalIndex,
+        previousId: v.previousId,
+        nextId: v.nextId,
+        chapterFirstVerseId: v.chapterFirstVerseId,
+        chapterLastVerseId: v.chapterLastVerseId,
+        bookFirstVerseId: v.bookFirstVerseId,
+        bookLastVerseId: v.bookLastVerseId
       }));
 
       console.log('✅ BibleService: Verses loaded successfully', { count: scriptureVerses.length });
@@ -339,8 +355,8 @@ export class BibleService {
         throw new Error('Version not found');
       }
 
-      // Convert to ScriptureVerse format
-      const scriptureVerses: ScriptureVerse[] = searchResults.map((v: Verse) => {
+      // Convert to ScriptureVerse format (preserve navigation metadata)
+      const scriptureVerses: ScriptureVerse[] = searchResults.map((v: any) => {
         const book = this.books.find(b => b.id === v.bookId);
         return {
           id: v.id,
@@ -350,7 +366,15 @@ export class BibleService {
           text: v.text,
           translation: version.name,
           bookId: v.bookId,
-          versionId: v.versionId
+          versionId: v.versionId,
+          // Preserve navigation metadata from prospective architecture
+          globalIndex: v.globalIndex,
+          previousId: v.previousId,
+          nextId: v.nextId,
+          chapterFirstVerseId: v.chapterFirstVerseId,
+          chapterLastVerseId: v.chapterLastVerseId,
+          bookFirstVerseId: v.bookFirstVerseId,
+          bookLastVerseId: v.bookLastVerseId
         };
       });
 

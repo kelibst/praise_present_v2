@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Palette,
   Image as ImageIcon,
   Droplet,
   Upload,
   Trash2,
-  Video as VideoIcon
+  Video as VideoIcon,
+  Save
 } from 'lucide-react';
+import debounce from 'lodash/debounce';
 import { Color } from '../../rendering/types/geometry';
 
 export interface SlideBackground {
@@ -30,6 +32,16 @@ interface BackgroundToolbarProps {
    * Callback when background changes
    */
   onBackgroundChange: (background: SlideBackground) => void;
+
+  /**
+   * Callback when saving as default (optional)
+   */
+  onSaveAsDefault?: (background: SlideBackground) => void;
+
+  /**
+   * Whether save as default is available
+   */
+  canSaveAsDefault?: boolean;
 
   /**
    * Optional CSS class
@@ -57,142 +69,201 @@ interface BackgroundToolbarProps {
 export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
   currentBackground,
   onBackgroundChange,
+  onSaveAsDefault,
+  canSaveAsDefault = false,
   className = ''
 }) => {
-  const [bgType, setBgType] = useState<'color' | 'gradient' | 'image' | 'video'>(currentBackground.type || 'color');
-  const [solidColor, setSolidColor] = useState(currentBackground.value || '#1a1a1a');
-  const [gradientStart, setGradientStart] = useState(currentBackground.gradient?.start || '#1a1a1a');
-  const [gradientEnd, setGradientEnd] = useState(currentBackground.gradient?.end || '#4a4a4a');
-  const [gradientDirection, setGradientDirection] = useState<'horizontal' | 'vertical' | 'diagonal'>(
-    currentBackground.gradient?.direction || 'vertical'
-  );
-  const [imageUrl, setImageUrl] = useState(currentBackground.value || '');
-  const [videoUrl, setVideoUrl] = useState(currentBackground.value || '');
-  const [opacity, setOpacity] = useState(currentBackground.opacity || 1.0);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  // Combine related state into single objects to reduce re-renders
+  const [backgroundState, setBackgroundState] = useState({
+    type: currentBackground.type || 'color',
+    solidColor: currentBackground.value || '#1a1a1a',
+    gradientStart: currentBackground.gradient?.start || '#1a1a1a',
+    gradientEnd: currentBackground.gradient?.end || '#4a4a4a',
+    gradientDirection: (currentBackground.gradient?.direction || 'vertical') as 'horizontal' | 'vertical' | 'diagonal',
+    imageUrl: currentBackground.type === 'image' ? (currentBackground.value || '') : '',
+    videoUrl: currentBackground.type === 'video' ? (currentBackground.value || '') : '',
+    opacity: currentBackground.opacity || 1.0
+  });
+
+  const [uploadState, setUploadState] = useState({
+    isUploading: false,
+    uploadError: null as string | null
+  });
+
+  const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
 
   // Sync local state with current background
-  // IMPORTANT: Use JSON.stringify for gradient to detect deep changes in nested object
-  // Without this, React won't detect when gradient.start/end/direction change
+  // Optimized to use shallow comparison instead of JSON.stringify
   useEffect(() => {
-    setBgType(currentBackground.type || 'color');
-    if (currentBackground.type === 'color') {
-      setSolidColor(currentBackground.value || '#1a1a1a');
-    } else if (currentBackground.type === 'gradient' && currentBackground.gradient) {
-      setGradientStart(currentBackground.gradient.start);
-      setGradientEnd(currentBackground.gradient.end);
-      setGradientDirection(currentBackground.gradient.direction || 'vertical');
-    } else if (currentBackground.type === 'image') {
-      setImageUrl(currentBackground.value || '');
-    } else if (currentBackground.type === 'video') {
-      setVideoUrl(currentBackground.value || '');
-    }
-    setOpacity(currentBackground.opacity || 1.0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setBackgroundState(prev => {
+      const newState = { ...prev };
+      newState.type = currentBackground.type || 'color';
+      newState.opacity = currentBackground.opacity || 1.0;
+
+      if (currentBackground.type === 'color') {
+        newState.solidColor = currentBackground.value || '#1a1a1a';
+      } else if (currentBackground.type === 'gradient' && currentBackground.gradient) {
+        newState.gradientStart = currentBackground.gradient.start;
+        newState.gradientEnd = currentBackground.gradient.end;
+        newState.gradientDirection = currentBackground.gradient.direction || 'vertical';
+      } else if (currentBackground.type === 'image') {
+        newState.imageUrl = currentBackground.value || '';
+      } else if (currentBackground.type === 'video') {
+        newState.videoUrl = currentBackground.value || '';
+      }
+
+      // Only update if something actually changed
+      if (
+        prev.type === newState.type &&
+        prev.solidColor === newState.solidColor &&
+        prev.gradientStart === newState.gradientStart &&
+        prev.gradientEnd === newState.gradientEnd &&
+        prev.gradientDirection === newState.gradientDirection &&
+        prev.imageUrl === newState.imageUrl &&
+        prev.videoUrl === newState.videoUrl &&
+        prev.opacity === newState.opacity
+      ) {
+        return prev; // No change, return previous state
+      }
+
+      return newState;
+    });
   }, [
     currentBackground.type,
     currentBackground.value,
     currentBackground.opacity,
-    // Use JSON.stringify to detect deep changes in gradient object
-    JSON.stringify(currentBackground.gradient)
+    currentBackground.gradient?.start,
+    currentBackground.gradient?.end,
+    currentBackground.gradient?.direction
   ]);
 
-  // Apply background change
-  const applyBackground = (updates: Partial<SlideBackground>) => {
+  // Apply background change immediately
+  const applyBackground = useCallback((updates: Partial<SlideBackground>) => {
     const newBackground: SlideBackground = {
       ...currentBackground,
       ...updates
     };
     onBackgroundChange(newBackground);
-  };
+  }, [currentBackground, onBackgroundChange]);
 
-  // Handle type change
-  const handleTypeChange = (type: 'color' | 'gradient' | 'image' | 'video') => {
-    setBgType(type);
+  // Create debounced version for color inputs (200ms delay)
+  const debouncedApplyBackground = useMemo(
+    () => debounce((updates: Partial<SlideBackground>) => {
+      applyBackground(updates);
+    }, 200),
+    [applyBackground]
+  );
+
+  // Clean up debounce on unmount
+  useEffect(() => {
+    return () => {
+      debouncedApplyBackground.cancel();
+    };
+  }, [debouncedApplyBackground]);
+
+  // Handle type change - immediate update
+  const handleTypeChange = useCallback((type: 'color' | 'gradient' | 'image' | 'video') => {
+    setBackgroundState(prev => ({ ...prev, type }));
 
     if (type === 'color') {
       applyBackground({
         type: 'color',
-        value: solidColor,
-        opacity
+        value: backgroundState.solidColor,
+        opacity: backgroundState.opacity
       });
     } else if (type === 'gradient') {
       applyBackground({
         type: 'gradient',
         gradient: {
-          start: gradientStart,
-          end: gradientEnd,
-          direction: gradientDirection
+          start: backgroundState.gradientStart,
+          end: backgroundState.gradientEnd,
+          direction: backgroundState.gradientDirection
         },
-        opacity
+        opacity: backgroundState.opacity
       });
     } else if (type === 'image') {
       applyBackground({
         type: 'image',
-        value: imageUrl,
-        opacity
+        value: backgroundState.imageUrl,
+        opacity: backgroundState.opacity
       });
     } else if (type === 'video') {
       applyBackground({
         type: 'video',
-        value: videoUrl,
-        opacity
+        value: backgroundState.videoUrl,
+        opacity: backgroundState.opacity
       });
     }
-  };
+  }, [backgroundState, applyBackground]);
 
-  // Handle color change
-  const handleColorChange = (color: string) => {
-    setSolidColor(color);
-    applyBackground({
-      type: 'color',
-      value: color
+  // Handle color change - debounced for text input, immediate for color picker clicks
+  const handleColorChange = useCallback((color: string, isTextInput: boolean = false) => {
+    setBackgroundState(prev => ({ ...prev, solidColor: color }));
+
+    const update = {
+      type: 'color' as const,
+      value: color,
+      opacity: backgroundState.opacity
+    };
+
+    if (isTextInput) {
+      debouncedApplyBackground(update);
+    } else {
+      applyBackground(update);
+    }
+  }, [backgroundState.opacity, applyBackground, debouncedApplyBackground]);
+
+  // Handle gradient change - debounced for text input
+  const handleGradientChange = useCallback((start?: string, end?: string, direction?: 'horizontal' | 'vertical' | 'diagonal', isTextInput: boolean = false) => {
+    setBackgroundState(prev => {
+      const newState = { ...prev };
+      if (start !== undefined) newState.gradientStart = start;
+      if (end !== undefined) newState.gradientEnd = end;
+      if (direction !== undefined) newState.gradientDirection = direction;
+      return newState;
     });
-  };
 
-  // Handle gradient change
-  const handleGradientChange = (start?: string, end?: string, direction?: 'horizontal' | 'vertical' | 'diagonal') => {
-    const newStart = start || gradientStart;
-    const newEnd = end || gradientEnd;
-    const newDirection = direction || gradientDirection;
-
-    if (start) setGradientStart(start);
-    if (end) setGradientEnd(end);
-    if (direction) setGradientDirection(direction);
-
-    applyBackground({
-      type: 'gradient',
+    const update = {
+      type: 'gradient' as const,
       gradient: {
-        start: newStart,
-        end: newEnd,
-        direction: newDirection
-      }
-    });
-  };
+        start: start || backgroundState.gradientStart,
+        end: end || backgroundState.gradientEnd,
+        direction: direction || backgroundState.gradientDirection
+      },
+      opacity: backgroundState.opacity
+    };
 
-  // Handle image change
-  const handleImageChange = (url: string) => {
-    setImageUrl(url);
-    setUploadError(null);
+    if (isTextInput) {
+      debouncedApplyBackground(update);
+    } else {
+      applyBackground(update);
+    }
+  }, [backgroundState, applyBackground, debouncedApplyBackground]);
+
+  // Handle image change - immediate
+  const handleImageChange = useCallback((url: string) => {
+    setBackgroundState(prev => ({ ...prev, imageUrl: url }));
+    setUploadState(prev => ({ ...prev, uploadError: null }));
     applyBackground({
       type: 'image',
-      value: url
+      value: url,
+      opacity: backgroundState.opacity
     });
-  };
+  }, [backgroundState.opacity, applyBackground]);
 
-  // Handle video change
-  const handleVideoChange = (url: string) => {
-    setVideoUrl(url);
-    setUploadError(null);
+  // Handle video change - immediate
+  const handleVideoChange = useCallback((url: string) => {
+    setBackgroundState(prev => ({ ...prev, videoUrl: url }));
+    setUploadState(prev => ({ ...prev, uploadError: null }));
     applyBackground({
       type: 'video',
-      value: url
+      value: url,
+      opacity: backgroundState.opacity
     });
-  };
+  }, [backgroundState.opacity, applyBackground]);
 
   // Handle file upload (images and videos)
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -201,7 +272,7 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
     const isVideo = fileType.startsWith('video/');
 
     if (!isImage && !isVideo) {
-      setUploadError('Invalid file type. Please upload an image or video file.');
+      setUploadState(prev => ({ ...prev, uploadError: 'Invalid file type. Please upload an image or video file.' }));
       return;
     }
 
@@ -209,33 +280,32 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
     if (isImage) {
       const validImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
       if (!validImageTypes.includes(fileType)) {
-        setUploadError('Invalid image type. Please upload JPG, PNG, WebP, or GIF.');
+        setUploadState(prev => ({ ...prev, uploadError: 'Invalid image type. Please upload JPG, PNG, WebP, or GIF.' }));
         return;
       }
 
       // Validate file size (max 2MB for images)
       const maxSize = 2 * 1024 * 1024; // 2MB in bytes
       if (file.size > maxSize) {
-        setUploadError('Image too large. Maximum size is 2MB.');
+        setUploadState(prev => ({ ...prev, uploadError: 'Image too large. Maximum size is 2MB.' }));
         return;
       }
     } else if (isVideo) {
       const validVideoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
       if (!validVideoTypes.includes(fileType)) {
-        setUploadError('Invalid video type. Please upload MP4, WebM, or MOV.');
+        setUploadState(prev => ({ ...prev, uploadError: 'Invalid video type. Please upload MP4, WebM, or MOV.' }));
         return;
       }
 
       // Validate file size (max 50MB for videos)
       const maxSize = 50 * 1024 * 1024; // 50MB in bytes
       if (file.size > maxSize) {
-        setUploadError('Video too large. Maximum size is 50MB.');
+        setUploadState(prev => ({ ...prev, uploadError: 'Video too large. Maximum size is 50MB.' }));
         return;
       }
     }
 
-    setIsUploading(true);
-    setUploadError(null);
+    setUploadState({ isUploading: true, uploadError: null });
 
     try {
       // Convert to base64
@@ -247,26 +317,74 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
         } else if (isVideo) {
           handleVideoChange(base64String);
         }
-        setIsUploading(false);
+        setUploadState({ isUploading: false, uploadError: null });
       };
       reader.onerror = () => {
-        setUploadError('Failed to read file. Please try again.');
-        setIsUploading(false);
+        setUploadState({ isUploading: false, uploadError: 'Failed to read file. Please try again.' });
       };
       reader.readAsDataURL(file);
     } catch (error) {
-      setUploadError('Upload failed. Please try again.');
-      setIsUploading(false);
+      setUploadState({ isUploading: false, uploadError: 'Upload failed. Please try again.' });
     }
-  };
+  }, [handleImageChange, handleVideoChange]);
 
-  // Handle opacity change
-  const handleOpacityChange = (newOpacity: number) => {
-    setOpacity(newOpacity);
-    applyBackground({
-      opacity: newOpacity
-    });
-  };
+  // Handle opacity change - debounced for slider
+  const handleOpacityChange = useCallback((newOpacity: number) => {
+    setBackgroundState(prev => ({ ...prev, opacity: newOpacity }));
+
+    // Update opacity for current background type
+    const update: Partial<SlideBackground> = { opacity: newOpacity };
+
+    if (backgroundState.type === 'gradient') {
+      update.type = 'gradient';
+      update.gradient = {
+        start: backgroundState.gradientStart,
+        end: backgroundState.gradientEnd,
+        direction: backgroundState.gradientDirection
+      };
+    } else if (backgroundState.type === 'color') {
+      update.type = 'color';
+      update.value = backgroundState.solidColor;
+    } else if (backgroundState.type === 'image') {
+      update.type = 'image';
+      update.value = backgroundState.imageUrl;
+    } else if (backgroundState.type === 'video') {
+      update.type = 'video';
+      update.value = backgroundState.videoUrl;
+    }
+
+    debouncedApplyBackground(update);
+  }, [backgroundState, debouncedApplyBackground]);
+
+  // Handle Save as Default
+  const handleSaveAsDefault = useCallback(() => {
+    if (!onSaveAsDefault) return;
+
+    const currentBg: SlideBackground = {
+      type: backgroundState.type,
+      opacity: backgroundState.opacity
+    };
+
+    if (backgroundState.type === 'color') {
+      currentBg.value = backgroundState.solidColor;
+    } else if (backgroundState.type === 'gradient') {
+      currentBg.gradient = {
+        start: backgroundState.gradientStart,
+        end: backgroundState.gradientEnd,
+        direction: backgroundState.gradientDirection
+      };
+    } else if (backgroundState.type === 'image') {
+      currentBg.value = backgroundState.imageUrl;
+    } else if (backgroundState.type === 'video') {
+      currentBg.value = backgroundState.videoUrl;
+    }
+
+    onSaveAsDefault(currentBg);
+
+    // Show confirmation
+    setShowSaveConfirmation(true);
+    setTimeout(() => setShowSaveConfirmation(false), 2000);
+  }, [backgroundState, onSaveAsDefault]);
 
   // Preset colors
   const presetColors = [
@@ -291,7 +409,7 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
             <button
               onClick={() => handleTypeChange('color')}
               className={`px-3 py-1 text-xs rounded border transition-colors ${
-                bgType === 'color'
+                backgroundState.type === 'color'
                   ? 'bg-blue-600 border-blue-500 text-white'
                   : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
               }`}
@@ -304,7 +422,7 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
             <button
               onClick={() => handleTypeChange('gradient')}
               className={`px-3 py-1 text-xs rounded border transition-colors ${
-                bgType === 'gradient'
+                backgroundState.type === 'gradient'
                   ? 'bg-blue-600 border-blue-500 text-white'
                   : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
               }`}
@@ -316,7 +434,7 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
             <button
               onClick={() => handleTypeChange('image')}
               className={`px-3 py-1 text-xs rounded border transition-colors ${
-                bgType === 'image'
+                backgroundState.type === 'image'
                   ? 'bg-blue-600 border-blue-500 text-white'
                   : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
               }`}
@@ -329,7 +447,7 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
             <button
               onClick={() => handleTypeChange('video')}
               className={`px-3 py-1 text-xs rounded border transition-colors ${
-                bgType === 'video'
+                backgroundState.type === 'video'
                   ? 'bg-blue-600 border-blue-500 text-white'
                   : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
               }`}
@@ -344,21 +462,41 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
         {/* Divider */}
         <div className="h-6 w-px bg-gray-600" />
 
+        {/* Save as Default Button */}
+        {canSaveAsDefault && onSaveAsDefault && (
+          <>
+            <button
+              onClick={handleSaveAsDefault}
+              className="px-3 py-1 text-xs rounded border bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 transition-colors flex items-center gap-1"
+              title="Save current background as default for this type of slide"
+            >
+              <Save className="w-3 h-3" />
+              Save as Default
+            </button>
+            {showSaveConfirmation && (
+              <div className="text-xs text-green-400 animate-fade-in">
+                ✓ Saved as default
+              </div>
+            )}
+            <div className="h-6 w-px bg-gray-600" />
+          </>
+        )}
+
         {/* Solid Color Controls */}
-        {bgType === 'color' && (
+        {backgroundState.type === 'color' && (
           <>
             <div className="flex items-center gap-2">
               <input
                 type="color"
-                value={solidColor}
-                onChange={(e) => handleColorChange(e.target.value)}
+                value={backgroundState.solidColor}
+                onChange={(e) => handleColorChange(e.target.value, false)}
                 className="w-10 h-8 bg-gray-800 border border-gray-600 rounded cursor-pointer"
                 title="Background color"
               />
               <input
                 type="text"
-                value={solidColor.toUpperCase()}
-                onChange={(e) => handleColorChange(e.target.value)}
+                value={backgroundState.solidColor.toUpperCase()}
+                onChange={(e) => handleColorChange(e.target.value, true)}
                 className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-2 py-1 w-20 uppercase font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="#1A1A1A"
                 maxLength={7}
@@ -370,7 +508,7 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
               {presetColors.map((preset) => (
                 <button
                   key={preset.value}
-                  onClick={() => handleColorChange(preset.value)}
+                  onClick={() => handleColorChange(preset.value, false)}
                   className="w-6 h-6 rounded border-2 border-gray-600 hover:border-blue-500 transition-colors"
                   style={{ backgroundColor: preset.value }}
                   title={preset.name}
@@ -381,21 +519,21 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
         )}
 
         {/* Gradient Controls */}
-        {bgType === 'gradient' && (
+        {backgroundState.type === 'gradient' && (
           <>
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-400">Start:</span>
               <input
                 type="color"
-                value={gradientStart}
-                onChange={(e) => handleGradientChange(e.target.value, undefined, undefined)}
+                value={backgroundState.gradientStart}
+                onChange={(e) => handleGradientChange(e.target.value, undefined, undefined, false)}
                 className="w-8 h-8 bg-gray-800 border border-gray-600 rounded cursor-pointer"
                 title="Gradient start color"
               />
               <input
                 type="text"
-                value={gradientStart.toUpperCase()}
-                onChange={(e) => handleGradientChange(e.target.value, undefined, undefined)}
+                value={backgroundState.gradientStart.toUpperCase()}
+                onChange={(e) => handleGradientChange(e.target.value, undefined, undefined, true)}
                 className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-2 py-1 w-20 uppercase font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                 maxLength={7}
               />
@@ -405,15 +543,15 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
               <span className="text-xs text-gray-400">End:</span>
               <input
                 type="color"
-                value={gradientEnd}
-                onChange={(e) => handleGradientChange(undefined, e.target.value, undefined)}
+                value={backgroundState.gradientEnd}
+                onChange={(e) => handleGradientChange(undefined, e.target.value, undefined, false)}
                 className="w-8 h-8 bg-gray-800 border border-gray-600 rounded cursor-pointer"
                 title="Gradient end color"
               />
               <input
                 type="text"
-                value={gradientEnd.toUpperCase()}
-                onChange={(e) => handleGradientChange(undefined, e.target.value, undefined)}
+                value={backgroundState.gradientEnd.toUpperCase()}
+                onChange={(e) => handleGradientChange(undefined, e.target.value, undefined, true)}
                 className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-2 py-1 w-20 uppercase font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                 maxLength={7}
               />
@@ -422,8 +560,8 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
             <div className="flex items-center gap-1">
               <span className="text-xs text-gray-400">Direction:</span>
               <select
-                value={gradientDirection}
-                onChange={(e) => handleGradientChange(undefined, undefined, e.target.value as any)}
+                value={backgroundState.gradientDirection}
+                onChange={(e) => handleGradientChange(undefined, undefined, e.target.value as any, false)}
                 className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="vertical">Vertical</option>
@@ -435,22 +573,22 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
         )}
 
         {/* Image Controls */}
-        {bgType === 'image' && (
+        {backgroundState.type === 'image' && (
           <>
             <div className="flex items-center gap-2">
               {/* Upload Button */}
               <label className={`px-3 py-1 text-xs rounded border transition-colors cursor-pointer flex items-center gap-1 ${
-                isUploading
+                uploadState.isUploading
                   ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-wait'
                   : 'bg-blue-600 hover:bg-blue-700 border-blue-500 text-white'
               }`}>
                 <Upload className="w-3 h-3" />
-                {isUploading ? 'Uploading...' : 'Upload Image'}
+                {uploadState.isUploading ? 'Uploading...' : 'Upload Image'}
                 <input
                   type="file"
                   accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
                   onChange={handleFileUpload}
-                  disabled={isUploading}
+                  disabled={uploadState.isUploading}
                   className="hidden"
                 />
               </label>
@@ -459,14 +597,14 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
               <span className="text-xs text-gray-400">or</span>
               <input
                 type="text"
-                value={imageUrl}
+                value={backgroundState.imageUrl}
                 onChange={(e) => handleImageChange(e.target.value)}
                 placeholder="Enter image URL..."
                 className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-3 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
 
               {/* Clear Button */}
-              {imageUrl && (
+              {backgroundState.imageUrl && (
                 <button
                   onClick={() => handleImageChange('')}
                   className="p-1 bg-gray-800 hover:bg-red-600 text-gray-300 rounded border border-gray-600 transition-colors"
@@ -478,32 +616,32 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
             </div>
 
             {/* Error Message */}
-            {uploadError && (
+            {uploadState.uploadError && (
               <div className="text-xs text-red-400 flex items-center gap-1">
                 <span>⚠️</span>
-                <span>{uploadError}</span>
+                <span>{uploadState.uploadError}</span>
               </div>
             )}
           </>
         )}
 
         {/* Video Controls */}
-        {bgType === 'video' && (
+        {backgroundState.type === 'video' && (
           <>
             <div className="flex items-center gap-2">
               {/* Upload Button */}
               <label className={`px-3 py-1 text-xs rounded border transition-colors cursor-pointer flex items-center gap-1 ${
-                isUploading
+                uploadState.isUploading
                   ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-wait'
                   : 'bg-blue-600 hover:bg-blue-700 border-blue-500 text-white'
               }`}>
                 <Upload className="w-3 h-3" />
-                {isUploading ? 'Uploading...' : 'Upload Video'}
+                {uploadState.isUploading ? 'Uploading...' : 'Upload Video'}
                 <input
                   type="file"
                   accept="video/mp4,video/webm,video/ogg,video/quicktime"
                   onChange={handleFileUpload}
-                  disabled={isUploading}
+                  disabled={uploadState.isUploading}
                   className="hidden"
                 />
               </label>
@@ -512,14 +650,14 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
               <span className="text-xs text-gray-400">or</span>
               <input
                 type="text"
-                value={videoUrl}
+                value={backgroundState.videoUrl}
                 onChange={(e) => handleVideoChange(e.target.value)}
                 placeholder="Enter video URL..."
                 className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-3 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
 
               {/* Clear Button */}
-              {videoUrl && (
+              {backgroundState.videoUrl && (
                 <button
                   onClick={() => handleVideoChange('')}
                   className="p-1 bg-gray-800 hover:bg-red-600 text-gray-300 rounded border border-gray-600 transition-colors"
@@ -531,10 +669,10 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
             </div>
 
             {/* Error Message */}
-            {uploadError && (
+            {uploadState.uploadError && (
               <div className="text-xs text-red-400 flex items-center gap-1">
                 <span>⚠️</span>
-                <span>{uploadError}</span>
+                <span>{uploadState.uploadError}</span>
               </div>
             )}
 
@@ -554,15 +692,15 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
           <span className="text-xs text-gray-400">Opacity:</span>
           <input
             type="range"
-            value={opacity}
+            value={backgroundState.opacity}
             onChange={(e) => handleOpacityChange(parseFloat(e.target.value))}
             min={0}
             max={1}
             step={0.1}
             className="w-24 accent-blue-500"
-            title={`Opacity: ${Math.round(opacity * 100)}%`}
+            title={`Opacity: ${Math.round(backgroundState.opacity * 100)}%`}
           />
-          <span className="text-xs text-white w-10">{Math.round(opacity * 100)}%</span>
+          <span className="text-xs text-white w-10">{Math.round(backgroundState.opacity * 100)}%</span>
         </div>
       </div>
     </div>

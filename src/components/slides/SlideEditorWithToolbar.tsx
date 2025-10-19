@@ -66,9 +66,15 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
   const [selectedShape, setSelectedShape] = useState<TextShape | null>(null);
   const [showBackgroundToolbar, setShowBackgroundToolbar] = useState(false);
   const [saveConfirmation, setSaveConfirmation] = useState(false);
+  const [bgSaveConfirmation, setBgSaveConfirmation] = useState(false);
 
   // Feature settings hook for saving as default
-  const { updateScriptureTypography } = useFeatureSettings();
+  const {
+    updateScriptureTypography,
+    updateScriptureBackground,
+    updateSongBackground,
+    updateAnnouncementBackground
+  } = useFeatureSettings();
 
   // Handle shape selection from SlideEditor
   const handleShapeSelect = useCallback((shape: TextShape | null) => {
@@ -221,6 +227,31 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
     setTimeout(() => setSaveConfirmation(false), 2000);
   }, [selectedShape, updateScriptureTypography]);
 
+  // Handle saving background as default
+  const handleBackgroundSaveAsDefault = useCallback((background: SlideBackground) => {
+    console.log('💾 Saving background as default:', background);
+
+    // Determine slide type from metadata or context
+    // For now, we'll assume scripture based on the slide content
+    // You could enhance this by checking slide.metadata?.slideType
+    const slideType = slide.metadata?.slideType || 'scripture';
+
+    if (slideType === 'scripture') {
+      updateScriptureBackground(background);
+    } else if (slideType === 'song') {
+      updateSongBackground(background);
+    } else if (slideType === 'announcement') {
+      updateAnnouncementBackground(background);
+    } else {
+      // Default to scripture if type unknown
+      updateScriptureBackground(background);
+    }
+
+    // Show confirmation
+    setBgSaveConfirmation(true);
+    setTimeout(() => setBgSaveConfirmation(false), 2000);
+  }, [slide.metadata, updateScriptureBackground, updateSongBackground, updateAnnouncementBackground]);
+
   // Get current background from slide or use default
   const currentBackground: SlideBackground = slide.background || {
     type: 'color',
@@ -234,10 +265,21 @@ export const SlideEditorWithToolbar: React.FC<SlideEditorWithToolbarProps> = ({
       {showToolbar && editable && (
         <div className="flex flex-col">
           {/* Background Toolbar - Always visible when editing */}
-          <BackgroundToolbar
-            currentBackground={currentBackground}
-            onBackgroundChange={handleBackgroundChange}
-          />
+          <div className="relative">
+            <BackgroundToolbar
+              currentBackground={currentBackground}
+              onBackgroundChange={handleBackgroundChange}
+              onSaveAsDefault={handleBackgroundSaveAsDefault}
+              canSaveAsDefault={true}
+            />
+
+            {/* Background Save Confirmation Toast */}
+            {bgSaveConfirmation && (
+              <div className="absolute right-4 top-14 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg animate-fade-in z-50">
+                ✓ Background saved as default
+              </div>
+            )}
+          </div>
 
           {/* Typography Toolbar - Appears when text is selected */}
           {selectedShape && (

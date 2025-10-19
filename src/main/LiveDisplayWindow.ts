@@ -104,7 +104,8 @@ export class LiveDisplayWindow {
       // Create the live presentation window
       this.liveWindow = new BrowserWindow(windowConfig);
 
-      // Force the window to the correct display after creation
+      // Windows-specific: Need to set bounds and fullscreen in correct order
+      // First, position the window on the correct display
       this.liveWindow.setBounds({
         x: electronDisplay.bounds.x,
         y: electronDisplay.bounds.y,
@@ -112,10 +113,22 @@ export class LiveDisplayWindow {
         height: electronDisplay.bounds.height,
       });
 
-      // Set fullscreen on the correct display
-      if (config.fullscreen ?? true) {
-        this.liveWindow.setFullScreen(true);
-      }
+      // On Windows, delay fullscreen to ensure proper display positioning
+      // This prevents the window from appearing on the wrong display
+      setTimeout(() => {
+        if (this.liveWindow && !this.liveWindow.isDestroyed()) {
+          if (config.fullscreen ?? true) {
+            this.liveWindow.setFullScreen(true);
+            console.log("Fullscreen mode applied after positioning");
+          }
+        }
+      }, 100);
+
+      // Set up window event handlers BEFORE loading content
+      // This ensures ready-to-show is captured
+      this.setupWindowEvents();
+
+      this.currentDisplayId = config.displayId;
 
       // Load the live display renderer
       if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -135,17 +148,22 @@ export class LiveDisplayWindow {
       }
 
       // Open developer tools for debugging (remove in production)
-      if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-        this.liveWindow.webContents.openDevTools();
-      }
-
-      // Set up window event handlers
-      this.setupWindowEvents();
-
-      this.currentDisplayId = config.displayId;
+      // Note: DevTools can cause issues on Windows, disable for now
+      // if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+      //   this.liveWindow.webContents.openDevTools();
+      // }
 
       console.log("Live window created successfully");
       console.log("Window bounds after creation:", this.liveWindow.getBounds());
+
+      // Windows-specific: Show window after a delay if ready-to-show doesn't fire
+      // This is a fallback mechanism for Windows where ready-to-show might not fire reliably
+      setTimeout(() => {
+        if (this.liveWindow && !this.liveWindow.isDestroyed() && !this.liveWindow.isVisible()) {
+          console.log("Window not shown by ready-to-show event, showing now (Windows fallback)");
+          this.showLiveWindow();
+        }
+      }, 1000);
 
       return true;
     } catch (error) {
@@ -326,6 +344,20 @@ export class LiveDisplayWindow {
   private setupWindowEvents(): void {
     if (!this.liveWindow) return;
 
+    console.log("Setting up live window event handlers...");
+
+    this.liveWindow.webContents.on("did-start-loading", () => {
+      console.log("Live window: Content started loading");
+    });
+
+    this.liveWindow.webContents.on("did-finish-load", () => {
+      console.log("Live window: Content finished loading");
+    });
+
+    this.liveWindow.webContents.on("dom-ready", () => {
+      console.log("Live window: DOM is ready");
+    });
+
     this.liveWindow.on("closed", () => {
       console.log("Live window was closed");
       this.liveWindow = null;
@@ -333,7 +365,7 @@ export class LiveDisplayWindow {
     });
 
     this.liveWindow.on("ready-to-show", () => {
-      console.log("Live window ready to show");
+      console.log("Live window: ready-to-show event fired");
       // Ensure window is positioned correctly when ready
       if (this.currentDisplayId) {
         const electronDisplays = screen.getAllDisplays();
@@ -350,6 +382,17 @@ export class LiveDisplayWindow {
           });
         }
       }
+
+      // Automatically show the window when ready (important for Windows)
+      if (this.liveWindow && !this.liveWindow.isDestroyed()) {
+        this.liveWindow.show();
+        this.liveWindow.focus();
+        console.log("Live window automatically shown and focused via ready-to-show");
+      }
+    });
+
+    this.liveWindow.on("show", () => {
+      console.log("Live window: show event fired");
     });
 
     this.liveWindow.on("focus", () => {

@@ -1164,6 +1164,43 @@ function setupDatabaseIPC() {
       throw error;
     }
   });
+  electron.ipcMain.handle("verses:getById", async (event, { id }) => {
+    try {
+      const verse = await db.verse.findUnique({
+        where: { id },
+        include: {
+          book: true,
+          version: {
+            include: {
+              translation: true
+            }
+          }
+        }
+      });
+      if (!verse) {
+        return null;
+      }
+      return {
+        ...verse,
+        book: verse.book ? {
+          ...verse.book
+        } : null,
+        version: verse.version ? {
+          ...verse.version,
+          createdAt: verse.version.createdAt?.toISOString(),
+          updatedAt: verse.version.updatedAt?.toISOString(),
+          translation: verse.version.translation ? {
+            ...verse.version.translation,
+            createdAt: verse.version.translation.createdAt?.toISOString(),
+            updatedAt: verse.version.translation.updatedAt?.toISOString()
+          } : null
+        } : null
+      };
+    } catch (error) {
+      console.error("Error loading verse by ID:", error);
+      throw error;
+    }
+  });
   electron.ipcMain.handle(
     "db:loadVerses",
     async (event, {
@@ -3475,21 +3512,29 @@ class LiveDisplayWindow {
         width: electronDisplay.bounds.width,
         height: electronDisplay.bounds.height
       });
-      if (config.fullscreen ?? true) {
-        this.liveWindow.setFullScreen(true);
-      }
+      setTimeout(() => {
+        if (this.liveWindow && !this.liveWindow.isDestroyed()) {
+          if (config.fullscreen ?? true) {
+            this.liveWindow.setFullScreen(true);
+            console.log("Fullscreen mode applied after positioning");
+          }
+        }
+      }, 100);
+      this.setupWindowEvents();
+      this.currentDisplayId = config.displayId;
       if ("http://localhost:5173") {
         await this.liveWindow.loadURL(
           `${"http://localhost:5173"}?mode=live-display`
         );
       }
-      if ("http://localhost:5173") {
-        this.liveWindow.webContents.openDevTools();
-      }
-      this.setupWindowEvents();
-      this.currentDisplayId = config.displayId;
       console.log("Live window created successfully");
       console.log("Window bounds after creation:", this.liveWindow.getBounds());
+      setTimeout(() => {
+        if (this.liveWindow && !this.liveWindow.isDestroyed() && !this.liveWindow.isVisible()) {
+          console.log("Window not shown by ready-to-show event, showing now (Windows fallback)");
+          this.showLiveWindow();
+        }
+      }, 1e3);
       return true;
     } catch (error) {
       console.error("Failed to create live window:", error);
@@ -3636,13 +3681,23 @@ class LiveDisplayWindow {
    */
   setupWindowEvents() {
     if (!this.liveWindow) return;
+    console.log("Setting up live window event handlers...");
+    this.liveWindow.webContents.on("did-start-loading", () => {
+      console.log("Live window: Content started loading");
+    });
+    this.liveWindow.webContents.on("did-finish-load", () => {
+      console.log("Live window: Content finished loading");
+    });
+    this.liveWindow.webContents.on("dom-ready", () => {
+      console.log("Live window: DOM is ready");
+    });
     this.liveWindow.on("closed", () => {
       console.log("Live window was closed");
       this.liveWindow = null;
       this.currentDisplayId = null;
     });
     this.liveWindow.on("ready-to-show", () => {
-      console.log("Live window ready to show");
+      console.log("Live window: ready-to-show event fired");
       if (this.currentDisplayId) {
         const electronDisplays = electron.screen.getAllDisplays();
         const targetDisplay = electronDisplays.find(
@@ -3657,6 +3712,14 @@ class LiveDisplayWindow {
           });
         }
       }
+      if (this.liveWindow && !this.liveWindow.isDestroyed()) {
+        this.liveWindow.show();
+        this.liveWindow.focus();
+        console.log("Live window automatically shown and focused via ready-to-show");
+      }
+    });
+    this.liveWindow.on("show", () => {
+      console.log("Live window: show event fired");
     });
     this.liveWindow.on("focus", () => {
       console.log("Live window focused");

@@ -3,6 +3,7 @@ import { Book, Search, Filter, Clock, User, Plus, ExternalLink, BookOpen, Heart,
 import { useNavigate } from 'react-router-dom';
 import BibleSelector from '../components/bible/BibleSelector';
 import { bibleService } from '../lib/services/bibleService';
+import { formatScriptureReference } from '../lib/services/scriptureReferenceFormatter';
 
 // Types
 interface ScriptureVerse {
@@ -91,38 +92,16 @@ const ScripturePage: React.FC = () => {
   const addToCurrentService = (verses: ScriptureVerse[]) => {
     if (verses.length === 0) return;
 
-    // Create scripture reference from verses
-    const firstVerse = verses[0];
-
-    // Build title from the verses
-    let title = `${firstVerse.book} ${firstVerse.chapter}:${firstVerse.verse}`;
-    if (verses.length > 1) {
-      // Check if verses are consecutive
-      const verseNumbers = verses.map(v => v.verse).sort((a, b) => a - b);
-      const isConsecutive = verseNumbers.every((v, i) => i === 0 || v === verseNumbers[i - 1] + 1);
-
-      if (isConsecutive && verseNumbers.length > 1) {
-        title = `${firstVerse.book} ${firstVerse.chapter}:${verseNumbers[0]}-${verseNumbers[verseNumbers.length - 1]}`;
-      } else {
-        title = `${firstVerse.book} ${firstVerse.chapter}:${verseNumbers.join(',')}`;
-      }
-    }
+    // Use centralized reference formatter
+    const title = formatScriptureReference(verses);
 
     const scriptureItem: ServiceItem = {
       id: `scripture-${Date.now()}`,
       type: 'scripture',
       title,
       content: {
-        verses: verses.map(v => ({
-          id: v.id,
-          book: v.book,
-          chapter: v.chapter,
-          verse: v.verse,
-          text: v.text,
-          translation: v.translation,
-          bookId: v.bookId,
-          versionId: v.versionId
-        }))
+        // Preserve all verse properties including navigation metadata
+        verses: verses.map(v => ({ ...v }))
       }
     };
 
@@ -155,19 +134,8 @@ const ScripturePage: React.FC = () => {
   const handleSaveScripture = (verses: ScriptureVerse[]) => {
     if (verses.length === 0) return;
 
-    const firstVerse = verses[0];
-    let defaultTitle = `${firstVerse.book} ${firstVerse.chapter}:${firstVerse.verse}`;
-
-    if (verses.length > 1) {
-      const verseNumbers = verses.map(v => v.verse).sort((a, b) => a - b);
-      const isConsecutive = verseNumbers.every((v, i) => i === 0 || v === verseNumbers[i - 1] + 1);
-
-      if (isConsecutive && verseNumbers.length > 1) {
-        defaultTitle = `${firstVerse.book} ${firstVerse.chapter}:${verseNumbers[0]}-${verseNumbers[verseNumbers.length - 1]}`;
-      } else {
-        defaultTitle = `${firstVerse.book} ${firstVerse.chapter}:${verseNumbers.join(',')}`;
-      }
-    }
+    // Use centralized reference formatter
+    const defaultTitle = formatScriptureReference(verses);
 
     setScriptureToSave({
       title: defaultTitle,

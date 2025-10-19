@@ -1,8 +1,51 @@
+# Dependencies
 node_modules
-# Keep environment variables out of version control
+
+# Environment variables
 .env
 
+# Prisma generated files
 /generated/prisma
 
-./.claude/
+# Database files
 prisma/dev.db
+prisma/*.db
+prisma/*.db-journal
+
+# Build output
+out/
+dist/
+.vite/
+
+# Electron Forge output
+.webpack/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Claude Code
+.claude/
+
+# Test coverage
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

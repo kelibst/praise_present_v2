@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, MonitorSpeaker, SkipBack, SkipForward, Settings, Calendar, ChevronLeft, ChevronRight, Maximize2, ExternalLink, BookOpen } from 'lucide-react';
+import { Play, MonitorSpeaker, SkipBack, SkipForward, Settings, Calendar, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Maximize2, ExternalLink, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -12,6 +12,21 @@ import {
   setServiceItems
 } from '../lib/serviceItemsSlice';
 import { RootState, AppDispatch } from '../lib/store';
+
+// Import scripture navigation Redux slice
+import {
+  setScriptureSelection,
+  navigateToPreviousSlide,
+  navigateToNextSlide,
+  navigateToPreviousVerse,
+  navigateToNextVerse,
+  navigateToPreviousChapter,
+  navigateToNextChapter,
+  setNavigationMode,
+  setCurrentGroupIndex,
+  selectScriptureNavigation,
+  selectCanNavigate
+} from '../lib/scriptureNavigationSlice';
 
 // Import drag and drop utilities
 import {
@@ -60,6 +75,9 @@ import { useLiveDisplay, LiveDisplayControls } from '../components/live/LiveDisp
 import BibleSelector from '../components/bible/BibleSelector';
 import { ScriptureVerse } from '../lib/services/bibleService';
 
+// Import scripture navigation service
+import { scriptureNavigationService, NavigatedVerse, VerseGroup } from '../lib/services/scriptureNavigationService';
+
 // Import settings modal
 import { FeatureSettingsModal } from '../components/settings/FeatureSettingsModal';
 import { useFeatureSettings } from '../hooks/useFeatureSettings';
@@ -78,6 +96,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // Redux hooks
   const dispatch = useDispatch<AppDispatch>();
   const serviceItems = useSelector(selectServiceItems);
+
+  // Scripture navigation Redux state
+  const scriptureNav = useSelector(selectScriptureNavigation);
+  const canNavigate = useSelector(selectCanNavigate);
 
   // State management
   const [activeTab, setActiveTab] = useState<'scripture' | 'plan' | 'plans'>('scripture');
@@ -423,13 +445,19 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       if (item.type === 'scripture' && item.content.verses) {
         const scriptureTemplate = new ScriptureTemplate(DEFAULT_SLIDE_SIZE);
 
-        // Group consecutive verses into single slides for better readability
-        const groupedVerses = groupConsecutiveVerses(item.content.verses);
+        // Use navigation service to group consecutive verses efficiently
+        const groupedVerses = scriptureNavigationService.groupConsecutiveVerses(
+          item.content.verses as NavigatedVerse[]
+        );
 
         for (const group of groupedVerses) {
-          if (group.length === 1) {
+          // VerseGroup structure: { verses, reference, isConsecutive }
+          const verses = group.verses;
+          const preFormattedReference = group.reference;
+
+          if (verses.length === 1) {
             // Single Verse slide
-            const verse = group[0];
+            const verse = verses[0];
             const scriptureContent = {
               verse: verse.text || 'Loading...',
               reference: `${verse.book} ${verse.chapter}:${verse.verse}`,
@@ -481,9 +509,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             });
           } else {
             // Multiple consecutive verses on one slide
-            const firstVerse = group[0];
-            const lastVerse = group[group.length - 1];
-            const combinedText = group.map(v => `${v.verse} ${v.text}`).join(' ');
+            const firstVerse = verses[0];
+            const lastVerse = verses[verses.length - 1];
+            const combinedText = verses.map(v => `${v.verse} ${v.text}`).join(' ');
 
             const scriptureContent = {
               verse: combinedText,
@@ -744,6 +772,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       const newIndex = currentSlideIndex - 1;
       console.log('⬅️ Moving to slide:', newIndex);
       setCurrentSlideIndex(newIndex);
+
+      // Update Redux navigation state if scripture
+      if (selectedItem.type === 'scripture' && scriptureNav.currentGroups.length > 0) {
+        dispatch(setCurrentGroupIndex(newIndex));
+      }
+
       // Send to live display if in presentation mode
       if (presentationMode === 'live' && liveDisplayActive && selectedItem.slides[newIndex]) {
         console.log('⬅️ Sending slide to live display');
@@ -760,6 +794,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       const newIndex = currentSlideIndex + 1;
       console.log('➡️ Moving to slide:', newIndex);
       setCurrentSlideIndex(newIndex);
+
+      // Update Redux navigation state if scripture
+      if (selectedItem.type === 'scripture' && scriptureNav.currentGroups.length > 0) {
+        dispatch(setCurrentGroupIndex(newIndex));
+      }
+
       // Send to live display if in presentation mode
       if (presentationMode === 'live' && liveDisplayActive && selectedItem.slides[newIndex]) {
         console.log('➡️ Sending slide to live display');
@@ -767,6 +807,49 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       }
     } else {
       console.log('➡️ Cannot go to next slide - at last slide or no slides');
+    }
+  };
+
+  // Cross-verse navigation functions
+  const goToPreviousVerse = async () => {
+    if (selectedItem?.type !== 'scripture' || !canNavigate.previous) return;
+
+    console.log('⬆️ Navigating to previous verse in Bible');
+    const result = await dispatch(navigateToPreviousVerse()).unwrap();
+    if (result) {
+      // Generate slide for the new verse
+      await handleScriptureSelect([result as ScriptureVerse]);
+    }
+  };
+
+  const goToNextVerse = async () => {
+    if (selectedItem?.type !== 'scripture' || !canNavigate.next) return;
+
+    console.log('⬇️ Navigating to next verse in Bible');
+    const result = await dispatch(navigateToNextVerse()).unwrap();
+    if (result) {
+      // Generate slide for the new verse
+      await handleScriptureSelect([result as ScriptureVerse]);
+    }
+  };
+
+  const goToPreviousChapter = async () => {
+    if (selectedItem?.type !== 'scripture' || !canNavigate.previousChapter) return;
+
+    console.log('⏮️ Navigating to previous chapter');
+    const result = await dispatch(navigateToPreviousChapter()).unwrap();
+    if (result) {
+      await handleScriptureSelect([result as ScriptureVerse]);
+    }
+  };
+
+  const goToNextChapter = async () => {
+    if (selectedItem?.type !== 'scripture' || !canNavigate.nextChapter) return;
+
+    console.log('⏭️ Navigating to next chapter');
+    const result = await dispatch(navigateToNextChapter()).unwrap();
+    if (result) {
+      await handleScriptureSelect([result as ScriptureVerse]);
     }
   };
 
@@ -808,7 +891,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         chapter: v.chapter,
         verse: v.verse,
         hasText: !!v.text,
-        textLength: v.text?.length || 0
+        textLength: v.text?.length || 0,
+        hasNavigation: !!(v.globalIndex && v.nextId && v.previousId)
       }))
     });
 
@@ -818,6 +902,15 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     }
 
     console.log('📖 Scripture selected for preview:', verses);
+
+    // Update Redux scripture navigation state
+    const navigatedVerses = verses.map(v => ({ ...v })) as NavigatedVerse[];
+    const groups = scriptureNavigationService.groupConsecutiveVerses(navigatedVerses);
+
+    dispatch(setScriptureSelection({
+      verses: navigatedVerses,
+      groups: groups
+    }));
 
     // Create temporary scripture item for preview (not added to service items)
     const firstVerse = verses[0];
@@ -842,16 +935,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       type: 'scripture',
       title,
       content: {
-        verses: verses.map(v => ({
-          id: v.id,
-          book: v.book,
-          chapter: v.chapter,
-          verse: v.verse,
-          text: v.text,
-          translation: v.translation,
-          bookId: v.bookId,
-          versionId: v.versionId
-        }))
+        // Preserve all verse properties including navigation metadata
+        verses: verses.map(v => ({ ...v }))
       },
       order: 0,
       // ONLY preserve slides if selecting the exact same verses
@@ -864,7 +949,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       currentVerseIds,
       newVerseIds,
       hasExistingSlides: !!scriptureItem.slides,
-      slideCount: scriptureItem.slides?.length || 0
+      slideCount: scriptureItem.slides?.length || 0,
+      navigationEnabled: canNavigate.previous || canNavigate.next
     });
 
     // Generate slides only if verse selection changed or no slides exist
@@ -1544,16 +1630,21 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                 {/* Navigation Controls */}
                 {selectedItem?.slides && (
-                  <div className="border-t border-border bg-card p-3">
+                  <div className="border-t border-border bg-card p-3 max-h-48 overflow-y-auto">
                     <div className="flex items-center justify-center gap-4 mb-3">
                       <button
                         onClick={goToPreviousSlide}
-                        disabled={!selectedItem?.slides || currentSlideIndex === 0}
+                        disabled={!selectedItem?.slides || selectedItem.slides.length === 0 || currentSlideIndex === 0}
                         className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        title={`Slide ${currentSlideIndex + 1} of ${selectedItem?.slides?.length || 0}`}
                       >
                         <SkipBack className="w-4 h-4" />
                         Previous
                       </button>
+
+                      <div className="text-sm text-muted-foreground">
+                        Slide {currentSlideIndex + 1} / {selectedItem?.slides?.length || 0}
+                      </div>
 
                       <button
                         onClick={presentCurrentSlide}
@@ -1570,13 +1661,76 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                       <button
                         onClick={goToNextSlide}
-                        disabled={!selectedItem?.slides || currentSlideIndex >= selectedItem.slides.length - 1}
+                        disabled={!selectedItem?.slides || selectedItem.slides.length === 0 || currentSlideIndex >= selectedItem.slides.length - 1}
                         className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        title={`Slide ${currentSlideIndex + 1} of ${selectedItem?.slides?.length || 0}`}
                       >
                         Next
                         <SkipForward className="w-4 h-4" />
                       </button>
                     </div>
+
+                    {/* Scripture Cross-Verse Navigation */}
+                    {console.log('🔍 Navigation Debug:', {
+                      selectedItemType: selectedItem?.type,
+                      isScripture: selectedItem?.type === 'scripture',
+                      canNavigate,
+                      scriptureNav,
+                      selectedItemContent: selectedItem?.content
+                    })}
+                    {selectedItem?.type === 'scripture' && (
+                      <div className="flex items-center justify-center gap-2 pt-2 border-t border-border">
+                        <div className="text-xs text-muted-foreground mr-2">Bible Navigation:</div>
+
+                        <button
+                          onClick={goToPreviousChapter}
+                          disabled={!canNavigate.previousChapter || scriptureNav.isNavigating}
+                          className="p-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Previous Chapter"
+                        >
+                          <ChevronUp className="w-3 h-3" />
+                          <ChevronUp className="w-3 h-3 -mt-2" />
+                        </button>
+
+                        <button
+                          onClick={goToPreviousVerse}
+                          disabled={!canNavigate.previous || scriptureNav.isNavigating}
+                          className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                          title="Previous Verse in Bible"
+                        >
+                          <ChevronUp className="w-3 h-3" />
+                          Prev Verse
+                        </button>
+
+                        <div className="text-xs text-muted-foreground px-2">
+                          {scriptureNav.currentVerses.length > 0 && (
+                            <span className="font-medium">
+                              {scriptureNav.currentVerses[0].book} {scriptureNav.currentVerses[0].chapter}:{scriptureNav.currentVerses[0].verse}
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={goToNextVerse}
+                          disabled={!canNavigate.next || scriptureNav.isNavigating}
+                          className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                          title="Next Verse in Bible"
+                        >
+                          Next Verse
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+
+                        <button
+                          onClick={goToNextChapter}
+                          disabled={!canNavigate.nextChapter || scriptureNav.isNavigating}
+                          className="p-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Next Chapter"
+                        >
+                          <ChevronDown className="w-3 h-3" />
+                          <ChevronDown className="w-3 h-3 -mt-2" />
+                        </button>
+                      </div>
+                    )}
 
                     {/* Status Indicators */}
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -1652,40 +1806,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       </PanelGroup>
     </div>
   );
-};
-
-// Helper function to group consecutive verses for better slide layout
-const groupConsecutiveVerses = (verses: any[]): any[][] => {
-  if (!verses || verses.length === 0) return [];
-
-  // Sort verses by verse number
-  const sortedVerses = [...verses].sort((a, b) => a.verse - b.verse);
-
-  const groups: any[][] = [];
-  let currentGroup: any[] = [sortedVerses[0]];
-
-  for (let i = 1; i < sortedVerses.length; i++) {
-    const prevVerse = sortedVerses[i - 1];
-    const currentVerse = sortedVerses[i];
-
-    // If verses are consecutive and from the same chapter, add to current group
-    if (
-      currentVerse.verse === prevVerse.verse + 1 &&
-      currentVerse.chapter === prevVerse.chapter &&
-      currentVerse.book === prevVerse.book
-    ) {
-      currentGroup.push(currentVerse);
-    } else {
-      // Start new group
-      groups.push(currentGroup);
-      currentGroup = [currentVerse];
-    }
-  }
-
-  // Add the last group
-  groups.push(currentGroup);
-
-  return groups;
 };
 
 export default LivePresentationPage;

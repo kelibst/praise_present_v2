@@ -65,15 +65,30 @@ model Verse {
   verse         Int
   text          String
   versionId     String
-  
+
+  // Navigation metadata - prospective architecture
+  globalIndex   Int? // Sequential position across entire Bible (1, 2, 3...)
+  previousId    String? // ID of previous verse for instant navigation
+  nextId        String? // ID of next verse for instant navigation
+
+  // Chapter-level navigation
+  chapterFirstVerseId String? // First verse of this chapter
+  chapterLastVerseId  String? // Last verse of this chapter
+
+  // Book-level navigation
+  bookFirstVerseId    String? // First verse of this book
+  bookLastVerseId     String? // Last verse of this book
+
   book          Book @relation(fields: [bookId], references: [id])
   version       Version @relation(fields: [versionId], references: [id])
-  
+
   topicVerses   TopicVerse[]
-  
+
   @@unique([bookId, chapter, verse, versionId])
   @@index([bookId, chapter, verse])
   @@index([versionId])
+  @@index([globalIndex])
+  @@index([versionId, globalIndex])
   @@map("verses")
 }
 

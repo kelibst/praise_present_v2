@@ -355,6 +355,23 @@ const featureSettingsSlice = createSlice({
       saveSettingsToStorage(state.settings);
     },
 
+    // Apply background to all existing slides of a specific type
+    applyBackgroundToAllSlides: (
+      state,
+      action: PayloadAction<{ feature: keyof AllFeatureSettings; background: SlideBackground; applyToExisting: boolean }>
+    ) => {
+      const { feature, background, applyToExisting } = action.payload;
+
+      // Update the default for future slides
+      (state.settings[feature] as any).background = background;
+      state.lastSaved = Date.now();
+      saveSettingsToStorage(state.settings);
+
+      // Note: The actual application to existing slides should be handled
+      // by the component that dispatches this action, as Redux slices
+      // should not directly modify presentation state
+    },
+
     clearError: (state) => {
       state.error = null;
     }
@@ -412,6 +429,7 @@ export const {
   updateFeatureSettings,
   updateFeatureBackground,
   updateFeatureTypography,
+  applyBackgroundToAllSlides,
   clearError
 } = featureSettingsSlice.actions;
 
