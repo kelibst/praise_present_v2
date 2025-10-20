@@ -1,7 +1,10 @@
-1. Let implement and Make sure that the previous and Next buttons work during scripture presentations.
-2. We have added the slides shapes can be moved and they can also be increase or reduced. but currently the shapes changes do not reflect beyond the immidiate time. that is when the user click on another verse then everything is gone. I beleive we have to take the same approach we took to make sure that the font size and the color changes for the scirpture verse and other shapes to work to achieve this. 
+1. Right now I have a ui right after the smart search that shows Genesis and sometimes it shows slected slide. That ui is not needed. I need to remove it and all of the codes related to it.
+2. I need to improve performaance of the scripture rendering. right now everytime there is a need for an update the background and the whole slide basically gets rerendered. Propsose a very optimized way to fix this without breaking the app. 
 
-3. Update the smart search for scriptures it should work exactly like the 2009 smart search of easy worship. describe how that smart search work and outline how you can make the current smart search work n similar ways. 
+3. The installation exe after installation start but it is full dark and nothing shows. 
+
+4. Add search online tab for scriptures where I can search for a scripture using vage references or paraphrases.
+
 4. General search tab featue is next to be implemented for the scriptures. this mode allows the user to search script via text, verse, books or vague references. it can also use the internet where the user should specify they want the internet version to get a reference. 
 
 5. The saved tab featuer on the scripture tab should do just that. outline features we can implement here when i am okay with it we will continue. 

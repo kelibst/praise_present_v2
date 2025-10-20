@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Play, MonitorSpeaker, SkipBack, SkipForward, Settings, Calendar, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Maximize2, ExternalLink, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
@@ -85,6 +85,8 @@ import { useFeatureSettings } from '../hooks/useFeatureSettings';
 // Use the new Slide interface from SlideRenderer
 interface Slide extends NewSlide {
   duration?: number;
+  verseNumbers?: number[]; // Track which verse(s) are displayed on this slide
+  verseIds?: string[]; // Track verse IDs for better identification
 }
 
 interface LivePresentationPageProps {}
@@ -107,6 +109,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const [selectedItem, setSelectedItem] = useState<ServiceItem | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isPresenting, setIsPresenting] = useState(false);
+  const [activeVerseNumbers, setActiveVerseNumbers] = useState<number[]>([]);
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
   const [presentationMode, setPresentationMode] = useState<'preview' | 'live'>('preview');
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
@@ -129,6 +132,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     clearLiveDisplay,
     showBlackScreen,
   } = useLiveDisplay();
+
+  // Refs for auto-scrolling
+  const thumbnailsContainerRef = useRef<HTMLDivElement>(null);
+  const thumbnailRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // Plan loading state
   const [isPlanLoading, setIsPlanLoading] = useState(false);
@@ -458,7 +465,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             slides.push({
               id: `scripture-${verse.id || Date.now()}`,
               shapes: shapes,
-              background: slideBackground
+              background: slideBackground,
+              verseNumbers: [verse.verse],
+              verseIds: [verse.id]
             });
           } else {
             // Multiple consecutive verses on one slide
@@ -506,7 +515,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             slides.push({
               id: `scripture-group-${firstVerse.id}-${lastVerse.id}`,
               shapes: shapes,
-              background: slideBackground
+              background: slideBackground,
+              verseNumbers: verses.map(v => v.verse),
+              verseIds: verses.map(v => v.id)
             });
           }
         }
@@ -738,6 +749,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     }
 
     console.log('📖 Scripture selected for preview:', verses);
+
+    // Set initial active verses when selecting scripture
+    const verseNumbers = verses.map(v => v.verse);
+    setActiveVerseNumbers(verseNumbers);
 
     // Update Redux scripture navigation state
     const navigatedVerses = verses.map(v => ({ ...v })) as NavigatedVerse[];
@@ -1128,7 +1143,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   const currentSlide = selectedItem?.slides?.[currentSlideIndex];
 
-  // Debug: Log currentSlideIndex changes
+  // Debug: Log currentSlideIndex changes and update active verses
   useEffect(() => {
     console.log('🔍 DEBUG: currentSlideIndex changed to:', currentSlideIndex, {
       selectedItem: selectedItem?.title,
@@ -1136,7 +1151,48 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       presentationMode,
       isPresenting
     });
+
+    // Update active verse numbers based on current slide
+    if (selectedItem?.type === 'scripture' && selectedItem.slides && selectedItem.slides[currentSlideIndex]) {
+      const currentSlide = selectedItem.slides[currentSlideIndex];
+      if (currentSlide.verseNumbers) {
+        console.log('📖 Updating active verses to:', currentSlide.verseNumbers);
+        setActiveVerseNumbers(currentSlide.verseNumbers);
+      }
+    } else {
+      // Clear active verses if not scripture
+      setActiveVerseNumbers([]);
+    }
   }, [currentSlideIndex, selectedItem, presentationMode, isPresenting]);
+
+  // Reset thumbnail refs when item changes
+  useEffect(() => {
+    thumbnailRefs.current = [];
+  }, [selectedItem]);
+
+  // Auto-scroll thumbnails to keep active slide in view
+  useEffect(() => {
+    if (thumbnailRefs.current[currentSlideIndex] && thumbnailsContainerRef.current) {
+      const thumbnail = thumbnailRefs.current[currentSlideIndex];
+      const container = thumbnailsContainerRef.current;
+
+      if (thumbnail && container) {
+        // Calculate the thumbnail's position relative to the container
+        const thumbnailRect = thumbnail.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+
+        // Check if thumbnail is out of view
+        if (thumbnailRect.left < containerRect.left || thumbnailRect.right > containerRect.right) {
+          // Scroll the thumbnail into view
+          thumbnail.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'center'
+          });
+        }
+      }
+    }
+  }, [currentSlideIndex]);
 
   // Handle slide updates from SlideEditor (PowerPoint pattern)
   const handleSlideUpdate = React.useCallback((updatedSlide: Slide) => {
@@ -1351,6 +1407,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 <BibleSelector
                   onVerseSelect={handleScriptureSelect}
                   defaultVersion="kjv"
+                  activeVerses={activeVerseNumbers}
                 />
               </div>
             )}
@@ -1695,6 +1752,77 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 {/* Navigation Controls */}
                 {selectedItem?.slides && (
                   <div className="border-t border-border bg-card p-3">
+                    {/* Slide Thumbnails Strip */}
+                    {selectedItem.slides.length > 1 && (
+                      <div className="mb-3">
+                        <div className="text-xs text-muted-foreground mb-1 font-medium">Slides</div>
+                        <div
+                          ref={thumbnailsContainerRef}
+                          className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent"
+                        >
+                          {selectedItem.slides.map((slide, index) => (
+                            <button
+                              key={slide.id}
+                              ref={(el) => { thumbnailRefs.current[index] = el; }}
+                              onClick={() => {
+                                setCurrentSlideIndex(index);
+                                // Update Redux navigation state if scripture
+                                if (selectedItem.type === 'scripture' && scriptureNav.currentGroups.length > 0) {
+                                  dispatch(setCurrentGroupIndex(index));
+                                }
+                                // Send to live display if in presentation mode
+                                if (presentationMode === 'live' && liveDisplayActive && slide) {
+                                  sendSlideToLive(slide, selectedItem, index);
+                                }
+                              }}
+                              className={`flex-shrink-0 border-2 rounded transition-all ${
+                                index === currentSlideIndex
+                                  ? 'border-primary ring-2 ring-primary/50 scale-105'
+                                  : 'border-border hover:border-primary/50'
+                              }`}
+                              title={`Slide ${index + 1}`}
+                            >
+                              <div className="relative w-24 h-16 bg-background overflow-hidden rounded">
+                                {/* Mini slide preview */}
+                                <div className="absolute inset-0 p-1 text-xs">
+                                  <div className={`w-full h-full flex items-center justify-center ${
+                                    slide.background?.type === 'color' ? '' : 'bg-secondary'
+                                  }`}
+                                    style={{
+                                      backgroundColor: slide.background?.type === 'color' ? slide.background.value : undefined,
+                                      backgroundImage: slide.background?.type === 'image' ? `url(${slide.background.value})` :
+                                                       slide.background?.type === 'gradient' ? slide.background.value : undefined,
+                                      backgroundSize: 'cover',
+                                      backgroundPosition: 'center'
+                                    }}
+                                  >
+                                    {/* Show text content preview if available */}
+                                    {slide.shapes && slide.shapes.length > 0 && (
+                                      <div className="text-[6px] text-center text-foreground/70 line-clamp-3 px-1">
+                                        {slide.shapes
+                                          .filter(shape => shape.type === 'text' && shape.text)
+                                          .map(shape => shape.text)
+                                          .join(' ')
+                                          .slice(0, 50)}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* Slide number badge */}
+                                <div className={`absolute bottom-0 right-0 px-1 text-[10px] font-semibold rounded-tl ${
+                                  index === currentSlideIndex
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'bg-secondary text-secondary-foreground'
+                                }`}>
+                                  {index + 1}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-center gap-4 mb-2">
                       <button
                         onClick={goToPrevious}

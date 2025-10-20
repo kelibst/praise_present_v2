@@ -4,6 +4,42 @@ This file tracks significant development activities for PraisePresent v2.
 
 ---
 
+## 2025-01-20 - Fixed Scripture Verse List Synchronization
+
+### 🔧 Implemented Bi-directional Synchronization Between Verse List and Preview
+**Time:** Early Morning
+**Description:** Fixed the synchronization issue where selected verses in the Bible selector were not updating when navigating slides with Next/Previous buttons.
+
+**Technical Implementation:**
+- Added `activeVerses` prop to BibleSelector component for external control
+- Enhanced slide generation to include verse metadata (verseNumbers, verseIds)
+- LivePresentationPage tracks and updates active verses based on current slide
+- Bi-directional sync: verse selection updates preview, navigation updates verse list
+
+**Files Modified:**
+- `src/components/bible/BibleSelector.tsx` - Added activeVerses prop and sync logic
+- `src/pages/LivePresentationPage.tsx` - Added verse tracking and metadata
+
+---
+
+## 2025-01-20 - Added Scripture Slide Thumbnails with Selection Sync
+
+### 🔧 Added Visual Slide Thumbnails for Scripture Navigation
+**Time:** Evening
+**Description:** Implemented visual slide thumbnails that sync with scripture navigation, showing which slide is currently active in the preview.
+
+**Technical Implementation:**
+- Added thumbnail strip above navigation controls showing all scripture slides
+- Implemented auto-scroll to keep active slide in view during navigation
+- Visual indicators: highlighted border, scale animation, and numbered badges
+- Clicking thumbnails directly navigates to that slide
+- Syncs with both next/previous buttons and keyboard navigation
+
+**Files Modified:**
+- `src/pages/LivePresentationPage.tsx` - Added thumbnails UI and auto-scroll logic
+
+---
+
 ## 2025-01-20 - Fixed Bible Navigation System
 
 ### 🔧 Fixed Scripture Navigation for Cross-Verse Movement

@@ -11,6 +11,7 @@ interface BibleSelectorProps {
   onVerseSelect?: (verses: ScriptureVerse[]) => void;
   className?: string;
   defaultVersion?: string;
+  activeVerses?: number[]; // External control of which verses are shown as selected
 }
 
 type TabType = 'reference' | 'search' | 'saved';
@@ -18,7 +19,8 @@ type TabType = 'reference' | 'search' | 'saved';
 const BibleSelector: React.FC<BibleSelectorProps> = ({
   onVerseSelect,
   className = '',
-  defaultVersion
+  defaultVersion,
+  activeVerses
 }) => {
   // State management
   const [activeTab, setActiveTab] = useState<TabType>('reference');
@@ -62,6 +64,14 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
   useEffect(() => {
     initializeData();
   }, []);
+
+  // Sync external activeVerses with internal state
+  useEffect(() => {
+    if (activeVerses && activeVerses.length > 0) {
+      console.log('🔄 BibleSelector: Syncing with external activeVerses:', activeVerses);
+      setSelectedVersesFromList(activeVerses);
+    }
+  }, [activeVerses]);
 
   // Keyboard shortcuts
   useEffect(() => {
