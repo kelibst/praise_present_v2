@@ -6,14 +6,43 @@ import { MakerRpm } from '@electron-forge/maker-rpm';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives';
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    extraResource: [
+      './prisma/dev.db',
+      './node_modules/.prisma/client'
+    ],
+    ignore: [
+      /^\/src/,
+      /^\/scripts/,
+      /^\/plan/,
+      /^\/.git/,
+      /^\/out/,
+      /^\/dist/,
+      /tsconfig\.json$/,
+      /tsconfig\.tsbuildinfo$/,
+      /vite\..*\.config\.ts$/,
+      /forge\.config\.ts$/,
+      /\.md$/,
+      /\.gitignore$/,
+      /eslint/
+    ]
   },
   rebuildConfig: {},
-  makers: [new MakerSquirrel({}), new MakerZIP({}, ['darwin']), new MakerRpm({}), new MakerDeb({})],
+  makers: [
+    new MakerSquirrel({
+      setupIcon: undefined, // Add your icon path here if you have one
+      loadingGif: undefined // Add loading gif if you have one
+    }),
+    new MakerZIP({}, ['darwin']),
+    new MakerRpm({}),
+    new MakerDeb({})
+  ],
   plugins: [
+    new AutoUnpackNativesPlugin({}),
     new VitePlugin({
       // `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.
       // If you are familiar with Vite configuration, it will look really familiar.
@@ -46,7 +75,7 @@ const config: ForgeConfig = {
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,
       [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
-      [FuseV1Options.OnlyLoadAppFromAsar]: true,
+      [FuseV1Options.OnlyLoadAppFromAsar]: false, // Changed to false to allow loading native modules
     }),
   ],
 };

@@ -37,12 +37,8 @@ export class ScriptureNavigationService {
     }
 
     try {
-      const nextVerse = await window.electronAPI?.invoke('database:query', {
-        model: 'verse',
-        operation: 'findUnique',
-        params: {
-          where: { id: currentVerse.nextId }
-        }
+      const nextVerse = await window.electronAPI?.invoke('verses:getById', {
+        id: currentVerse.nextId
       });
       if (!nextVerse) return null;
 
@@ -62,12 +58,8 @@ export class ScriptureNavigationService {
     }
 
     try {
-      const prevVerse = await window.electronAPI?.invoke('database:query', {
-        model: 'verse',
-        operation: 'findUnique',
-        params: {
-          where: { id: currentVerse.previousId }
-        }
+      const prevVerse = await window.electronAPI?.invoke('verses:getById', {
+        id: currentVerse.previousId
       });
       if (!prevVerse) return null;
 
@@ -87,12 +79,8 @@ export class ScriptureNavigationService {
     }
 
     try {
-      const firstVerse = await window.electronAPI?.invoke('database:query', {
-        model: 'verse',
-        operation: 'findUnique',
-        params: {
-          where: { id: currentVerse.chapterFirstVerseId }
-        }
+      const firstVerse = await window.electronAPI?.invoke('verses:getById', {
+        id: currentVerse.chapterFirstVerseId
       });
       if (!firstVerse) return null;
 
@@ -112,12 +100,8 @@ export class ScriptureNavigationService {
     }
 
     try {
-      const lastVerse = await window.electronAPI?.invoke('database:query', {
-        model: 'verse',
-        operation: 'findUnique',
-        params: {
-          where: { id: currentVerse.chapterLastVerseId }
-        }
+      const lastVerse = await window.electronAPI?.invoke('verses:getById', {
+        id: currentVerse.chapterLastVerseId
       });
       if (!lastVerse) return null;
 
@@ -165,12 +149,8 @@ export class ScriptureNavigationService {
     }
 
     try {
-      const firstVerse = await window.electronAPI?.invoke('database:query', {
-        model: 'verse',
-        operation: 'findUnique',
-        params: {
-          where: { id: currentVerse.bookFirstVerseId }
-        }
+      const firstVerse = await window.electronAPI?.invoke('verses:getById', {
+        id: currentVerse.bookFirstVerseId
       });
       if (!firstVerse) return null;
 
@@ -190,12 +170,8 @@ export class ScriptureNavigationService {
     }
 
     try {
-      const lastVerse = await window.electronAPI?.invoke('database:query', {
-        model: 'verse',
-        operation: 'findUnique',
-        params: {
-          where: { id: currentVerse.bookLastVerseId }
-        }
+      const lastVerse = await window.electronAPI?.invoke('verses:getById', {
+        id: currentVerse.bookLastVerseId
       });
       if (!lastVerse) return null;
 
@@ -294,19 +270,11 @@ export class ScriptureNavigationService {
     }
 
     try {
-      const firstVerse = await window.electronAPI?.invoke('database:query', {
-        model: 'verse',
-        operation: 'findUnique',
-        params: {
-          where: { id: currentVerse.chapterFirstVerseId }
-        }
+      const firstVerse = await window.electronAPI?.invoke('verses:getById', {
+        id: currentVerse.chapterFirstVerseId
       });
-      const lastVerse = await window.electronAPI?.invoke('database:query', {
-        model: 'verse',
-        operation: 'findUnique',
-        params: {
-          where: { id: currentVerse.chapterLastVerseId }
-        }
+      const lastVerse = await window.electronAPI?.invoke('verses:getById', {
+        id: currentVerse.chapterLastVerseId
       });
 
       if (!firstVerse?.globalIndex || !lastVerse?.globalIndex || !currentVerse.globalIndex) {

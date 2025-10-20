@@ -1,10 +1,11 @@
 "use strict";
 const electron = require("electron");
-const path$1 = require("node:path");
-const started = require("electron-squirrel-startup");
+const path = require("node:path");
+const squirrelStartup = require("electron-squirrel-startup");
+const fs = require("node:fs");
 const client = require("@prisma/client");
-const fs = require("fs");
-const path = require("path");
+const fs$1 = require("fs");
+const path$1 = require("path");
 const child_process = require("child_process");
 const os = require("os");
 function _interopNamespaceDefault(e) {
@@ -23,10 +24,61 @@ function _interopNamespaceDefault(e) {
   n.default = e;
   return Object.freeze(n);
 }
-const fs__namespace = /* @__PURE__ */ _interopNamespaceDefault(fs);
-const path__namespace = /* @__PURE__ */ _interopNamespaceDefault(path);
+const fs__namespace = /* @__PURE__ */ _interopNamespaceDefault(fs$1);
+const path__namespace = /* @__PURE__ */ _interopNamespaceDefault(path$1);
+let prisma$2;
+function getProductionDatabasePath() {
+  const isDev = process.env.NODE_ENV === "development" || !electron.app.isPackaged;
+  if (isDev) {
+    return path.join(process.cwd(), "prisma", "dev.db");
+  }
+  const dbPath = path.join(electron.app.getPath("userData"), "database.db");
+  const dbDir = path.dirname(dbPath);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+  if (!fs.existsSync(dbPath)) {
+    const possiblePaths = [
+      path.join(process.resourcesPath, "prisma", "dev.db"),
+      path.join(process.resourcesPath, "extraResources", "prisma", "dev.db"),
+      path.join(process.resourcesPath, "app", "prisma", "dev.db"),
+      path.join(process.resourcesPath, "app.asar.unpacked", "prisma", "dev.db")
+    ];
+    let sourceDb = null;
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        sourceDb = p;
+        break;
+      }
+    }
+    if (sourceDb) {
+      console.log(`Copying database from ${sourceDb} to ${dbPath}`);
+      fs.copyFileSync(sourceDb, dbPath);
+    } else {
+      console.log("No source database found, will create new database");
+    }
+  }
+  return dbPath;
+}
+function initializePrismaClient() {
+  if (prisma$2) {
+    return prisma$2;
+  }
+  const dbPath = getProductionDatabasePath();
+  console.log(`Using database at: ${dbPath}`);
+  process.env.DATABASE_URL = `file:${dbPath}`;
+  prisma$2 = new client.PrismaClient({
+    log: ["error", "warn"],
+    datasources: {
+      db: {
+        url: `file:${dbPath}`
+      }
+    }
+  });
+  return prisma$2;
+}
 let prisma$1;
-function initializeDatabase() {
+function initializeDatabase$1() {
   if (prisma$1) {
     return prisma$1;
   }
@@ -35,7 +87,7 @@ function initializeDatabase() {
 }
 function getDatabase() {
   if (!prisma$1) {
-    return initializeDatabase();
+    return initializeDatabase$1();
   }
   return prisma$1;
 }
@@ -447,7 +499,7 @@ const AVAILABLE_VERSIONS$1 = [
 class BibleImporter {
   constructor() {
     this.db = getDatabase();
-    this.databasePath = path.join(process.cwd(), "src", "database");
+    this.databasePath = path$1.join(process.cwd(), "src", "database");
   }
   /**
    * Import all available Bible versions
@@ -488,8 +540,8 @@ class BibleImporter {
    * Import a specific Bible version
    */
   async importVersion(versionInfo, translationId) {
-    const jsonPath = path.join(this.databasePath, "json", versionInfo.filename);
-    if (!fs.existsSync(jsonPath)) {
+    const jsonPath = path$1.join(this.databasePath, "json", versionInfo.filename);
+    if (!fs$1.existsSync(jsonPath)) {
       throw new Error(`Bible file not found: ${jsonPath}`);
     }
     let version = await this.db.version.findFirst({
@@ -522,7 +574,7 @@ class BibleImporter {
       });
     }
     console.log(`Reading ${versionInfo.filename}...`);
-    const jsonData = fs.readFileSync(jsonPath, "utf8");
+    const jsonData = fs$1.readFileSync(jsonPath, "utf8");
     const verses = JSON.parse(jsonData);
     console.log(`Importing ${verses.length} verses for ${versionInfo.fullName}...`);
     const batchSize = 1e3;
@@ -687,7 +739,7 @@ const AVAILABLE_VERSIONS = [
 class SQLiteBibleImporter {
   constructor() {
     this.db = getDatabase();
-    this.databasePath = path.join(process.cwd(), "src", "database");
+    this.databasePath = path$1.join(process.cwd(), "src", "database");
   }
   /**
    * Import all available Bible versions using SQLite direct connection
@@ -728,8 +780,8 @@ class SQLiteBibleImporter {
    * Import a specific Bible version from SQLite file
    */
   async importVersionFromSQLite(versionInfo, translationId) {
-    const sqlitePath = path.join(this.databasePath, "sqlite", versionInfo.filename);
-    if (!fs.existsSync(sqlitePath)) {
+    const sqlitePath = path$1.join(this.databasePath, "sqlite", versionInfo.filename);
+    if (!fs$1.existsSync(sqlitePath)) {
       throw new Error(`SQLite Bible file not found: ${sqlitePath}`);
     }
     const metaData = await this.readSQLiteMetadata(sqlitePath);
@@ -993,8 +1045,8 @@ class SQLiteBibleImporter {
    * This method directly attaches the source SQLite file and copies data
    */
   async importVersionUsingSQLiteAttach(versionInfo, translationId) {
-    const sqlitePath = path.join(this.databasePath, "sqlite", versionInfo.filename);
-    if (!fs.existsSync(sqlitePath)) {
+    const sqlitePath = path$1.join(this.databasePath, "sqlite", versionInfo.filename);
+    if (!fs$1.existsSync(sqlitePath)) {
       throw new Error(`SQLite Bible file not found: ${sqlitePath}`);
     }
     const metaData = await this.readSQLiteMetadata(sqlitePath);
@@ -1043,6 +1095,77 @@ class SQLiteBibleImporter {
   }
 }
 const sqliteBibleImporter = new SQLiteBibleImporter();
+async function populateNavigationFields(db2) {
+  console.log("🚀 Starting navigation field population...");
+  try {
+    const versions = await db2.version.findMany();
+    console.log(`Found ${versions.length} Bible versions to process`);
+    for (const version of versions) {
+      console.log(`
+📖 Processing version: ${version.name} (${version.id})`);
+      const verses = await db2.verse.findMany({
+        where: { versionId: version.id },
+        orderBy: [
+          { bookId: "asc" },
+          { chapter: "asc" },
+          { verse: "asc" }
+        ],
+        include: {
+          book: true
+        }
+      });
+      console.log(`  Found ${verses.length} verses`);
+      if (verses.length === 0) continue;
+      for (let i = 0; i < verses.length; i++) {
+        const currentVerse = verses[i];
+        const previousVerse = i > 0 ? verses[i - 1] : null;
+        const nextVerse = i < verses.length - 1 ? verses[i + 1] : null;
+        const chapterVerses = verses.filter(
+          (v) => v.bookId === currentVerse.bookId && v.chapter === currentVerse.chapter
+        );
+        const chapterFirstVerse = chapterVerses[0];
+        const chapterLastVerse = chapterVerses[chapterVerses.length - 1];
+        const bookVerses = verses.filter((v) => v.bookId === currentVerse.bookId);
+        const bookFirstVerse = bookVerses[0];
+        const bookLastVerse = bookVerses[bookVerses.length - 1];
+        await db2.verse.update({
+          where: { id: currentVerse.id },
+          data: {
+            globalIndex: i + 1,
+            // 1-based index
+            previousId: previousVerse?.id || null,
+            nextId: nextVerse?.id || null,
+            chapterFirstVerseId: chapterFirstVerse?.id || null,
+            chapterLastVerseId: chapterLastVerse?.id || null,
+            bookFirstVerseId: bookFirstVerse?.id || null,
+            bookLastVerseId: bookLastVerse?.id || null
+          }
+        });
+        if ((i + 1) % 1e3 === 0) {
+          console.log(`  Processed ${i + 1}/${verses.length} verses...`);
+        }
+      }
+      console.log(`✅ Completed navigation for ${version.name}: ${verses.length} verses updated`);
+    }
+    console.log("\n🎉 Navigation field population completed successfully!");
+    return true;
+  } catch (error) {
+    console.error("❌ Error populating navigation fields:", error);
+    throw error;
+  }
+}
+if (require.main === module) {
+  const prisma2 = new client.PrismaClient();
+  populateNavigationFields(prisma2).then(() => {
+    console.log("Migration completed");
+    process.exit(0);
+  }).catch((error) => {
+    console.error("Migration failed:", error);
+    process.exit(1);
+  }).finally(async () => {
+    await prisma2.$disconnect();
+  });
+}
 let db = null;
 function parseSongStructure(lyrics) {
   if (!lyrics) {
@@ -1095,7 +1218,7 @@ function parseSongStructure(lyrics) {
 }
 async function initializeDatabaseMain() {
   try {
-    db = initializeDatabase();
+    db = initializePrismaClient();
     console.log("Database initialized in main process");
     setupDatabaseIPC();
     return db;
@@ -2863,6 +2986,47 @@ function setupDatabaseIPC() {
       }
     }
   );
+  electron.ipcMain.handle("db:populateNavigation", async (event) => {
+    try {
+      console.log("Starting navigation field population...");
+      const result = await populateNavigationFields(db);
+      return { success: true, message: "Navigation fields populated successfully" };
+    } catch (error) {
+      console.error("Error populating navigation fields:", error);
+      throw error;
+    }
+  });
+  electron.ipcMain.handle("db:checkNavigationFields", async (event) => {
+    try {
+      const sampleVerses = await db.verse.findMany({
+        take: 10,
+        where: {
+          globalIndex: { not: null }
+        }
+      });
+      const totalVerses = await db.verse.count();
+      const populatedVerses = await db.verse.count({
+        where: {
+          globalIndex: { not: null }
+        }
+      });
+      return {
+        isPopulated: populatedVerses > 0 && populatedVerses === totalVerses,
+        totalVerses,
+        populatedVerses,
+        percentage: totalVerses > 0 ? Math.round(populatedVerses / totalVerses * 100) : 0
+      };
+    } catch (error) {
+      console.error("Error checking navigation fields:", error);
+      return {
+        isPopulated: false,
+        totalVerses: 0,
+        populatedVerses: 0,
+        percentage: 0,
+        error: error.message
+      };
+    }
+  });
 }
 class DisplayManager {
   // Cache native display info
@@ -4699,7 +4863,7 @@ function initializeMediaHandlers() {
   });
   console.log("Media IPC handlers initialized");
 }
-if (started) {
+if (squirrelStartup) {
   electron.app.quit();
 }
 const createWindow = () => {
@@ -4721,7 +4885,7 @@ const createWindow = () => {
     show: false,
     // Don't show until ready
     webPreferences: {
-      preload: path$1.join(__dirname, "preload.js"),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true

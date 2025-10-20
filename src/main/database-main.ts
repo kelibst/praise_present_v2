@@ -1,7 +1,9 @@
 import { ipcMain } from "electron";
-import { getDatabase, initializeDatabase, seedDatabase } from "../lib/database";
+import { getMainDatabase, initializePrismaClient } from "./database-init";
+import { seedDatabase } from "../lib/database";
 import { bibleImporter } from "../lib/bible-importer";
 import { sqliteBibleImporter } from "../lib/sqlite-bible-importer";
+import { populateNavigationFields } from "./populate-navigation";
 
 // Initialize database in main process
 let db: any = null;
@@ -73,7 +75,7 @@ function parseSongStructure(lyrics: string): { slides: any[], order: string[] } 
 
 export async function initializeDatabaseMain() {
   try {
-    db = initializeDatabase();
+    db = initializePrismaClient();
     console.log("Database initialized in main process");
 
     // Set up IPC handlers for database operations
@@ -2203,6 +2205,54 @@ function setupDatabaseIPC() {
       }
     }
   );
+
+  // Populate navigation fields for Bible verses
+  ipcMain.handle("db:populateNavigation", async (event) => {
+    try {
+      console.log("Starting navigation field population...");
+      const result = await populateNavigationFields(db);
+      return { success: true, message: "Navigation fields populated successfully" };
+    } catch (error) {
+      console.error("Error populating navigation fields:", error);
+      throw error;
+    }
+  });
+
+  // Check if navigation fields are populated
+  ipcMain.handle("db:checkNavigationFields", async (event) => {
+    try {
+      // Check a sample of verses to see if navigation fields are populated
+      const sampleVerses = await db.verse.findMany({
+        take: 10,
+        where: {
+          globalIndex: { not: null }
+        }
+      });
+
+      const totalVerses = await db.verse.count();
+      const populatedVerses = await db.verse.count({
+        where: {
+          globalIndex: { not: null }
+        }
+      });
+
+      return {
+        isPopulated: populatedVerses > 0 && populatedVerses === totalVerses,
+        totalVerses,
+        populatedVerses,
+        percentage: totalVerses > 0 ? Math.round((populatedVerses / totalVerses) * 100) : 0
+      };
+    } catch (error) {
+      console.error("Error checking navigation fields:", error);
+      return {
+        isPopulated: false,
+        totalVerses: 0,
+        populatedVerses: 0,
+        percentage: 0,
+        error: error.message
+      };
+    }
+  });
 }
 
 export { db };

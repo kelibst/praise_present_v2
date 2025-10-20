@@ -1,6 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import path from 'path';
-import fs from 'fs';
 
 // Global variable to store the Prisma client instance
 let prisma: PrismaClient;
@@ -11,8 +9,8 @@ export function initializeDatabase(): PrismaClient {
     return prisma;
   }
 
-  // For now, use the default Prisma configuration
-  // In production, we'll want to customize the database location
+  // Use default Prisma configuration
+  // The database path should be handled by the Prisma schema
   prisma = new PrismaClient();
 
   return prisma;

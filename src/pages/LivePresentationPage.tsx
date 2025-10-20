@@ -110,6 +110,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
   const [presentationMode, setPresentationMode] = useState<'preview' | 'live'>('preview');
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [navigationFieldsPopulated, setNavigationFieldsPopulated] = useState<boolean | null>(null);
 
   // Feature settings hook
   const { scriptureSettings, songSettings } = useFeatureSettings();
@@ -233,6 +234,28 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     return manager;
   });
   const [slideGenerator] = useState(() => new SlideGenerator());
+
+  // Check navigation fields on mount
+  useEffect(() => {
+    const checkNavigationFields = async () => {
+      if (window.electronAPI) {
+        try {
+          const result = await window.electronAPI.invoke('db:checkNavigationFields');
+          console.log('Navigation fields check:', result);
+          setNavigationFieldsPopulated(result.isPopulated);
+
+          // Auto-populate if not populated and verses exist
+          if (!result.isPopulated && result.totalVerses > 0) {
+            console.log('Navigation fields not populated, showing notification...');
+          }
+        } catch (error) {
+          console.error('Error checking navigation fields:', error);
+        }
+      }
+    };
+
+    checkNavigationFields();
+  }, []);
 
   // Initialize and check for pending items from other pages
   useEffect(() => {
@@ -812,7 +835,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Cross-verse navigation functions
   const goToPreviousVerse = async () => {
-    if (selectedItem?.type !== 'scripture' || !canNavigate.previous) return;
+    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigatePrevious) return;
 
     console.log('⬆️ Navigating to previous verse in Bible');
     const result = await dispatch(navigateToPreviousVerse()).unwrap();
@@ -823,7 +846,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   };
 
   const goToNextVerse = async () => {
-    if (selectedItem?.type !== 'scripture' || !canNavigate.next) return;
+    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigateNext) return;
 
     console.log('⬇️ Navigating to next verse in Bible');
     const result = await dispatch(navigateToNextVerse()).unwrap();
@@ -834,7 +857,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   };
 
   const goToPreviousChapter = async () => {
-    if (selectedItem?.type !== 'scripture' || !canNavigate.previousChapter) return;
+    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigatePreviousChapter) return;
 
     console.log('⏮️ Navigating to previous chapter');
     const result = await dispatch(navigateToPreviousChapter()).unwrap();
@@ -844,7 +867,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   };
 
   const goToNextChapter = async () => {
-    if (selectedItem?.type !== 'scripture' || !canNavigate.nextChapter) return;
+    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigateNextChapter) return;
 
     console.log('⏭️ Navigating to next chapter');
     const result = await dispatch(navigateToNextChapter()).unwrap();
@@ -1284,6 +1307,43 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   </p>
                 </div>
 
+                {/* Navigation Fields Warning */}
+                {navigationFieldsPopulated === false && (
+                  <div className="bg-yellow-900/50 border border-yellow-600 rounded-lg p-3 mb-4">
+                    <div className="flex items-start gap-2">
+                      <div className="text-yellow-400 mt-0.5">⚠️</div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-yellow-300 mb-1">
+                          Bible Navigation Not Configured
+                        </h4>
+                        <p className="text-xs text-yellow-200 mb-2">
+                          Navigation between verses, chapters, and books requires one-time setup.
+                        </p>
+                        <button
+                          onClick={async () => {
+                            if (window.electronAPI) {
+                              try {
+                                console.log('Starting navigation field population...');
+                                const result = await window.electronAPI.invoke('db:populateNavigation');
+                                console.log('Navigation population result:', result);
+                                setNavigationFieldsPopulated(true);
+
+                                // Show success message (you might want to add a toast notification here)
+                                console.log('✅ Navigation fields populated successfully!');
+                              } catch (error) {
+                                console.error('Error populating navigation fields:', error);
+                              }
+                            }
+                          }}
+                          className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs font-medium transition-colors"
+                        >
+                          Enable Navigation (One-time Setup)
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <BibleSelector
                   onVerseSelect={handleScriptureSelect}
                   defaultVersion="kjv"
@@ -1684,7 +1744,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                         <button
                           onClick={goToPreviousChapter}
-                          disabled={!canNavigate.previousChapter || scriptureNav.isNavigating}
+                          disabled={!scriptureNav.canNavigatePreviousChapter || scriptureNav.isNavigating}
                           className="p-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Previous Chapter"
                         >
@@ -1694,7 +1754,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                         <button
                           onClick={goToPreviousVerse}
-                          disabled={!canNavigate.previous || scriptureNav.isNavigating}
+                          disabled={!scriptureNav.canNavigatePrevious || scriptureNav.isNavigating}
                           className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                           title="Previous Verse in Bible"
                         >
@@ -1712,7 +1772,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                         <button
                           onClick={goToNextVerse}
-                          disabled={!canNavigate.next || scriptureNav.isNavigating}
+                          disabled={!scriptureNav.canNavigateNext || scriptureNav.isNavigating}
                           className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                           title="Next Verse in Bible"
                         >
@@ -1722,7 +1782,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                         <button
                           onClick={goToNextChapter}
-                          disabled={!canNavigate.nextChapter || scriptureNav.isNavigating}
+                          disabled={!scriptureNav.canNavigateNextChapter || scriptureNav.isNavigating}
                           className="p-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Next Chapter"
                         >
