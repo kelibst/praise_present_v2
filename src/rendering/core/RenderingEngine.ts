@@ -198,6 +198,78 @@ export class RenderingEngine {
     }
   }
 
+  /**
+   * PERFORMANCE OPTIMIZATION: Selective rendering
+   * Only renders shapes marked as dirty, avoiding full canvas clear and redraw
+   * This is a major performance boost for verse selection where only text changes
+   *
+   * @param onlyDirty - If true, only renders dirty shapes. Background is only redrawn if dirty.
+   */
+  public renderSelective(onlyDirty: boolean = true): void {
+    const startTime = performance.now();
+
+    try {
+      this.renderer.startFrame();
+
+      const renderContext = this.renderer.createRenderContext();
+      const visibleShapes = this.getVisibleShapes();
+
+      if (!onlyDirty) {
+        // Fallback to full render
+        this.renderer.clear();
+        for (const shape of visibleShapes) {
+          this.renderShape(shape, renderContext);
+        }
+      } else {
+        // Selective rendering: only render dirty shapes
+        const dirtyShapes = visibleShapes.filter(shape => shape.isDirty());
+
+        if (dirtyShapes.length === 0) {
+          // Nothing to render
+          this.renderer.endFrame();
+          return;
+        }
+
+        // Check if background needs re-rendering
+        const backgroundShape = visibleShapes.find(s => s.zIndex < 0); // Background has negative zIndex
+        const needsFullClear = backgroundShape?.isDirty();
+
+        if (needsFullClear) {
+          // Background changed - need full re-render
+          this.renderer.clear();
+          for (const shape of visibleShapes) {
+            this.renderShape(shape, renderContext);
+            shape.markClean();
+          }
+        } else {
+          // Only text/foreground shapes changed - selective render
+          // Clear only the regions of dirty shapes (or redraw over them)
+          for (const shape of dirtyShapes) {
+            // Re-render the shape (it will draw over previous content)
+            this.renderShape(shape, renderContext);
+            shape.markClean();
+          }
+        }
+      }
+
+      this.updateShapeStats(visibleShapes);
+      this.renderer.endFrame();
+
+      // Update performance metrics
+      const endTime = performance.now();
+      this.updatePerformanceMetrics(startTime, endTime, visibleShapes.length);
+
+      if (this.enableDebug) {
+        this.renderDebugInfo(renderContext);
+      }
+
+      this.resetErrorTracking();
+
+    } catch (error) {
+      this.handleRenderingError(error as Error, 'selective_render');
+    }
+  }
+
   private renderShape(shape: Shape, context: RenderContext): void {
     if (!shape.visible || shape.opacity <= 0) {
       this.renderer.incrementCulledShapeCount();

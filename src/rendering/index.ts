@@ -20,6 +20,7 @@ export * from './types';
 export { convertContentToSlide, validateSlideStructure } from './utils/slideConverter';
 export { ShapeFactory, reconstructShape, reconstructShapes } from './utils/ShapeFactory';
 export { ResourceManager, useResourceCleanup } from './utils/ResourceManager';
+export { VideoPool } from './utils/VideoPool';
 export {
   isTextShape,
   isRectangleShape,
