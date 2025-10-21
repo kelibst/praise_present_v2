@@ -50,6 +50,13 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
   const [currentContent, setCurrentContent] = useState<LiveContent | null>(null);
   const [connectionStatus, setConnectionStatus] = useState('Initializing...');
 
+  // Create a stable blank slide object (only once)
+  const blankSlide = React.useMemo(() => ({
+    id: 'blank-slide',
+    shapes: [],
+    background: { type: 'color' as const, value: '#000000' }
+  }), []);
+
   // Handle content updates from main process
   useEffect(() => {
     const handleContentUpdate = (content: LiveContent) => {
@@ -123,6 +130,13 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
     }
   }, []);
 
+  // CRITICAL FIX: Determine if we should show the slide viewer
+  // Keep it mounted to prevent engine recreation
+  const showSlideViewer = currentContent?.type === 'template-slide' && currentContent.slide;
+
+  // Use stable blank slide or current slide (prevents object identity changes)
+  const displaySlide = currentContent?.slide || blankSlide;
+
   // Render content based on type
   const renderContent = () => {
     if (!currentContent) {
@@ -139,15 +153,8 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
 
     switch (currentContent.type) {
       case 'template-slide':
-        if (currentContent.slide) {
-          return (
-            <SlideViewer
-              slide={currentContent.slide}
-              className="w-full h-full"
-            />
-          );
-        }
-        break;
+        // Handled outside switch to keep component mounted
+        return null;
 
       case 'media':
         if (currentContent.mediaItem && currentContent.mediaType) {
@@ -252,7 +259,7 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
   };
 
   return (
-    <div 
+    <div
       className="relative overflow-hidden bg-black"
       style={{
         width: '100vw',
@@ -263,7 +270,22 @@ export const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
         zIndex: 9999
       }}
     >
-      {renderContent()}
+      {/* CRITICAL FIX: Keep SlideViewer mounted at all times to prevent video recreation */}
+      {/* Always render but control visibility to keep engine/video alive */}
+      <div style={{
+        display: showSlideViewer ? 'block' : 'none',
+        width: '100%',
+        height: '100%'
+      }}>
+        <SlideViewer
+          key="live-display-viewer-permanent"
+          slide={displaySlide}
+          className="w-full h-full"
+        />
+      </div>
+
+      {/* Render other content types when not showing slide */}
+      {!showSlideViewer && renderContent()}
 
       {/* Development info overlay */}
       {process.env.NODE_ENV === 'development' && (

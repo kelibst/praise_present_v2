@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { SlideRenderer, Slide } from './SlideRenderer';
 
 interface SlideViewerProps {
@@ -38,6 +38,14 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
   targetResolution,
   className = ''
 }) => {
+  // Debug logging to track mount/unmount
+  useEffect(() => {
+    console.log('🎬 SlideViewer: Mounted', { slideId: slide.id });
+    return () => {
+      console.log('🧹 SlideViewer: Unmounted', { slideId: slide.id });
+    };
+  }, []); // Only on mount/unmount
+
   return (
     <div
       className={`relative w-full h-full ${className}`}

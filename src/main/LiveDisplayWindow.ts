@@ -91,12 +91,17 @@ export class LiveDisplayWindow {
           contextIsolation: true,
           webSecurity: false,
           preload: require("path").join(__dirname, "preload.js"),
+          // CRITICAL FIX: Force hardware acceleration for smooth video
+          hardwareAcceleration: true,
+          backgroundThrottling: false, // Prevent throttling in background
         },
         // Additional configuration for better positioning
         skipTaskbar: true,
         minimizable: false,
         maximizable: false,
         resizable: false,
+        // CRITICAL FIX: Prevent window from being backgrounded/throttled
+        backgroundMaterial: 'none' as any, // Prevent transparency effects that throttle
       };
 
       console.log("Creating BrowserWindow with config:", windowConfig);

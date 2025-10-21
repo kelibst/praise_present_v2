@@ -24,6 +24,8 @@ export class RenderingEngine {
   private maxConsecutiveErrors: number = 5;
   private lastErrorTime: number = 0;
   private errorRecoveryAttempts: number = 0;
+  private fallbackTimerId: number | null = null;
+  private useAggressiveRendering: boolean = false;
 
   constructor(options: RenderingEngineOptions) {
     this.enableDebug = options.enableDebug || false;
@@ -276,11 +278,18 @@ export class RenderingEngine {
     ctx.restore();
   }
 
-  public startRenderLoop(): void {
+  public startRenderLoop(aggressiveMode: boolean = false): void {
     if (this.isRendering) return;
 
     this.isRendering = true;
+    this.useAggressiveRendering = aggressiveMode;
+
+    // Start RAF-based render loop
     this.renderLoop();
+
+    // REMOVED: Fallback timer causes video to play slowly
+    // The setInterval rendering was blocking the main thread
+    // and preventing smooth video playback
   }
 
   public stopRenderLoop(): void {
@@ -288,6 +297,10 @@ export class RenderingEngine {
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
+    }
+    if (this.fallbackTimerId !== null) {
+      clearInterval(this.fallbackTimerId);
+      this.fallbackTimerId = null;
     }
   }
 
@@ -301,6 +314,28 @@ export class RenderingEngine {
     }
 
     this.animationFrameId = requestAnimationFrame(this.renderLoop);
+  }
+
+  /**
+   * Fallback timer for rendering when requestAnimationFrame is throttled
+   * This ensures video backgrounds play smoothly in background windows (like live display)
+   */
+  private startFallbackTimer(): void {
+    if (this.fallbackTimerId !== null) return;
+
+    // 30 FPS for smooth video in background
+    const targetFPS = 30;
+    const interval = 1000 / targetFPS;
+
+    this.fallbackTimerId = window.setInterval(() => {
+      if (this.isRendering) {
+        // Only render if RAF hasn't rendered recently
+        // This prevents double rendering when window is visible
+        this.render();
+      }
+    }, interval);
+
+    console.log('🎬 RenderingEngine: Aggressive rendering mode enabled for background video playback');
   }
 
   public requestRender(): void {

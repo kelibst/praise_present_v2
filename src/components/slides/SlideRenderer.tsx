@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { RenderingEngine, Shape } from '../../rendering';
 import { RenderQuality } from '../../rendering/types/rendering';
 import { ResourceManager } from '../../rendering/utils/ResourceManager';
@@ -128,6 +128,31 @@ const convertSlideBackgroundToBackgroundStyle = (
 };
 
 /**
+ * Helper function to create a stable content fingerprint for a slide
+ * This allows us to detect actual content changes vs object reference changes
+ */
+const createSlideFingerprint = (slide: Slide): string => {
+  // Create a fingerprint based on slide content, not object identity
+  const backgroundKey = slide.background
+    ? `${slide.background.type}-${slide.background.value || ''}-${slide.background.opacity || 1}`
+    : 'no-bg';
+
+  const shapesKey = slide.shapes
+    .map(shape => {
+      // For each shape, create a key based on its actual content
+      const baseKey = `${shape.id}-${shape.position.x}-${shape.position.y}-${shape.size.width}-${shape.size.height}`;
+
+      // Add text content if it's a TextShape (duck typing)
+      const textKey = (shape as any).text ? `text:${(shape as any).text}` : '';
+
+      return `${baseKey}${textKey}`;
+    })
+    .join('|');
+
+  return `${slide.id}:${backgroundKey}:${shapesKey}`;
+};
+
+/**
  * SlideRenderer - Core rendering component (PowerPoint pattern)
  *
  * This component is the SINGLE SOURCE OF TRUTH for slide rendering.
@@ -141,8 +166,13 @@ const convertSlideBackgroundToBackgroundStyle = (
  * - Same slide renders identically everywhere
  *
  * This is how PowerPoint, Google Slides, and Canva work.
+ *
+ * PERFORMANCE OPTIMIZATION:
+ * - Uses React.memo to prevent unnecessary re-renders
+ * - Content fingerprinting to detect actual changes vs reference changes
+ * - Only re-renders when slide content actually changes
  */
-export const SlideRenderer: React.FC<SlideRendererProps> = ({
+const SlideRendererComponent: React.FC<SlideRendererProps> = ({
   slide,
   targetResolution = { width: 1920, height: 1080 },
   onRendered,
@@ -150,6 +180,12 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<RenderingEngine | null>(null);
+
+  // Create a stable content fingerprint to prevent unnecessary re-renders
+  // Only changes when actual content changes, not when slide object reference changes
+  const slideFingerprint = useMemo(() => {
+    return createSlideFingerprint(slide);
+  }, [slide]); // Use entire slide object - createSlideFingerprint handles the deep comparison
 
   // Initialize rendering engine once (only when component mounts or resolution changes)
   useEffect(() => {
@@ -191,7 +227,8 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
       resourceManager.registerEngine(resourceId, engine);
 
       // Start continuous render loop to handle async image loading
-      engine.startRenderLoop();
+      // FIXED: Don't use aggressive mode - it was causing slow video playback
+      engine.startRenderLoop(false);
 
       // console.log('✅ SlideRenderer: Engine created and render loop started');
 
@@ -206,13 +243,15 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
 
     // Cleanup on unmount
     return () => {
-      // console.log('🧹 SlideRenderer: Cleaning up');
+      console.log('🧹 SlideRenderer: Cleaning up engine', { resourceId, slideId: slide.id });
       resourceManager.cleanup(resourceId);
       engineRef.current = null;
     };
   }, [targetResolution.width, targetResolution.height]); // Only recreate if resolution changes
 
   // Render slide when it changes
+  // PERFORMANCE OPTIMIZATION: Use slideFingerprint instead of entire slide object
+  // This prevents re-renders when slide object reference changes but content is identical
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine || !canvasRef.current) return;
@@ -221,7 +260,8 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
       // Diagnostic logging disabled for production
       // console.log('🎨 SlideRenderer: Rendering slide', {
       //   slideId: slide.id,
-      //   shapeCount: slide.shapes.length
+      //   shapeCount: slide.shapes.length,
+      //   fingerprint: slideFingerprint
       // });
 
       // Clear existing shapes
@@ -266,7 +306,7 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
     } catch (error) {
       console.error('❌ SlideRenderer: Render error:', error);
     }
-  }, [slide]);
+  }, [slideFingerprint, slide.background, targetResolution.width, targetResolution.height]);
 
   return (
     <canvas
@@ -286,5 +326,73 @@ export const SlideRenderer: React.FC<SlideRendererProps> = ({
     />
   );
 };
+
+/**
+ * Memoized SlideRenderer with custom comparison
+ * Only re-renders when slide content actually changes, not when object reference changes
+ */
+export const SlideRenderer = React.memo(
+  SlideRendererComponent,
+  (prevProps, nextProps) => {
+    // Custom comparison: check if content is actually the same
+    // Return true if props are equal (skip re-render), false if different (re-render)
+
+    // Always re-render if resolution changes
+    if (
+      prevProps.targetResolution?.width !== nextProps.targetResolution?.width ||
+      prevProps.targetResolution?.height !== nextProps.targetResolution?.height
+    ) {
+      return false;
+    }
+
+    // Check if slide IDs are different
+    if (prevProps.slide.id !== nextProps.slide.id) {
+      return false;
+    }
+
+    // Compare background
+    const prevBg = prevProps.slide.background;
+    const nextBg = nextProps.slide.background;
+    if (prevBg?.type !== nextBg?.type || prevBg?.value !== nextBg?.value) {
+      return false;
+    }
+
+    // Compare shapes count first (quick check)
+    if (prevProps.slide.shapes.length !== nextProps.slide.shapes.length) {
+      return false;
+    }
+
+    // Deep compare shape content (focusing on text changes for verses)
+    for (let i = 0; i < prevProps.slide.shapes.length; i++) {
+      const prevShape = prevProps.slide.shapes[i];
+      const nextShape = nextProps.slide.shapes[i];
+
+      // Check shape IDs
+      if (prevShape.id !== nextShape.id) {
+        return false;
+      }
+
+      // Check text content for TextShapes
+      const prevText = (prevShape as any).text;
+      const nextText = (nextShape as any).text;
+      if (prevText !== nextText) {
+        return false;
+      }
+
+      // Check position/size changes
+      if (
+        prevShape.position.x !== nextShape.position.x ||
+        prevShape.position.y !== nextShape.position.y ||
+        prevShape.size.width !== nextShape.size.width ||
+        prevShape.size.height !== nextShape.size.height
+      ) {
+        return false;
+      }
+    }
+
+    // Props are equal - skip re-render
+    return true;
+  }
+);
 
 export default SlideRenderer;
