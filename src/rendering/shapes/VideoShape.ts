@@ -1,6 +1,7 @@
 import { Shape } from '../core/Shape';
 import { RenderContext } from '../types/rendering';
 import { ShapeType, ShapeProps, ImageStyle } from '../types/shapes';
+import { VideoPool } from '../utils/VideoPool';
 
 export interface VideoShapeProps extends ShapeProps {
   src?: string;
@@ -31,6 +32,8 @@ export class VideoShape extends Shape {
   private loadState: VideoLoadState = VideoLoadState.UNLOADED;
   private loadPromise: Promise<void> | null = null;
   private loadCallbacks: Array<(success: boolean) => void> = [];
+  private videoPool: VideoPool = VideoPool.getInstance();
+  private isUsingPooledVideo: boolean = false;
 
   constructor(props: VideoShapeProps = {}, style: ImageStyle = {}) {
     super(props, style);
@@ -245,53 +248,34 @@ export class VideoShape extends Shape {
 
     this.loadState = VideoLoadState.LOADING;
 
-    this.loadPromise = new Promise((resolve, reject) => {
-      const video = document.createElement('video');
+    this.loadPromise = (async () => {
+      try {
+        // PERFORMANCE OPTIMIZATION: Use pooled video element to avoid gray flash
+        // This reuses already-loaded and playing videos across slide transitions
+        const video = await this.videoPool.acquire(this.src, {
+          loop: this.loop,
+          muted: this.muted,
+          autoplay: this.autoplay,
+          playbackRate: this.playbackRate
+        });
 
-      // Set video attributes
-      video.loop = this.loop;
-      video.muted = this.muted;
-      video.autoplay = this.autoplay;
-      video.playbackRate = this.playbackRate;
-      video.playsInline = true; // Important for mobile
-      video.preload = 'auto';
-
-      // Handle CORS for external videos
-      video.crossOrigin = 'anonymous';
-
-      video.addEventListener('loadeddata', () => {
         this.video = video;
         this.loadState = VideoLoadState.LOADED;
-
-        // Try to start playback
-        if (this.autoplay) {
-          video.play().catch(err => {
-            console.warn('VideoShape: Autoplay prevented, user interaction may be required', err);
-          });
-        }
+        this.isUsingPooledVideo = true;
 
         this.notifyLoadCallbacks(true);
-        resolve();
-      });
-
-      video.addEventListener('error', () => {
+      } catch (error) {
+        console.warn(`VideoShape load error:`, error);
         this.video = null;
         this.loadState = VideoLoadState.ERROR;
         this.notifyLoadCallbacks(false);
-        reject(new Error(`Failed to load video: ${this.src}`));
-      });
+        throw error;
+      } finally {
+        this.loadPromise = null;
+      }
+    })();
 
-      video.src = this.src;
-      video.load();
-    });
-
-    try {
-      await this.loadPromise;
-    } catch (error) {
-      console.warn(`VideoShape load error:`, error);
-    } finally {
-      this.loadPromise = null;
-    }
+    return this.loadPromise;
   }
 
   private notifyLoadCallbacks(success: boolean): void {
@@ -306,11 +290,10 @@ export class VideoShape extends Shape {
       return Promise.resolve();
     }
 
-    // Stop and cleanup old video
-    if (this.video) {
-      this.video.pause();
-      this.video.src = '';
-      this.video.load();
+    // Release old video back to pool if changing source
+    if (this.src && this.isUsingPooledVideo) {
+      this.videoPool.release(this.src);
+      this.isUsingPooledVideo = false;
     }
 
     this.src = src;
@@ -410,6 +393,19 @@ export class VideoShape extends Shape {
     } else {
       this.loadCallbacks.push(callback);
     }
+  }
+
+  /**
+   * Cleanup method to release video back to pool
+   * Should be called when the shape is destroyed
+   */
+  public destroy(): void {
+    if (this.src && this.isUsingPooledVideo) {
+      console.log('🔄 VideoShape: Releasing video back to pool', { src: this.src });
+      this.videoPool.release(this.src);
+    }
+    this.video = null;
+    this.loadState = VideoLoadState.UNLOADED;
   }
 
   public async waitForLoad(): Promise<boolean> {

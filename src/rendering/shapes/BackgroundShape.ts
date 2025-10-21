@@ -273,6 +273,11 @@ export class BackgroundShape extends Shape {
 
   // Public methods
   public setBackgroundColor(color: Color): void {
+    // Cleanup video shape before removing it
+    if (this.videoShape) {
+      this.videoShape.destroy();
+    }
+
     this.backgroundStyle = {
       type: 'color',
       color
@@ -282,6 +287,11 @@ export class BackgroundShape extends Shape {
   }
 
   public setBackgroundGradient(gradient: Gradient): void {
+    // Cleanup video shape before removing it
+    if (this.videoShape) {
+      this.videoShape.destroy();
+    }
+
     this.backgroundStyle = {
       type: 'gradient',
       gradient
@@ -291,6 +301,11 @@ export class BackgroundShape extends Shape {
   }
 
   public async setBackgroundImage(imageUrl: string, imageStyle?: any): Promise<void> {
+    // Cleanup video shape before removing it
+    if (this.videoShape) {
+      this.videoShape.destroy();
+    }
+
     this.backgroundStyle = {
       type: 'image',
       imageUrl,
@@ -316,6 +331,18 @@ export class BackgroundShape extends Shape {
     if (this.videoShape) {
       await this.videoShape.waitForLoad();
     }
+  }
+
+  /**
+   * Cleanup method to release resources
+   * Should be called when the shape is destroyed
+   */
+  public destroy(): void {
+    if (this.videoShape) {
+      this.videoShape.destroy();
+      this.videoShape = null;
+    }
+    this.imageShape = null;
   }
 
   public getBackgroundType(): 'color' | 'gradient' | 'image' | 'video' {

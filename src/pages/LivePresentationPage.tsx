@@ -91,6 +91,26 @@ interface Slide extends NewSlide {
 
 interface LivePresentationPageProps {}
 
+// PERFORMANCE OPTIMIZATION: Shape cache to avoid regenerating identical slides
+// Cache key format: "itemType-verseIds-background-settings"
+const shapeCache = new Map<string, Shape[]>();
+const MAX_CACHE_SIZE = 100; // Limit cache size to prevent memory issues
+
+/**
+ * Generate cache key for shape caching
+ * Only regenerate shapes if content or styling actually changed
+ */
+const generateShapeCacheKey = (
+  itemType: string,
+  content: string,
+  backgroundType: string,
+  backgroundValue: string,
+  settings: any
+): string => {
+  // Create a stable key based on actual content, not object references
+  return `${itemType}:${content}:${backgroundType}:${backgroundValue}:${JSON.stringify(settings)}`;
+};
+
 export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // Navigation
   const navigate = useNavigate();
@@ -442,7 +462,30 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               italic: scriptureSettings.typography.italic
             });
 
-            const shapes = scriptureTemplate.generateSlide(scriptureContent);
+            // PERFORMANCE OPTIMIZATION: Check cache before generating shapes
+            const cacheKey = generateShapeCacheKey(
+              'scripture-single',
+              verse.text || '',
+              scriptureSettings.background.type,
+              scriptureSettings.background.value || '',
+              scriptureSettings.typography
+            );
+
+            let shapes: Shape[];
+            if (shapeCache.has(cacheKey)) {
+              console.log('✅ Using cached shapes for verse:', verse.verse);
+              shapes = shapeCache.get(cacheKey)!;
+            } else {
+              console.log('🔨 Generating new shapes for verse:', verse.verse);
+              shapes = scriptureTemplate.generateSlide(scriptureContent);
+
+              // Add to cache with LRU eviction
+              if (shapeCache.size >= MAX_CACHE_SIZE) {
+                const firstKey = shapeCache.keys().next().value;
+                if (firstKey) shapeCache.delete(firstKey);
+              }
+              shapeCache.set(cacheKey, shapes);
+            }
 
             // Convert SlideBackground to Slide background format
             // IMPORTANT: Maintain gradient structure with start/end/direction, not comma-separated string
@@ -492,7 +535,30 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               }
             };
 
-            const shapes = scriptureTemplate.generateSlide(scriptureContent);
+            // PERFORMANCE OPTIMIZATION: Check cache before generating shapes
+            const cacheKey = generateShapeCacheKey(
+              'scripture-group',
+              combinedText,
+              scriptureSettings.background.type,
+              scriptureSettings.background.value || '',
+              scriptureSettings.typography
+            );
+
+            let shapes: Shape[];
+            if (shapeCache.has(cacheKey)) {
+              console.log('✅ Using cached shapes for verse group:', `${firstVerse.verse}-${lastVerse.verse}`);
+              shapes = shapeCache.get(cacheKey)!;
+            } else {
+              console.log('🔨 Generating new shapes for verse group:', `${firstVerse.verse}-${lastVerse.verse}`);
+              shapes = scriptureTemplate.generateSlide(scriptureContent);
+
+              // Add to cache with LRU eviction
+              if (shapeCache.size >= MAX_CACHE_SIZE) {
+                const firstKey = shapeCache.keys().next().value;
+                if (firstKey) shapeCache.delete(firstKey);
+              }
+              shapeCache.set(cacheKey, shapes);
+            }
 
             // Convert SlideBackground to Slide background format
             // IMPORTANT: Maintain gradient structure with start/end/direction, not comma-separated string

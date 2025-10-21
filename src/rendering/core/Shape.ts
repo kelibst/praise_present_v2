@@ -15,6 +15,9 @@ export abstract class Shape {
   public metadata: Record<string, any>; // For identifying shape purpose (verse/reference/translation)
   public abstract readonly type: ShapeType;
 
+  // Dirty flag tracking for selective rendering optimization
+  private _dirty: boolean = true; // Start dirty to ensure first render
+
   constructor(props: ShapeProps = {}, style: ShapeStyle = {}) {
     const mergedProps = { ...defaultShapeProps, ...props };
 
@@ -32,6 +35,27 @@ export abstract class Shape {
 
   protected generateId(): string {
     return `shape_${this.type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Mark this shape as dirty (needs re-rendering)
+   */
+  public markDirty(): void {
+    this._dirty = true;
+  }
+
+  /**
+   * Mark this shape as clean (rendered)
+   */
+  public markClean(): void {
+    this._dirty = false;
+  }
+
+  /**
+   * Check if this shape needs re-rendering
+   */
+  public isDirty(): boolean {
+    return this._dirty;
   }
 
   public abstract render(context: RenderContext): void;
@@ -189,43 +213,74 @@ export abstract class Shape {
   }
 
   public moveTo(position: Point): void {
-    this.position.x = position.x;
-    this.position.y = position.y;
+    if (this.position.x !== position.x || this.position.y !== position.y) {
+      this.position.x = position.x;
+      this.position.y = position.y;
+      this.markDirty();
+    }
   }
 
   public moveBy(delta: Point): void {
-    this.position.x += delta.x;
-    this.position.y += delta.y;
+    if (delta.x !== 0 || delta.y !== 0) {
+      this.position.x += delta.x;
+      this.position.y += delta.y;
+      this.markDirty();
+    }
   }
 
   public resize(size: Size): void {
-    this.size.width = Math.max(0, size.width);
-    this.size.height = Math.max(0, size.height);
+    const newWidth = Math.max(0, size.width);
+    const newHeight = Math.max(0, size.height);
+    if (this.size.width !== newWidth || this.size.height !== newHeight) {
+      this.size.width = newWidth;
+      this.size.height = newHeight;
+      this.markDirty();
+    }
   }
 
   public rotate(angle: number): void {
-    this.rotation = angle;
+    if (this.rotation !== angle) {
+      this.rotation = angle;
+      this.markDirty();
+    }
   }
 
   public scale(scaleX: number, scaleY?: number): void {
-    this.transform.scaleX = scaleX;
-    this.transform.scaleY = scaleY ?? scaleX;
+    const newScaleY = scaleY ?? scaleX;
+    if (this.transform.scaleX !== scaleX || this.transform.scaleY !== newScaleY) {
+      this.transform.scaleX = scaleX;
+      this.transform.scaleY = newScaleY;
+      this.markDirty();
+    }
   }
 
   public setOpacity(opacity: number): void {
-    this.opacity = Math.max(0, Math.min(1, opacity));
+    const newOpacity = Math.max(0, Math.min(1, opacity));
+    if (this.opacity !== newOpacity) {
+      this.opacity = newOpacity;
+      this.markDirty();
+    }
   }
 
   public setZIndex(zIndex: number): void {
-    this.zIndex = zIndex;
+    if (this.zIndex !== zIndex) {
+      this.zIndex = zIndex;
+      this.markDirty();
+    }
   }
 
   public show(): void {
-    this.visible = true;
+    if (!this.visible) {
+      this.visible = true;
+      this.markDirty();
+    }
   }
 
   public hide(): void {
-    this.visible = false;
+    if (this.visible) {
+      this.visible = false;
+      this.markDirty();
+    }
   }
 
   public toJSON(): any {

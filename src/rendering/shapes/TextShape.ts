@@ -566,6 +566,7 @@ export class TextShape extends Shape {
       this.text = text;
       this.cachedMetrics = null;
       this.clearMetricsCache();
+      this.markDirty(); // Mark for selective rendering
     }
   }
 
@@ -573,6 +574,7 @@ export class TextShape extends Shape {
     this.textStyle = { ...this.textStyle, ...style };
     this.cachedMetrics = null;
     this.clearMetricsCache();
+    this.markDirty(); // Mark for selective rendering
   }
 
   /**
