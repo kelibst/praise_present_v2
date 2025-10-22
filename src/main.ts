@@ -79,28 +79,49 @@ const createWindow = () => {
 
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    console.log('[MAIN] Loading from dev server:', MAIN_WINDOW_VITE_DEV_SERVER_URL);
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
-    );
+    const htmlPath = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
+    console.log('[MAIN] __dirname:', __dirname);
+    console.log('[MAIN] MAIN_WINDOW_VITE_NAME:', MAIN_WINDOW_VITE_NAME);
+    console.log('[MAIN] Loading from file:', htmlPath);
+    mainWindow.loadFile(htmlPath);
   }
 
   // Open the DevTools.
-  // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
+
+  // Add error handlers
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('[MAIN] Failed to load:', {
+      errorCode,
+      errorDescription,
+      validatedURL
+    });
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('[MAIN] Window finished loading successfully');
+  });
 };
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on("ready", async () => {
-  // Initialize database in main process
-  try {
-    await initializeDatabaseMain();
-    console.log("Database initialized successfully");
-  } catch (error) {
-    console.error("Failed to initialize database:", error);
-  }
+  // Create window first - don't block on database initialization
+  createWindow();
+
+  // Initialize database in main process (async, non-blocking)
+  initializeDatabaseMain()
+    .then(() => {
+      console.log("Database initialized successfully");
+    })
+    .catch((error) => {
+      console.error("Failed to initialize database:", error);
+      console.error("The application will continue, but database features may not work");
+    });
 
   // Initialize display management
   try {
@@ -125,8 +146,6 @@ app.on("ready", async () => {
   } catch (error) {
     console.error("Failed to initialize media handlers:", error);
   }
-
-  createWindow();
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

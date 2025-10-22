@@ -86,20 +86,22 @@ async function populateNavigationFields(db: PrismaClient) {
 // Export for use in other modules
 export { populateNavigationFields };
 
+// NOTE: Disabled auto-execution because it doesn't work correctly in bundled/packaged apps
+// This script should only be called explicitly via IPC or npm script
 // If run directly (for testing)
-if (require.main === module) {
-  const prisma = new PrismaClient();
+// if (require.main === module) {
+//   const prisma = new PrismaClient();
 
-  populateNavigationFields(prisma)
-    .then(() => {
-      console.log('Migration completed');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('Migration failed:', error);
-      process.exit(1);
-    })
-    .finally(async () => {
-      await prisma.$disconnect();
-    });
-}
+//   populateNavigationFields(prisma)
+//     .then(() => {
+//       console.log('Migration completed');
+//       process.exit(0);
+//     })
+//     .catch((error) => {
+//       console.error('Migration failed:', error);
+//       process.exit(1);
+//     })
+//     .finally(async () => {
+//       await prisma.$disconnect();
+//     });
+// }
