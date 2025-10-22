@@ -341,35 +341,48 @@ const BibleBrowseSelector: React.FC<BibleBrowseSelectorProps> = ({
 
         {/* Verses Stage */}
         {stage === 'verses' && selectedBook && selectedChapter && (
-          <div>
-            {/* Action buttons */}
-            <div className="flex items-center justify-between mb-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-400">
-                  {selectedVerses.length > 0 ? (
-                    <>
-                      <Check className="w-4 h-4 inline text-green-400 mr-1" />
-                      {selectedVerses.length} verse{selectedVerses.length !== 1 ? 's' : ''} selected
-                    </>
-                  ) : (
-                    'Click verses to select'
-                  )}
-                </span>
+          <div className="flex flex-col h-[700px]">
+            {/* Sticky Header with Book/Chapter Info and Action Buttons */}
+            <div className="flex-shrink-0 bg-gray-900/95 backdrop-blur-sm border-b border-gray-700 mb-4">
+              {/* Book and Chapter Title */}
+              <div className="p-4 pb-3">
+                <h3 className="text-lg font-bold text-white mb-1">
+                  {selectedBook.name} Chapter {selectedChapter}
+                </h3>
+                <p className="text-sm text-gray-400">
+                  {currentVerses.length} verses • {selectedBook.testament === 'OT' ? 'Old Testament' : 'New Testament'}
+                </p>
               </div>
 
-              {selectedVerses.length > 0 && (
-                <button
-                  onClick={handleAddToService}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  Add to Service
-                </button>
-              )}
+              {/* Action Bar */}
+              <div className="flex items-center justify-between px-4 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-400">
+                    {selectedVerses.length > 0 ? (
+                      <>
+                        <Check className="w-4 h-4 inline text-green-400 mr-1" />
+                        {selectedVerses.length} verse{selectedVerses.length !== 1 ? 's' : ''} selected
+                      </>
+                    ) : (
+                      'Click verses to select'
+                    )}
+                  </span>
+                </div>
+
+                {selectedVerses.length > 0 && (
+                  <button
+                    onClick={handleAddToService}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    Add to Service
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Chapter verse list */}
-            <div className="bg-gray-800/30 rounded-lg border border-gray-700 p-4">
+            {/* Scrollable Verse List */}
+            <div className="flex-1 min-h-0 overflow-y-auto bg-gray-800/30 rounded-lg border border-gray-700">
               {loading ? (
                 <div className="flex items-center justify-center p-8">
                   <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
@@ -400,7 +413,7 @@ const BibleBrowseSelector: React.FC<BibleBrowseSelectorProps> = ({
                     handleAddToService();
                   }}
                   onVersionChange={() => {}} // Disabled - version controlled at top level
-                  className="h-full max-h-[600px]"
+                  className="h-full"
                   loading={loading}
                   error={error}
                   hideVersionSelector={true}
