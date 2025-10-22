@@ -151,6 +151,15 @@ const BibleBrowseSelector: React.FC<BibleBrowseSelectorProps> = ({
   const handleVerseSelection = useCallback(async (verseNumbers: number[]) => {
     if (!selectedBook || !selectedChapter || !selectedVersion) return;
 
+    // Check if selection actually changed to prevent infinite loops
+    const currentSelection = [...selectedVerses].sort((a, b) => a - b).join(',');
+    const newSelection = [...verseNumbers].sort((a, b) => a - b).join(',');
+
+    if (currentSelection === newSelection) {
+      console.log('📖 BibleBrowseSelector: Selection unchanged, skipping callback');
+      return; // No change, don't trigger callbacks
+    }
+
     console.log('📖 BibleBrowseSelector: Verses selected:', verseNumbers);
     setSelectedVerses(verseNumbers);
 
@@ -171,7 +180,7 @@ const BibleBrowseSelector: React.FC<BibleBrowseSelectorProps> = ({
       console.error('❌ BibleBrowseSelector: Error loading selected verses:', err);
       setError(err instanceof Error ? err.message : 'Failed to load verses');
     }
-  }, [selectedBook, selectedChapter, selectedVersion, onVerseSelect]);
+  }, [selectedBook, selectedChapter, selectedVersion, selectedVerses, onVerseSelect]);
 
   // Handle back navigation
   const handleBack = () => {
@@ -341,9 +350,9 @@ const BibleBrowseSelector: React.FC<BibleBrowseSelectorProps> = ({
 
         {/* Verses Stage */}
         {stage === 'verses' && selectedBook && selectedChapter && (
-          <div className="flex flex-col h-[700px]">
-            {/* Sticky Header with Book/Chapter Info and Action Buttons */}
-            <div className="flex-shrink-0 bg-gray-900/95 backdrop-blur-sm border-b border-gray-700 mb-4">
+          <div className="space-y-4">
+            {/* Header with Book/Chapter Info and Action Buttons */}
+            <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg">
               {/* Book and Chapter Title */}
               <div className="p-4 pb-3">
                 <h3 className="text-lg font-bold text-white mb-1">
@@ -381,8 +390,8 @@ const BibleBrowseSelector: React.FC<BibleBrowseSelectorProps> = ({
               </div>
             </div>
 
-            {/* Scrollable Verse List */}
-            <div className="flex-1 min-h-0 overflow-y-auto bg-gray-800/30 rounded-lg border border-gray-700">
+            {/* Verse List */}
+            <div className="bg-gray-800/30 rounded-lg border border-gray-700">
               {loading ? (
                 <div className="flex items-center justify-center p-8">
                   <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
@@ -413,7 +422,7 @@ const BibleBrowseSelector: React.FC<BibleBrowseSelectorProps> = ({
                     handleAddToService();
                   }}
                   onVersionChange={() => {}} // Disabled - version controlled at top level
-                  className="h-full"
+                  className=""
                   loading={loading}
                   error={error}
                   hideVersionSelector={true}
