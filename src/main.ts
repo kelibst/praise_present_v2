@@ -15,9 +15,12 @@ if (squirrelStartup) {
   app.quit();
 }
 
+// Global reference to the main window
+let mainWindow: BrowserWindow | null = null;
+
 const createWindow = () => {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 720,
     minWidth: 800,
@@ -104,6 +107,23 @@ const createWindow = () => {
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('[MAIN] Window finished loading successfully');
   });
+
+  // Handle main window close event
+  mainWindow.on('close', () => {
+    console.log('[MAIN] Main window is closing, cleaning up...');
+
+    // Close live display window when main window closes
+    const { liveDisplayWindow } = require("./main/LiveDisplayWindow");
+    if (liveDisplayWindow) {
+      liveDisplayWindow.closeLiveWindow();
+      console.log('[MAIN] Live display window closed');
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    console.log('[MAIN] Main window closed');
+    mainWindow = null;
+  });
 };
 
 // This method will be called when Electron has finished
@@ -154,6 +174,22 @@ app.on("ready", async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
+  }
+});
+
+// Clean up all windows before quitting
+app.on("before-quit", () => {
+  console.log("[APP] Application is quitting, closing all windows...");
+
+  // Close live display window if it exists
+  const { liveDisplayWindow } = require("./main/LiveDisplayWindow");
+  if (liveDisplayWindow) {
+    liveDisplayWindow.closeLiveWindow();
+  }
+
+  // Close main window if it exists
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.close();
   }
 });
 

@@ -1908,7 +1908,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                         Previous
                       </button>
 
-                      <div className="text-sm text-muted-foreground min-w-[120px] text-center">
+                      {/* <div className="text-sm text-muted-foreground min-w-[120px] text-center">
                         {selectedItem?.type === 'scripture' && selectedItem.slides?.length === 1 ? (
                           <div>
                             <div>Slide 1 / 1</div>
@@ -1921,7 +1921,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                         ) : (
                           `Slide ${currentSlideIndex + 1} / ${selectedItem?.slides?.length || 0}`
                         )}
-                      </div>
+                      </div> */}
 
                       <button
                         onClick={presentCurrentSlide}

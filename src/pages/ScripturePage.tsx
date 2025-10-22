@@ -1,21 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Book, Search, Filter, Clock, User, Plus, ExternalLink, BookOpen, Heart, History } from 'lucide-react';
+import { Book, Search, Filter, Clock, User, Plus, ExternalLink, BookOpen, Heart, History, Grid3x3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import BibleSelector from '../components/bible/BibleSelector';
-import { bibleService } from '../lib/services/bibleService';
+import BibleBrowseSelector from '../components/bible/BibleBrowseSelector';
+import { bibleService, ScriptureVerse } from '../lib/services/bibleService';
 import { formatScriptureReference } from '../lib/services/scriptureReferenceFormatter';
 
 // Types
-interface ScriptureVerse {
-  id: string;
-  book: string;
-  chapter: number;
-  verse: number;
-  text: string;
-  translation: string;
-  bookId: string;
-  versionId: string;
-}
 
 interface ServiceItem {
   id: string;
@@ -41,6 +32,9 @@ interface SavedScripture {
 
 const ScripturePage: React.FC = () => {
   const navigate = useNavigate();
+
+  // Tab management
+  const [activeTab, setActiveTab] = useState<'browse' | 'search'>('browse');
 
   // State management
   const [selectedVerses, setSelectedVerses] = useState<ScriptureVerse[]>([]);
@@ -274,16 +268,57 @@ const ScripturePage: React.FC = () => {
           </div>
         )}
 
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mb-6 border-b border-border">
+          <button
+            onClick={() => setActiveTab('browse')}
+            className={`px-6 py-3 font-medium transition-colors flex items-center gap-2 ${
+              activeTab === 'browse'
+                ? 'border-b-2 border-purple-500 text-purple-400'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Grid3x3 className="w-5 h-5" />
+            Browse Books
+          </button>
+          <button
+            onClick={() => setActiveTab('search')}
+            className={`px-6 py-3 font-medium transition-colors flex items-center gap-2 ${
+              activeTab === 'search'
+                ? 'border-b-2 border-purple-500 text-purple-400'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Search className="w-5 h-5" />
+            Search & Type
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Panel - Bible Selector and Current Selection */}
+          {/* Left Panel - Bible Selector/Browse and Current Selection */}
           <div className="space-y-6">
-            {/* Bible Selector */}
+            {/* Bible Browse/Search Selector */}
             <div className="bg-card rounded-lg border border-border p-6">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Search className="w-5 h-5 text-purple-400" />
-                Search Bible
+                {activeTab === 'browse' ? (
+                  <>
+                    <Grid3x3 className="w-5 h-5 text-purple-400" />
+                    Browse Bible Books
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-5 h-5 text-purple-400" />
+                    Search Bible
+                  </>
+                )}
               </h3>
-              <BibleSelector onVerseSelect={handleVerseSelect} />
+
+              {/* Tab Content */}
+              {activeTab === 'browse' ? (
+                <BibleBrowseSelector onVerseSelect={handleVerseSelect} />
+              ) : (
+                <BibleSelector onVerseSelect={handleVerseSelect} />
+              )}
             </div>
 
             {/* Current Selection */}

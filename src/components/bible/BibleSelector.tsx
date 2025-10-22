@@ -465,6 +465,13 @@ const BibleSelector: React.FC<BibleSelectorProps> = ({
     }
   }, [currentParsedReference, selectedVersion, onVerseSelect]);
 
+  // Handle use verses (send to parent)
+  const handleUseVerses = useCallback((verses: ScriptureVerse[]) => {
+    if (onVerseSelect && verses.length > 0) {
+      onVerseSelect(verses);
+    }
+  }, [onVerseSelect]);
+
   // Get current version name
   const getCurrentVersion = () => {
     return versions.find(v => v.id === selectedVersion);
