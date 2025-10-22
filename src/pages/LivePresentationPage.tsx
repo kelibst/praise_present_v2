@@ -71,8 +71,9 @@ import { SlidePropertyPanel, SlideProperties } from '../components/slides/SlideP
 // Import live display components
 import { useLiveDisplay, LiveDisplayControls } from '../components/live/LiveDisplayManager';
 
-// Import Bible selector
+// Import Bible selectors
 import BibleSelector from '../components/bible/BibleSelector';
+import BibleBrowseSelector from '../components/bible/BibleBrowseSelector';
 import { ScriptureVerse } from '../lib/services/bibleService';
 
 // Import scripture navigation service
@@ -125,6 +126,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // State management
   const [activeTab, setActiveTab] = useState<'scripture' | 'plan' | 'plans'>('scripture');
+  const [scriptureSubTab, setScriptureSubTab] = useState<'browse' | 'type'>('browse');
 
   const [selectedItem, setSelectedItem] = useState<ServiceItem | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -1470,11 +1472,47 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   </div>
                 )}
 
-                <BibleSelector
-                  onVerseSelect={handleScriptureSelect}
-                  defaultVersion="kjv"
-                  activeVerses={activeVerseNumbers}
-                />
+                {/* Scripture Sub-Tabs */}
+                <div className="flex gap-2 mb-4 border-b border-border">
+                  <button
+                    onClick={() => setScriptureSubTab('browse')}
+                    className={`px-4 py-2 font-medium transition-colors flex items-center gap-2 ${
+                      scriptureSubTab === 'browse'
+                        ? 'border-b-2 border-purple-500 text-purple-400'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    Browse Books
+                  </button>
+                  <button
+                    onClick={() => setScriptureSubTab('type')}
+                    className={`px-4 py-2 font-medium transition-colors flex items-center gap-2 ${
+                      scriptureSubTab === 'type'
+                        ? 'border-b-2 border-purple-500 text-purple-400'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    Type Reference
+                  </button>
+                </div>
+
+                {/* Sub-Tab Content */}
+                {scriptureSubTab === 'browse' && (
+                  <BibleBrowseSelector
+                    onVerseSelect={handleScriptureSelect}
+                    defaultVersion="kjv"
+                  />
+                )}
+
+                {scriptureSubTab === 'type' && (
+                  <BibleSelector
+                    onVerseSelect={handleScriptureSelect}
+                    defaultVersion="kjv"
+                    activeVerses={activeVerseNumbers}
+                  />
+                )}
               </div>
             )}
 
