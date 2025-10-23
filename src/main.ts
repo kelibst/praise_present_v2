@@ -5,6 +5,7 @@ import { initializeDatabaseMain } from "./main/database-main";
 import { initializeDisplayMain } from "./main/display-main";
 import { initializeWindowMain } from "./main/window-main";
 import { initializeMediaHandlers } from "./main/media-main";
+import { liveDisplayWindow } from "./main/LiveDisplayWindow";
 
 // These constants are injected by Electron Forge and Vite
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -113,10 +114,11 @@ const createWindow = () => {
     console.log('[MAIN] Main window is closing, cleaning up...');
 
     // Close live display window when main window closes
-    const { liveDisplayWindow } = require("./main/LiveDisplayWindow");
-    if (liveDisplayWindow) {
+    try {
       liveDisplayWindow.closeLiveWindow();
       console.log('[MAIN] Live display window closed');
+    } catch (error) {
+      console.error('[MAIN] Error closing live display window:', error);
     }
   });
 
@@ -182,9 +184,11 @@ app.on("before-quit", () => {
   console.log("[APP] Application is quitting, closing all windows...");
 
   // Close live display window if it exists
-  const { liveDisplayWindow } = require("./main/LiveDisplayWindow");
-  if (liveDisplayWindow) {
+  try {
     liveDisplayWindow.closeLiveWindow();
+    console.log("[APP] Live display window closed");
+  } catch (error) {
+    console.error("[APP] Error closing live display window:", error);
   }
 
   // Close main window if it exists

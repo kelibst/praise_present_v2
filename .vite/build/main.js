@@ -4995,10 +4995,11 @@ const createWindow = () => {
   });
   mainWindow.on("close", () => {
     console.log("[MAIN] Main window is closing, cleaning up...");
-    const { liveDisplayWindow: liveDisplayWindow2 } = require("./main/LiveDisplayWindow");
-    if (liveDisplayWindow2) {
-      liveDisplayWindow2.closeLiveWindow();
+    try {
+      liveDisplayWindow.closeLiveWindow();
       console.log("[MAIN] Live display window closed");
+    } catch (error) {
+      console.error("[MAIN] Error closing live display window:", error);
     }
   });
   mainWindow.on("closed", () => {
@@ -5040,9 +5041,11 @@ electron.app.on("window-all-closed", () => {
 });
 electron.app.on("before-quit", () => {
   console.log("[APP] Application is quitting, closing all windows...");
-  const { liveDisplayWindow: liveDisplayWindow2 } = require("./main/LiveDisplayWindow");
-  if (liveDisplayWindow2) {
-    liveDisplayWindow2.closeLiveWindow();
+  try {
+    liveDisplayWindow.closeLiveWindow();
+    console.log("[APP] Live display window closed");
+  } catch (error) {
+    console.error("[APP] Error closing live display window:", error);
   }
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.close();
