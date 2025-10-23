@@ -6,6 +6,7 @@ import featureSettingsSlice from './featureSettingsSlice';
 import serviceItemsSlice from './serviceItemsSlice';
 import mediaSlice from './mediaSlice';
 import scriptureNavigationSlice from './scriptureNavigationSlice';
+import planExecutionSlice from './planExecutionSlice';
 
 // Store configuration with presentation slice
 export const store = configureStore({
@@ -17,6 +18,7 @@ export const store = configureStore({
     serviceItems: serviceItemsSlice,
     media: mediaSlice,
     scriptureNavigation: scriptureNavigationSlice,
+    planExecution: planExecutionSlice,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

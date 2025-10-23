@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, MonitorSpeaker, SkipBack, SkipForward, Settings, Calendar, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Maximize2, ExternalLink, BookOpen } from 'lucide-react';
+import { Play, MonitorSpeaker, SkipBack, SkipForward, Settings, Calendar, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Maximize2, ExternalLink, BookOpen, Music, FileText, Mic } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -75,6 +75,25 @@ import { useLiveDisplay, LiveDisplayControls } from '../components/live/LiveDisp
 import BibleSelector from '../components/bible/BibleSelector';
 import BibleBrowseSelector from '../components/bible/BibleBrowseSelector';
 import { ScriptureVerse } from '../lib/services/bibleService';
+
+// Import inline media selectors
+import {
+  InlineSongSelector,
+  InlineScriptureSelector,
+  InlinePresentationSelector,
+  InlineAnnouncementEditor
+} from '../components/plans/InlineMediaSelectors';
+
+// Import execution components
+import { TimeTracker } from '../components/plans/TimeTracker';
+import { PlanTimeline } from '../components/plans/PlanTimeline';
+import { LivePlanControls } from '../components/plans/LivePlanControls';
+
+// Import plan management components
+import { TemplateLibrary } from '../components/plans/TemplateLibrary';
+import { PlanSearch } from '../components/plans/PlanSearch';
+import { NextItemPreview } from '../components/plans/NextItemPreview';
+import { PreServiceChecklist } from '../components/plans/PreServiceChecklist';
 
 // Import scripture navigation service
 import { scriptureNavigationService, NavigatedVerse, VerseGroup } from '../lib/services/scriptureNavigationService';
@@ -162,6 +181,15 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // Plan loading state
   const [isPlanLoading, setIsPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+
+  // Inline media addition state
+  const [showInlineMediaModal, setShowInlineMediaModal] = useState(false);
+  const [inlineMediaType, setInlineMediaType] = useState<'song' | 'scripture' | 'presentation' | 'announcement' | null>(null);
+  const [insertPosition, setInsertPosition] = useState<number>(0);
+
+  // Service execution state
+  const [isExecutingService, setIsExecutingService] = useState(false);
+  const [checklist, setChecklist] = useState<any[]>([]);
 
   // Plan integration management
   const { handlePlanSelect, handlePlanCreate } = usePlanIntegration({
@@ -1194,6 +1222,146 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     generateSlidesForItem(announcement);
   };
 
+  // Inline media addition handlers
+  const openInlineMediaModal = (type: 'song' | 'scripture' | 'presentation' | 'announcement', position: number) => {
+    setInlineMediaType(type);
+    setInsertPosition(position);
+    setShowInlineMediaModal(true);
+  };
+
+  const closeInlineMediaModal = () => {
+    setShowInlineMediaModal(false);
+    setInlineMediaType(null);
+  };
+
+  const handleInlineSongSelect = async (song: any) => {
+    const songItem: ServiceItem = {
+      id: `song-${Date.now()}`,
+      type: 'song',
+      title: song.title,
+      content: {
+        lyrics: song.lyrics || '',
+        artist: song.artist || ''
+      },
+      order: insertPosition + 1
+    };
+
+    // Insert at specific position
+    const newItems = [...serviceItems];
+    newItems.splice(insertPosition, 0, songItem);
+
+    // Update order for all items
+    const reorderedItems = newItems.map((item, index) => ({ ...item, order: index + 1 }));
+    dispatch(setServiceItems(reorderedItems));
+
+    // Generate slides for the new song
+    await generateSlidesForItem(songItem);
+
+    closeInlineMediaModal();
+  };
+
+  const handleInlineScriptureSelect = async (scripture: any) => {
+    const scriptureItem: ServiceItem = {
+      id: `scripture-${Date.now()}`,
+      type: 'scripture',
+      title: scripture.reference,
+      content: {
+        reference: scripture.reference,
+        book: scripture.book,
+        chapter: scripture.chapter,
+        verses: scripture.text ? [scripture] : []
+      },
+      order: insertPosition + 1
+    };
+
+    // Insert at specific position
+    const newItems = [...serviceItems];
+    newItems.splice(insertPosition, 0, scriptureItem);
+
+    // Update order for all items
+    const reorderedItems = newItems.map((item, index) => ({ ...item, order: index + 1 }));
+    dispatch(setServiceItems(reorderedItems));
+
+    // Generate slides for the new scripture
+    await generateSlidesForItem(scriptureItem);
+
+    closeInlineMediaModal();
+  };
+
+  const handleInlinePresentationSelect = async (presentation: any) => {
+    const presentationItem: ServiceItem = {
+      id: `presentation-${Date.now()}`,
+      type: 'presentation',
+      title: presentation.name,
+      content: {
+        name: presentation.name,
+        slideCount: presentation.slideCount
+      },
+      order: insertPosition + 1
+    };
+
+    // Insert at specific position
+    const newItems = [...serviceItems];
+    newItems.splice(insertPosition, 0, presentationItem);
+
+    // Update order for all items
+    const reorderedItems = newItems.map((item, index) => ({ ...item, order: index + 1 }));
+    dispatch(setServiceItems(reorderedItems));
+
+    // Generate slides for the new presentation
+    await generateSlidesForItem(presentationItem);
+
+    closeInlineMediaModal();
+  };
+
+  const handleInlineAnnouncementSave = async (announcement: { title: string; content: string; duration?: number }) => {
+    const announcementItem: ServiceItem = {
+      id: `announcement-${Date.now()}`,
+      type: 'announcement',
+      title: announcement.title,
+      content: {
+        text: announcement.content,
+        description: ''
+      },
+      duration: announcement.duration || 60,
+      order: insertPosition + 1
+    };
+
+    // Insert at specific position
+    const newItems = [...serviceItems];
+    newItems.splice(insertPosition, 0, announcementItem);
+
+    // Update order for all items
+    const reorderedItems = newItems.map((item, index) => ({ ...item, order: index + 1 }));
+    dispatch(setServiceItems(reorderedItems));
+
+    // Generate slides for the new announcement
+    await generateSlidesForItem(announcementItem);
+
+    closeInlineMediaModal();
+  };
+
+  // Inline edit and delete handlers
+  const handleServiceItemEdit = (item: ServiceItem) => {
+    dispatch(updateServiceItem(item));
+    // If this is the selected item, update it
+    if (selectedItem?.id === item.id) {
+      setSelectedItem(item);
+    }
+  };
+
+  const handleServiceItemDelete = (itemId: string) => {
+    // Remove from service items
+    const newItems = serviceItems.filter(item => item.id !== itemId);
+    dispatch(setServiceItems(newItems));
+
+    // If this was the selected item, clear selection
+    if (selectedItem?.id === itemId) {
+      setSelectedItem(null);
+      setCurrentSlideIndex(0);
+    }
+  };
+
   // Session management functions
   const clearAllItems = () => {
     dispatch(clearServiceItems());
@@ -1399,26 +1567,77 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             </button>
           </div>
 
-          {/* Tab Navigation */}
-          <div className="flex border-b border-border">
+          {/* Tab Navigation - Enhanced with clear active states */}
+          <div className="flex border-b border-gray-700 bg-gray-900">
             {[
-              { key: 'scripture', label: 'Scripture', icon: BookOpen },
-              { key: 'plan', label: 'Current Service', icon: Settings },
-              { key: 'plans', label: 'Plan Manager', icon: Calendar }
-            ].map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key as any)}
-                className={`flex-1 px-4 py-3 text-sm font-medium border-r border-border last:border-r-0 flex items-center justify-center gap-2 ${
-                  activeTab === key
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {label}
-              </button>
-            ))}
+              { key: 'scripture', label: 'Scripture', icon: BookOpen, color: 'purple' },
+              { key: 'plan', label: 'Current Service', icon: Play, color: 'green' },
+              { key: 'plans', label: 'Plan Manager', icon: Calendar, color: 'blue' }
+            ].map(({ key, label, icon: Icon, color }) => {
+              const isActive = activeTab === key;
+
+              // Color-specific styling
+              const colorClasses = {
+                purple: {
+                  active: 'bg-purple-600 text-white border-b-4 border-purple-400 shadow-lg shadow-purple-900/50',
+                  inactive: 'bg-gray-900 text-gray-400 hover:bg-purple-900/20 hover:text-purple-300',
+                  icon: 'text-purple-400'
+                },
+                green: {
+                  active: 'bg-green-600 text-white border-b-4 border-green-400 shadow-lg shadow-green-900/50',
+                  inactive: 'bg-gray-900 text-gray-400 hover:bg-green-900/20 hover:text-green-300',
+                  icon: 'text-green-400'
+                },
+                blue: {
+                  active: 'bg-blue-600 text-white border-b-4 border-blue-400 shadow-lg shadow-blue-900/50',
+                  inactive: 'bg-gray-900 text-gray-400 hover:bg-blue-900/20 hover:text-blue-300',
+                  icon: 'text-blue-400'
+                }
+              };
+
+              const itemCount = key === 'plan' ? serviceItems.length : 0;
+
+              return (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key as any)}
+                  className={`
+                    relative flex-1 px-4 py-3 text-sm font-medium
+                    border-r border-gray-700 last:border-r-0
+                    flex items-center justify-center gap-2
+                    transition-all duration-200
+                    ${isActive ? colorClasses[color as keyof typeof colorClasses].active : colorClasses[color as keyof typeof colorClasses].inactive}
+                  `}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? 'animate-pulse' : ''}`} />
+                  <span>{label}</span>
+
+                  {/* Item count badge for Current Service tab */}
+                  {key === 'plan' && itemCount > 0 && (
+                    <span className={`
+                      ml-1 px-2 py-0.5 rounded-full text-xs font-bold
+                      ${isActive ? 'bg-white/20 text-white' : 'bg-green-900/50 text-green-400'}
+                    `}>
+                      {itemCount}
+                    </span>
+                  )}
+
+                  {/* Active indicator gradient line */}
+                  {isActive && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r opacity-50"
+                      style={{
+                        backgroundImage: color === 'purple'
+                          ? 'linear-gradient(to right, transparent, rgb(192, 132, 252), transparent)'
+                          : color === 'green'
+                          ? 'linear-gradient(to right, transparent, rgb(74, 222, 128), transparent)'
+                          : 'linear-gradient(to right, transparent, rgb(96, 165, 250), transparent)'
+                      }}
+                    />
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Tab Content */}
@@ -1518,6 +1737,14 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
             {activeTab === 'plan' && (
               <div className="space-y-4">
+                {/* TimeTracker - Shows at top during execution */}
+                {serviceItems.length > 0 && (
+                  <TimeTracker
+                    plan={selectedPlan}
+                    className="mb-4"
+                  />
+                )}
+
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -1614,6 +1841,44 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   </div>
                 ) : null}
 
+                {/* QuickAdd toolbar at top - before any items */}
+                {serviceItems.length > 0 && (
+                  <div className="mb-2 group">
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div className="flex items-center justify-center gap-2 py-2 border-2 border-dashed border-gray-700 rounded-lg bg-gray-900/30 hover:bg-gray-900/50 hover:border-green-600 transition-all">
+                        <button
+                          onClick={() => openInlineMediaModal('song', 0)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-medium transition-colors"
+                        >
+                          <Music className="w-3 h-3" />
+                          Song
+                        </button>
+                        <button
+                          onClick={() => openInlineMediaModal('scripture', 0)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-xs font-medium transition-colors"
+                        >
+                          <BookOpen className="w-3 h-3" />
+                          Scripture
+                        </button>
+                        <button
+                          onClick={() => openInlineMediaModal('presentation', 0)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-medium transition-colors"
+                        >
+                          <FileText className="w-3 h-3" />
+                          Presentation
+                        </button>
+                        <button
+                          onClick={() => openInlineMediaModal('announcement', 0)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md text-xs font-medium transition-colors"
+                        >
+                          <Mic className="w-3 h-3" />
+                          Announcement
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <DndContext
                   sensors={sensors}
                   onDragEnd={handleDragEnd}
@@ -1625,20 +1890,117 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                       const isPresentingThis = isPresenting && isSelected && presentationMode === 'live';
 
                       return (
-                        <SortableServiceItem
-                          key={item.id}
-                          item={item}
-                          index={index}
-                          isSelected={isSelected}
-                          isLoading={isLoading}
-                          isPresentingThis={isPresentingThis}
-                          onSelect={handleServiceItemSelect}
-                          onPresent={handleServiceItemPresent}
-                        />
+                        <React.Fragment key={item.id}>
+                          <SortableServiceItem
+                            item={item}
+                            index={index}
+                            isSelected={isSelected}
+                            isLoading={isLoading}
+                            isPresentingThis={isPresentingThis}
+                            onSelect={handleServiceItemSelect}
+                            onPresent={handleServiceItemPresent}
+                            onEdit={handleServiceItemEdit}
+                            onDelete={handleServiceItemDelete}
+                          />
+
+                          {/* QuickAdd toolbar between items */}
+                          <div className="my-2 group">
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              <div className="flex items-center justify-center gap-2 py-2 border-2 border-dashed border-gray-700 rounded-lg bg-gray-900/30 hover:bg-gray-900/50 hover:border-green-600 transition-all">
+                                <button
+                                  onClick={() => openInlineMediaModal('song', index + 1)}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-medium transition-colors"
+                                >
+                                  <Music className="w-3 h-3" />
+                                  Song
+                                </button>
+                                <button
+                                  onClick={() => openInlineMediaModal('scripture', index + 1)}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-xs font-medium transition-colors"
+                                >
+                                  <BookOpen className="w-3 h-3" />
+                                  Scripture
+                                </button>
+                                <button
+                                  onClick={() => openInlineMediaModal('presentation', index + 1)}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-medium transition-colors"
+                                >
+                                  <FileText className="w-3 h-3" />
+                                  Presentation
+                                </button>
+                                <button
+                                  onClick={() => openInlineMediaModal('announcement', index + 1)}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md text-xs font-medium transition-colors"
+                                >
+                                  <Mic className="w-3 h-3" />
+                                  Announcement
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </React.Fragment>
                       );
                     })}
                   </SortableContext>
                 </DndContext>
+
+                {/* PlanTimeline - Shows at bottom with visual overview */}
+                {serviceItems.length > 0 && (
+                  <PlanTimeline
+                    plan={selectedPlan}
+                    serviceItems={serviceItems}
+                    currentItemId={selectedItem?.id}
+                    className="mt-6"
+                  />
+                )}
+
+                {/* LivePlanControls - Service execution controls */}
+                {serviceItems.length > 0 && (
+                  <LivePlanControls
+                    plan={selectedPlan}
+                    serviceItems={serviceItems}
+                    currentItem={selectedItem}
+                    onItemSelect={(item) => handleServiceItemSelect(item, {} as any)}
+                    className="mt-4"
+                  />
+                )}
+
+                {/* Service Planning & Execution Assistance */}
+                {serviceItems.length > 0 && (
+                  <div className="grid grid-cols-2 gap-4 mt-6">
+                    {/* Next Item Preview - Shows when executing */}
+                    {isExecutingService && selectedItem && (
+                      <div className="col-span-1">
+                        <NextItemPreview
+                          currentItem={selectedItem}
+                          nextItem={serviceItems[serviceItems.findIndex(item => item.id === selectedItem.id) + 1]}
+                          upcomingItems={serviceItems.slice(
+                            serviceItems.findIndex(item => item.id === selectedItem.id) + 1,
+                            serviceItems.findIndex(item => item.id === selectedItem.id) + 4
+                          )}
+                        />
+                      </div>
+                    )}
+
+                    {/* Pre-Service Checklist - Shows when not executing */}
+                    {!isExecutingService && (
+                      <div className={isExecutingService ? 'col-span-1' : 'col-span-2'}>
+                        <PreServiceChecklist
+                          planItems={serviceItems.map(item => ({
+                            id: item.id,
+                            type: item.type,
+                            title: item.title,
+                            duration: item.duration,
+                            order: item.order || 0,
+                            content: item.content
+                          }))}
+                          checklist={checklist}
+                          onChange={setChecklist}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -2090,6 +2452,38 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           </Panel>
         )}
       </PanelGroup>
+
+      {/* Inline Media Addition Modal */}
+      {showInlineMediaModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-background rounded-lg shadow-2xl w-full max-w-3xl max-h-[80vh] border border-border overflow-hidden">
+            {inlineMediaType === 'song' && (
+              <InlineSongSelector
+                onSelect={handleInlineSongSelect}
+                onCancel={closeInlineMediaModal}
+              />
+            )}
+            {inlineMediaType === 'scripture' && (
+              <InlineScriptureSelector
+                onSelect={handleInlineScriptureSelect}
+                onCancel={closeInlineMediaModal}
+              />
+            )}
+            {inlineMediaType === 'presentation' && (
+              <InlinePresentationSelector
+                onSelect={handleInlinePresentationSelect}
+                onCancel={closeInlineMediaModal}
+              />
+            )}
+            {inlineMediaType === 'announcement' && (
+              <InlineAnnouncementEditor
+                onSave={handleInlineAnnouncementSave}
+                onCancel={closeInlineMediaModal}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

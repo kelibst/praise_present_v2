@@ -364,13 +364,27 @@ model ServicePlan {
   notes       String?
   order       Int @default(0)
   isTemplate  Boolean @default(false)
+
+  // Workflow and approval
+  status      String @default("draft") // "draft", "review", "approved"
+
+  // Execution tracking
+  startedAt       DateTime?
+  completedAt     DateTime?
+  actualDuration  Int? // Actual duration in minutes
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   service     Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   planItems   ServicePlanItem[]
+  sections    PlanSection[]
+  checklists  PlanChecklist[]
+  history     PlanHistory[]
+  comments    PlanComment[]
 
   @@index([serviceId])
+  @@index([status])
   @@map("service_plans")
 }
 
@@ -384,6 +398,25 @@ model ServicePlanItem {
   notes         String?
   settings      String? // JSON settings specific to the item
 
+  // Section grouping
+  sectionId     String?
+
+  // Multi-level notes
+  operatorNotes   String? // Technical cues for booth operators
+  speakerNotes    String? // Notes for presenters/pastors
+  technicalCues   String? // JSON array of cues (lighting, sound, video)
+
+  // Team collaboration
+  assignee        String? // Person responsible for this item
+
+  // Scripture-specific
+  responsiveReading String? // JSON config for responsive reading
+
+  // Execution tracking
+  actualStart     DateTime?
+  actualEnd       DateTime?
+  actualDuration  Int? // Actual duration in minutes
+
   // Content references
   songId         String?
   presentationId String?
@@ -392,7 +425,82 @@ model ServicePlanItem {
   plan          ServicePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   song          Song? @relation(fields: [songId], references: [id])
   presentation  Presentation? @relation(fields: [presentationId], references: [id])
+  section       PlanSection? @relation(fields: [sectionId], references: [id])
 
   @@index([planId, order])
+  @@index([sectionId])
   @@map("service_plan_items")
+}
+
+// Plan Section Model - for grouping plan items
+model PlanSection {
+  id          String @id @default(cuid())
+  planId      String
+  name        String // "Opening", "Worship", "Message", "Closing"
+  order       Int
+  color       String? // Hex color for visual distinction
+  icon        String? // Icon name for section
+  collapsed   Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  plan        ServicePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  items       ServicePlanItem[]
+
+  @@index([planId, order])
+  @@map("plan_sections")
+}
+
+// Plan Checklist Model - pre-service checklist items
+model PlanChecklist {
+  id          String @id @default(cuid())
+  planId      String
+  type        String // "auto" (generated) or "manual" (user-created)
+  title       String
+  description String?
+  isCompleted Boolean @default(false)
+  completedAt DateTime?
+  completedBy String?
+  assignee    String?
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  plan        ServicePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, order])
+  @@map("plan_checklists")
+}
+
+// Plan History Model - track changes and versions
+model PlanHistory {
+  id          String @id @default(cuid())
+  planId      String
+  action      String // "created", "updated", "approved", "item_added", "item_removed", "item_modified", etc.
+  changes     String // JSON diff of changes
+  userId      String?
+  userName    String?
+  createdAt   DateTime @default(now())
+
+  plan        ServicePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, createdAt])
+  @@map("plan_history")
+}
+
+// Plan Comment Model - collaboration and review comments
+model PlanComment {
+  id          String @id @default(cuid())
+  planId      String
+  itemId      String? // Optional: comment on specific item
+  text        String
+  userId      String?
+  userName    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  plan        ServicePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, createdAt])
+  @@map("plan_comments")
 }
