@@ -218,7 +218,10 @@ export const SongSectionEditor: React.FC<SongSectionEditorProps> = ({
                       <textarea
                         value={section.lyrics}
                         onChange={(e) => updateSection(section.id, { lyrics: e.target.value })}
-                        onFocus={() => setEditingSection(section.id)}
+                        onFocus={() => {
+                          setEditingSection(section.id);
+                          onSectionClick?.(index);
+                        }}
                         onBlur={() => setEditingSection(null)}
                         disabled={readOnly}
                         className="w-full px-3 py-2 border border-border rounded bg-input text-foreground text-sm disabled:opacity-50 font-mono"

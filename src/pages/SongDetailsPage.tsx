@@ -236,9 +236,9 @@ const SongDetailsPage: React.FC = () => {
       }))
     };
 
-    const currentItems = JSON.parse(localStorage.getItem('pendingServiceItems') || '[]');
-    currentItems.push(serviceItem);
-    localStorage.setItem('pendingServiceItems', JSON.stringify(currentItems));
+    const currentSongs = JSON.parse(localStorage.getItem('pendingSongs') || '[]');
+    currentSongs.push(serviceItem);
+    localStorage.setItem('pendingSongs', JSON.stringify(currentSongs));
 
     navigate('/live');
   };

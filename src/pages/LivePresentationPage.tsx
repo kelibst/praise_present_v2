@@ -141,7 +141,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const canNavigate = useSelector(selectCanNavigate);
 
   // State management
-  const [activeTab, setActiveTab] = useState<'scripture' | 'plan' | 'plans'>('scripture');
+  const [activeTab, setActiveTab] = useState<'scripture' | 'songs' | 'plan' | 'plans'>('scripture');
   const [scriptureSubTab, setScriptureSubTab] = useState<'browse' | 'type'>('browse');
 
   const [selectedItem, setSelectedItem] = useState<ServiceItem | null>(null);
@@ -152,6 +152,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const [presentationMode, setPresentationMode] = useState<'preview' | 'live'>('preview');
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [navigationFieldsPopulated, setNavigationFieldsPopulated] = useState<boolean | null>(null);
+
+  // Songs management
+  const [pendingSongs, setPendingSongs] = useState<ServiceItem[]>([]);
+  const [selectedSong, setSelectedSong] = useState<ServiceItem | null>(null);
 
   // Feature settings hook
   const { scriptureSettings, songSettings } = useFeatureSettings();
@@ -350,6 +354,50 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
     // Also check periodically in case storage events don't work (same-window updates)
     const interval = setInterval(checkPendingItems, 1000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Initialize and check for pending songs
+  useEffect(() => {
+    const checkPendingSongs = () => {
+      const pendingSongsData = localStorage.getItem('pendingSongs');
+      if (pendingSongsData) {
+        try {
+          const songs = JSON.parse(pendingSongsData);
+          if (Array.isArray(songs) && songs.length > 0) {
+            setPendingSongs(songs);
+            // Auto-switch to songs tab when songs are added
+            setActiveTab('songs');
+            // Auto-select the first song
+            if (songs.length > 0) {
+              setSelectedSong(songs[0]);
+              setCurrentSlideIndex(0);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading pending songs:', error);
+          localStorage.removeItem('pendingSongs');
+        }
+      }
+    };
+
+    checkPendingSongs();
+
+    // Set up listener for storage events
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'pendingSongs' && e.newValue) {
+        checkPendingSongs();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // Check periodically for same-window updates
+    const interval = setInterval(checkPendingSongs, 1000);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
@@ -1037,8 +1085,19 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Unified Navigation functions
   const goToPrevious = React.useCallback(async () => {
+    // For songs, navigate through slides
+    if (selectedSong && currentSlideIndex > 0) {
+      const newIndex = currentSlideIndex - 1;
+      console.log('⬅️ Moving to song slide:', newIndex);
+      setCurrentSlideIndex(newIndex);
+
+      // Send to live display if in presentation mode
+      if (presentationMode === 'live' && liveDisplayActive && selectedSong.slides && selectedSong.slides[newIndex]) {
+        await sendSlideToLive(selectedSong.slides[newIndex], selectedSong, newIndex, newIndex);
+      }
+    }
     // For scriptures with single verse, navigate through Bible
-    if (selectedItem?.type === 'scripture' && selectedItem.slides?.length === 1) {
+    else if (selectedItem?.type === 'scripture' && selectedItem.slides?.length === 1) {
       if (!scriptureNav.canNavigatePrevious) return;
 
       console.log('⬆️ Navigating to previous verse in Bible');
@@ -1063,11 +1122,22 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         await sendSlideToLive(selectedItem.slides[newIndex], selectedItem, newIndex);
       }
     }
-  }, [selectedItem, currentSlideIndex, scriptureNav, dispatch, presentationMode, liveDisplayActive, sendSlideToLive, handleScriptureSelect]);
+  }, [selectedSong, selectedItem, currentSlideIndex, scriptureNav, dispatch, presentationMode, liveDisplayActive, sendSlideToLive, handleScriptureSelect]);
 
   const goToNext = React.useCallback(async () => {
+    // For songs, navigate through slides
+    if (selectedSong && selectedSong.slides && currentSlideIndex < selectedSong.slides.length - 1) {
+      const newIndex = currentSlideIndex + 1;
+      console.log('➡️ Moving to song slide:', newIndex);
+      setCurrentSlideIndex(newIndex);
+
+      // Send to live display if in presentation mode
+      if (presentationMode === 'live' && liveDisplayActive && selectedSong.slides[newIndex]) {
+        await sendSlideToLive(selectedSong.slides[newIndex], selectedSong, newIndex, newIndex);
+      }
+    }
     // For scriptures with single verse, navigate through Bible
-    if (selectedItem?.type === 'scripture' && selectedItem.slides?.length === 1) {
+    else if (selectedItem?.type === 'scripture' && selectedItem.slides?.length === 1) {
       if (!scriptureNav.canNavigateNext) return;
 
       console.log('⬇️ Navigating to next verse in Bible');
@@ -1092,7 +1162,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         await sendSlideToLive(selectedItem.slides[newIndex], selectedItem, newIndex);
       }
     }
-  }, [selectedItem, currentSlideIndex, scriptureNav, dispatch, presentationMode, liveDisplayActive, sendSlideToLive, handleScriptureSelect]);
+  }, [selectedSong, selectedItem, currentSlideIndex, scriptureNav, dispatch, presentationMode, liveDisplayActive, sendSlideToLive, handleScriptureSelect]);
 
   // Keyboard shortcuts for presentation control
   useEffect(() => {
@@ -1499,7 +1569,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     // TODO: Open plan creation modal with current items
   };
 
-  const currentSlide = selectedItem?.slides?.[currentSlideIndex];
+  const currentSlide = selectedSong?.slides?.[currentSlideIndex] || selectedItem?.slides?.[currentSlideIndex];
 
   // Debug: Log currentSlideIndex changes and update active verses
   useEffect(() => {
@@ -1693,6 +1763,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           <div className="flex border-b border-gray-700 bg-gray-900">
             {[
               { key: 'scripture', label: 'Scripture', icon: BookOpen, color: 'purple' },
+              { key: 'songs', label: 'Songs', icon: Music, color: 'orange' },
               { key: 'plan', label: 'Current Service', icon: Play, color: 'green' },
               { key: 'plans', label: 'Plan Manager', icon: Calendar, color: 'blue' }
             ].map(({ key, label, icon: Icon, color }) => {
@@ -1704,6 +1775,11 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   active: 'bg-purple-600 text-white border-b-4 border-purple-400 shadow-lg shadow-purple-900/50',
                   inactive: 'bg-gray-900 text-gray-400 hover:bg-purple-900/20 hover:text-purple-300',
                   icon: 'text-purple-400'
+                },
+                orange: {
+                  active: 'bg-orange-600 text-white border-b-4 border-orange-400 shadow-lg shadow-orange-900/50',
+                  inactive: 'bg-gray-900 text-gray-400 hover:bg-orange-900/20 hover:text-orange-300',
+                  icon: 'text-orange-400'
                 },
                 green: {
                   active: 'bg-green-600 text-white border-b-4 border-green-400 shadow-lg shadow-green-900/50',
@@ -1717,7 +1793,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 }
               };
 
-              const itemCount = key === 'plan' ? serviceItems.length : 0;
+              const itemCount = key === 'plan' ? serviceItems.length : key === 'songs' ? pendingSongs.length : 0;
 
               return (
                 <button
@@ -1734,11 +1810,11 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   <Icon className={`w-4 h-4 ${isActive ? 'animate-pulse' : ''}`} />
                   <span>{label}</span>
 
-                  {/* Item count badge for Current Service tab */}
-                  {key === 'plan' && itemCount > 0 && (
+                  {/* Item count badge for Current Service and Songs tabs */}
+                  {(key === 'plan' || key === 'songs') && itemCount > 0 && (
                     <span className={`
                       ml-1 px-2 py-0.5 rounded-full text-xs font-bold
-                      ${isActive ? 'bg-white/20 text-white' : 'bg-green-900/50 text-green-400'}
+                      ${isActive ? 'bg-white/20 text-white' : key === 'plan' ? 'bg-green-900/50 text-green-400' : 'bg-orange-900/50 text-orange-400'}
                     `}>
                       {itemCount}
                     </span>
@@ -1751,6 +1827,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                       style={{
                         backgroundImage: color === 'purple'
                           ? 'linear-gradient(to right, transparent, rgb(192, 132, 252), transparent)'
+                          : color === 'orange'
+                          ? 'linear-gradient(to right, transparent, rgb(251, 146, 60), transparent)'
                           : color === 'green'
                           ? 'linear-gradient(to right, transparent, rgb(74, 222, 128), transparent)'
                           : 'linear-gradient(to right, transparent, rgb(96, 165, 250), transparent)'
@@ -1853,6 +1931,137 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     defaultVersion="kjv"
                     activeVerses={activeVerseNumbers}
                   />
+                )}
+              </div>
+            )}
+
+            {activeTab === 'songs' && (
+              <div className="space-y-4">
+                <div className="mb-3">
+                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <Music className="w-5 h-5 text-orange-400" />
+                    Song Presentation
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Songs ready to present • Click to preview • Double-click to present live
+                  </p>
+                </div>
+
+                {pendingSongs.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Music className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                    <div className="text-lg font-medium mb-2">No songs added yet</div>
+                    <p className="text-sm">
+                      Go to the Songs page and click "Add to Service" to add songs for presentation
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {pendingSongs.map((song, index) => (
+                      <div
+                        key={song.id}
+                        className={`
+                          group relative bg-card border rounded-lg p-4 cursor-pointer transition-all
+                          ${selectedSong?.id === song.id
+                            ? 'border-orange-500 bg-orange-900/20 shadow-lg shadow-orange-900/50'
+                            : 'border-border hover:border-orange-400 hover:bg-orange-900/10'
+                          }
+                        `}
+                        onClick={() => {
+                          setSelectedSong(song);
+                          setCurrentSlideIndex(0);
+                        }}
+                        onDoubleClick={async () => {
+                          setSelectedSong(song);
+                          setCurrentSlideIndex(0);
+                          if (!liveDisplayActive) {
+                            await createLiveDisplay();
+                          }
+                          if (song.slides && song.slides.length > 0) {
+                            await sendSlideToLive(song.slides[0], song, 0, 0);
+                            setIsPresenting(true);
+                          }
+                        }}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Music className="w-4 h-4 text-orange-400" />
+                              <h4 className="font-semibold text-foreground">{song.title}</h4>
+                              {selectedSong?.id === song.id && (
+                                <span className="px-2 py-0.5 bg-orange-600 text-white text-xs rounded-full">
+                                  Selected
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-muted-foreground mb-2">
+                              {song.content?.author && <span>{song.content.author}</span>}
+                              {song.content?.artist && song.content.artist !== song.content.author && (
+                                <span> • {song.content.artist}</span>
+                              )}
+                              {song.slides && (
+                                <span className="ml-2">• {song.slides.length} slides</span>
+                              )}
+                            </div>
+                            {song.content?.key && (
+                              <div className="text-xs text-muted-foreground">
+                                Key: {song.content.key}
+                                {song.content?.tempo && ` • Tempo: ${song.content.tempo}`}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/songs/${song.content?.id || song.id.replace('song-', '').split('-')[0]}`);
+                              }}
+                              className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newSongs = pendingSongs.filter(s => s.id !== song.id);
+                                setPendingSongs(newSongs);
+                                localStorage.setItem('pendingSongs', JSON.stringify(newSongs));
+                                if (selectedSong?.id === song.id) {
+                                  setSelectedSong(null);
+                                }
+                              }}
+                              className="px-3 py-1.5 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Slide thumbnail preview */}
+                        {selectedSong?.id === song.id && song.slides && song.slides.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-border">
+                            <div className="text-xs font-medium text-muted-foreground mb-2">Preview</div>
+                            <div className="grid grid-cols-4 gap-2">
+                              {song.slides.slice(0, 4).map((slide, slideIdx) => (
+                                <div
+                                  key={slide.id}
+                                  className="aspect-video bg-black rounded border border-border overflow-hidden cursor-pointer hover:border-orange-400"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCurrentSlideIndex(slideIdx);
+                                  }}
+                                >
+                                  <div className="w-full h-full flex items-center justify-center text-xs text-white/50">
+                                    Slide {slideIdx + 1}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
