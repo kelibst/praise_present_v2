@@ -247,7 +247,11 @@ export const SortableServiceItem: React.FC<SortableServiceItemProps> = ({
 
                 <div className="text-sm text-muted-foreground flex items-center gap-2">
                   <span className="capitalize">{item.type}</span>
-                  {item.slides && <span>• {item.slides.length} slides</span>}
+                  {item.slides && item.slides.length > 0 ? (
+                    <span className="text-green-400">• {item.slides.length} slide{item.slides.length !== 1 ? 's' : ''}</span>
+                  ) : (
+                    <span className="text-yellow-400">• No slides yet</span>
+                  )}
                   {item.duration && <span>• {item.duration}s</span>}
                   {item.notes && <span>• Has notes</span>}
                 </div>

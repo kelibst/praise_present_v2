@@ -1,7 +1,8 @@
 import React from "react";
 import AppRoutes from "../routes";
 import { usePresentationInit } from "../hooks/usePresentationInit";
-import LiveDisplayRenderer from "../components/LiveDisplayRenderer";
+// TODO: Create LiveDisplayRenderer component
+// import LiveDisplayRenderer from "../components/LiveDisplayRenderer";
 
 
 const App: React.FC = () => {
@@ -15,8 +16,10 @@ const App: React.FC = () => {
 
   // If this is the live display window, render only the LiveDisplayRenderer
   if (isLiveDisplayMode) {
-    console.log("App.tsx: Rendering LiveDisplayRenderer for live display mode");
-    return <LiveDisplayRenderer width={1920} height={1080} />;
+    console.log("App.tsx: Live display mode detected but LiveDisplayRenderer not implemented yet");
+    // TODO: Implement LiveDisplayRenderer
+    // return <LiveDisplayRenderer width={1920} height={1080} />;
+    return <div>Live Display Mode (Not Implemented)</div>;
   }
 
   // Main application component with initialization

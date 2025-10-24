@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Music, BookOpen, FileText, Mic, Search, X } from 'lucide-react';
+import { Music, BookOpen, FileText, Mic, Search, X, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 // ==================== INTERFACES ====================
 
@@ -37,6 +38,7 @@ interface InlineSongSelectorProps {
 }
 
 export const InlineSongSelector: React.FC<InlineSongSelectorProps> = ({ onSelect, onCancel }) => {
+  const navigate = useNavigate();
   const [songs, setSongs] = useState<Song[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -142,14 +144,13 @@ export const InlineSongSelector: React.FC<InlineSongSelectorProps> = ({ onSelect
         ) : (
           <div className="space-y-2">
             {filteredSongs.map(song => (
-              <button
+              <div
                 key={song.id}
-                onClick={() => onSelect(song)}
-                className="w-full p-3 bg-secondary hover:bg-secondary/80 rounded-lg text-left transition-colors group"
+                className="p-3 bg-secondary rounded-lg transition-colors group"
               >
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
-                    <h4 className="font-medium text-foreground group-hover:text-blue-400 transition-colors">
+                    <h4 className="font-medium text-foreground">
                       {song.title}
                     </h4>
                     {song.artist && (
@@ -170,9 +171,28 @@ export const InlineSongSelector: React.FC<InlineSongSelectorProps> = ({ onSelect
                       </div>
                     )}
                   </div>
-                  <Music className="w-4 h-4 text-blue-400 ml-2 flex-shrink-0" />
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => {
+                        onCancel();
+                        navigate(`/songs/${song.id}`);
+                      }}
+                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs flex items-center gap-1 whitespace-nowrap"
+                      title="View details and customize slides"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Details
+                    </button>
+                    <button
+                      onClick={() => onSelect(song)}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs whitespace-nowrap"
+                      title="Quick add to service"
+                    >
+                      Quick Add
+                    </button>
+                  </div>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}

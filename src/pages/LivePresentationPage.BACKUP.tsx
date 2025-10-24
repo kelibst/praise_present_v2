@@ -1885,7 +1885,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                </div>
+                <div>
+     <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">{serviceItems.length} items</span>
                     {serviceItems.length > 0 && (
                       <button
@@ -1921,7 +1923,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                       + Announcement
                     </button>
                   </div>
-                </div>
+                  </div>
 
                 {serviceItems.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">

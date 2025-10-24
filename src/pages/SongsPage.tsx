@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Music, Search, Filter, Clock, User, Tag, ChevronDown, ChevronRight, Plus, Edit, Trash2, Save, X, Play, Settings, Download, Upload } from 'lucide-react';
+import { Music, Search, Filter, Clock, User, Tag, ChevronDown, ChevronRight, Plus, Edit, Trash2, Save, X, Play, Settings, Download, Upload, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { sampleSongs } from '../../data/sample-songs';
 
 interface Song {
@@ -39,6 +40,7 @@ interface ServiceItem {
 }
 
 const SongsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [songs, setSongs] = useState<Song[]>(sampleSongs);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -121,6 +123,10 @@ const SongsPage: React.FC = () => {
 
     // Show feedback to user
     alert(`"${song.title}" has been added to the current service!`);
+  };
+
+  const handleViewSongDetails = (song: Song) => {
+    navigate(`/songs/${song.id}`);
   };
 
   const handleEditSong = (song: Song) => {
@@ -672,11 +678,18 @@ const SongsPage: React.FC = () => {
                           {/* Action Buttons */}
                           <div className="flex gap-2 pt-2">
                             <button
+                              onClick={() => handleViewSongDetails(song)}
+                              className="flex-1 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-medium flex items-center justify-center gap-2"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                              View Details & Slides
+                            </button>
+                            <button
                               onClick={() => handleAddToService(song)}
-                              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium flex items-center justify-center gap-2"
+                              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
                             >
                               <Play className="w-4 h-4" />
-                              Add to Current Service
+                              Quick Add
                             </button>
                             <button
                               onClick={() => handleEditSong(song)}

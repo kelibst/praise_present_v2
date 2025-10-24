@@ -85,15 +85,12 @@ import {
 } from '../components/plans/InlineMediaSelectors';
 
 // Import execution components
-import { TimeTracker } from '../components/plans/TimeTracker';
-import { PlanTimeline } from '../components/plans/PlanTimeline';
 import { LivePlanControls } from '../components/plans/LivePlanControls';
 
 // Import plan management components
 import { TemplateLibrary } from '../components/plans/TemplateLibrary';
 import { PlanSearch } from '../components/plans/PlanSearch';
 import { NextItemPreview } from '../components/plans/NextItemPreview';
-import { PreServiceChecklist } from '../components/plans/PreServiceChecklist';
 
 // Import scripture navigation service
 import { scriptureNavigationService, NavigatedVerse, VerseGroup } from '../lib/services/scriptureNavigationService';
@@ -189,7 +186,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Service execution state
   const [isExecutingService, setIsExecutingService] = useState(false);
-  const [checklist, setChecklist] = useState<any[]>([]);
 
   // Plan integration management
   const { handlePlanSelect, handlePlanCreate } = usePlanIntegration({
@@ -1863,14 +1859,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
             {activeTab === 'plan' && (
               <div className="space-y-4">
-                {/* TimeTracker - Shows at top during execution */}
-                {serviceItems.length > 0 && (
-                  <TimeTracker
-                    plan={selectedPlan}
-                    className="mb-4"
-                  />
-                )}
-
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -1885,7 +1873,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                </div>
+                <div>
+ <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">{serviceItems.length} items</span>
                     {serviceItems.length > 0 && (
                       <button
@@ -2070,16 +2060,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   </SortableContext>
                 </DndContext>
 
-                {/* PlanTimeline - Shows at bottom with visual overview */}
-                {serviceItems.length > 0 && (
-                  <PlanTimeline
-                    plan={selectedPlan}
-                    serviceItems={serviceItems}
-                    currentItemId={selectedItem?.id}
-                    className="mt-6"
-                  />
-                )}
-
                 {/* LivePlanControls - Service execution controls */}
                 {serviceItems.length > 0 && (
                   <LivePlanControls
@@ -2092,39 +2072,17 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 )}
 
                 {/* Service Planning & Execution Assistance */}
-                {serviceItems.length > 0 && (
-                  <div className="grid grid-cols-2 gap-4 mt-6">
+                {serviceItems.length > 0 && isExecutingService && selectedItem && (
+                  <div className="mt-6">
                     {/* Next Item Preview - Shows when executing */}
-                    {isExecutingService && selectedItem && (
-                      <div className="col-span-1">
-                        <NextItemPreview
-                          currentItem={selectedItem}
-                          nextItem={serviceItems[serviceItems.findIndex(item => item.id === selectedItem.id) + 1]}
-                          upcomingItems={serviceItems.slice(
-                            serviceItems.findIndex(item => item.id === selectedItem.id) + 1,
-                            serviceItems.findIndex(item => item.id === selectedItem.id) + 4
-                          )}
-                        />
-                      </div>
-                    )}
-
-                    {/* Pre-Service Checklist - Shows when not executing */}
-                    {!isExecutingService && (
-                      <div className={isExecutingService ? 'col-span-1' : 'col-span-2'}>
-                        <PreServiceChecklist
-                          planItems={serviceItems.map(item => ({
-                            id: item.id,
-                            type: item.type,
-                            title: item.title,
-                            duration: item.duration,
-                            order: item.order || 0,
-                            content: item.content
-                          }))}
-                          checklist={checklist}
-                          onChange={setChecklist}
-                        />
-                      </div>
-                    )}
+                    <NextItemPreview
+                      currentItem={selectedItem}
+                      nextItem={serviceItems[serviceItems.findIndex(item => item.id === selectedItem.id) + 1]}
+                      upcomingItems={serviceItems.slice(
+                        serviceItems.findIndex(item => item.id === selectedItem.id) + 1,
+                        serviceItems.findIndex(item => item.id === selectedItem.id) + 4
+                      )}
+                    />
                   </div>
                 )}
               </div>
