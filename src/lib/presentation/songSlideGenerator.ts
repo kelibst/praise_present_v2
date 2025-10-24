@@ -15,7 +15,6 @@ export interface Song {
   artist?: string;
   author: string;
   lyrics: string;
-  chords?: string;
   key: string;
   tempo: string;
   category: string;
@@ -32,7 +31,6 @@ export interface SongVerse {
   type: 'verse' | 'chorus' | 'bridge' | 'tag' | 'intro' | 'outro';
   number?: number;
   lyrics: string;
-  chords?: string;
 }
 
 export interface SongSlideSettings {
@@ -51,7 +49,6 @@ export interface SongSlideSettings {
     };
   };
   showSectionLabels?: boolean;
-  showChords?: boolean;
   showCopyright?: boolean;
   maxLinesPerSlide?: number;
 }
@@ -72,7 +69,6 @@ export interface SongSlideConfiguration {
   showTitleSlide: boolean;
   showCopyrightSlide: boolean;
   showSectionLabels: boolean;
-  showChords: boolean;
 }
 
 const DEFAULT_CONFIG: SongSlideConfiguration = {
@@ -82,8 +78,7 @@ const DEFAULT_CONFIG: SongSlideConfiguration = {
   minFontSize: 28,
   showTitleSlide: true,
   showCopyrightSlide: true,
-  showSectionLabels: true,
-  showChords: false
+  showSectionLabels: true
 };
 
 /**
@@ -141,7 +136,6 @@ export class SongSlideGenerator {
       author: song.author,
       key: song.key,
       tempo: parseInt(song.tempo) || undefined,
-      showChords: false,
       showCopyright: false
     };
 
@@ -170,8 +164,6 @@ export class SongSlideGenerator {
         lyrics,
         section: section.type,
         sectionNumber: section.number,
-        chords: this.config.showChords ? section.lyrics : undefined, // TODO: Extract chords properly
-        showChords: this.config.showChords,
         showCopyright: false
       };
 
@@ -203,7 +195,6 @@ export class SongSlideGenerator {
       copyright: song.copyright,
       ccli: song.ccliNumber,
       author: song.author,
-      showChords: false,
       showCopyright: true
     };
 
@@ -282,7 +273,7 @@ export class SongSlideGenerator {
   private applySongSettings(song: Song): void {
     if (!song.slideSettings) return;
 
-    const { typography, showSectionLabels, showChords } = song.slideSettings;
+    const { typography, showSectionLabels } = song.slideSettings;
 
     // Update template style
     const style: SongTemplateStyle = {
@@ -293,11 +284,6 @@ export class SongSlideGenerator {
     };
 
     this.template.setStyle(style);
-
-    // Update config
-    if (showChords !== undefined) {
-      this.config.showChords = showChords;
-    }
   }
 
   /**

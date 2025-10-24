@@ -6,12 +6,12 @@ export interface SongSection {
   type: 'verse' | 'chorus' | 'bridge' | 'pre-chorus' | 'outro' | 'intro';
   number?: number;
   lyrics: string;
-  chords?: string;
 }
 
 interface SongSectionEditorProps {
   sections: SongSection[];
   onChange: (sections: SongSection[]) => void;
+  onSectionClick?: (sectionIndex: number) => void;
   readOnly?: boolean;
   className?: string;
 }
@@ -37,6 +37,7 @@ const SECTION_LABELS = {
 export const SongSectionEditor: React.FC<SongSectionEditorProps> = ({
   sections,
   onChange,
+  onSectionClick,
   readOnly = false,
   className = ''
 }) => {
@@ -124,7 +125,12 @@ export const SongSectionEditor: React.FC<SongSectionEditorProps> = ({
                 {/* Section Header */}
                 <div
                   className="p-3 cursor-pointer hover:bg-secondary/20 transition-colors flex items-center justify-between"
-                  onClick={() => !isEditing && toggleExpand(section.id)}
+                  onClick={() => {
+                    if (!isEditing) {
+                      toggleExpand(section.id);
+                      onSectionClick?.(index);
+                    }
+                  }}
                 >
                   <div className="flex items-center gap-3 flex-1">
                     {!readOnly && (
@@ -222,19 +228,6 @@ export const SongSectionEditor: React.FC<SongSectionEditorProps> = ({
                       <div className="text-xs text-muted-foreground mt-1">
                         {section.lyrics.split('\n').length} lines • {section.lyrics.length} characters
                       </div>
-                    </div>
-
-                    {/* Chords (optional) */}
-                    <div>
-                      <label className="block text-xs font-medium mb-1 text-muted-foreground">Chords (optional)</label>
-                      <textarea
-                        value={section.chords || ''}
-                        onChange={(e) => updateSection(section.id, { chords: e.target.value })}
-                        disabled={readOnly}
-                        className="w-full px-3 py-2 border border-border rounded bg-input text-foreground text-sm disabled:opacity-50 font-mono"
-                        rows={2}
-                        placeholder="C - G - Am - F"
-                      />
                     </div>
                   </div>
                 )}

@@ -58,7 +58,6 @@ const SongDetailsPage: React.FC = () => {
       lineSpacing: 1.4
     },
     showSectionLabels: true,
-    showChords: false,
     showCopyright: true,
     maxLinesPerSlide: 8
   });
@@ -130,7 +129,6 @@ const SongDetailsPage: React.FC = () => {
     const generator = new SongSlideGenerator({
       maxLinesPerSlide: slideSettings.maxLinesPerSlide || 8,
       showSectionLabels: slideSettings.showSectionLabels ?? true,
-      showChords: slideSettings.showChords ?? false,
       showCopyrightSlide: slideSettings.showCopyright ?? true
     });
 
@@ -139,13 +137,32 @@ const SongDetailsPage: React.FC = () => {
 
   const currentSlide = slides[currentSlideIndex];
 
+  // Helper to create service item for live display
+  const createServiceItem = () => {
+    if (!song || !metadata) return null;
+    return {
+      id: `song-${song.id}`,
+      type: 'song' as const,
+      title: metadata.title,
+      content: song,
+      slides: slides.map(slide => ({
+        id: slide.id,
+        shapes: slide.shapes,
+        background: slide.background as any
+      }))
+    };
+  };
+
   // Slide navigation
   const goToNextSlide = () => {
     if (currentSlideIndex < slides.length - 1) {
       const newIndex = currentSlideIndex + 1;
       setCurrentSlideIndex(newIndex);
       if (isPresenting && liveDisplayActive) {
-        sendSlideToLive(slides[newIndex]);
+        const serviceItem = createServiceItem();
+        if (serviceItem) {
+          sendSlideToLive(slides[newIndex] as any, serviceItem, newIndex, newIndex);
+        }
       }
     }
   };
@@ -155,7 +172,10 @@ const SongDetailsPage: React.FC = () => {
       const newIndex = currentSlideIndex - 1;
       setCurrentSlideIndex(newIndex);
       if (isPresenting && liveDisplayActive) {
-        sendSlideToLive(slides[newIndex]);
+        const serviceItem = createServiceItem();
+        if (serviceItem) {
+          sendSlideToLive(slides[newIndex] as any, serviceItem, newIndex, newIndex);
+        }
       }
     }
   };
@@ -163,7 +183,10 @@ const SongDetailsPage: React.FC = () => {
   const goToSlide = (index: number) => {
     setCurrentSlideIndex(index);
     if (isPresenting && liveDisplayActive) {
-      sendSlideToLive(slides[index]);
+      const serviceItem = createServiceItem();
+      if (serviceItem) {
+        sendSlideToLive(slides[index] as any, serviceItem, index, index);
+      }
     }
   };
 
@@ -173,8 +196,11 @@ const SongDetailsPage: React.FC = () => {
       await createLiveDisplay();
     }
     if (currentSlide) {
-      await sendSlideToLive(currentSlide);
-      setIsPresenting(true);
+      const serviceItem = createServiceItem();
+      if (serviceItem) {
+        await sendSlideToLive(currentSlide as any, serviceItem, currentSlideIndex, currentSlideIndex);
+        setIsPresenting(true);
+      }
     }
   };
 
@@ -227,6 +253,28 @@ const SongDetailsPage: React.FC = () => {
     alert('Song saved successfully!');
   };
 
+  // Handle section click to jump to corresponding slide
+  const handleSectionClick = (sectionIndex: number) => {
+    // Title slide is at index 0, so section slides start at index 1
+    // Find the first slide for this section
+    let targetSlideIndex = 1; // Start after title slide
+
+    for (let i = 0; i < sectionIndex; i++) {
+      // Count how many slides each previous section generated
+      const section = sections[i];
+      const lyricParts = Math.ceil(section.lyrics.split('\n').length / (slideSettings.maxLinesPerSlide || 8));
+      targetSlideIndex += lyricParts;
+    }
+
+    setCurrentSlideIndex(targetSlideIndex);
+    if (isPresenting && liveDisplayActive) {
+      const serviceItem = createServiceItem();
+      if (serviceItem) {
+        sendSlideToLive(slides[targetSlideIndex] as any, serviceItem, targetSlideIndex, targetSlideIndex);
+      }
+    }
+  };
+
   if (!song || !metadata) {
     return (
       <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
@@ -276,19 +324,21 @@ const SongDetailsPage: React.FC = () => {
             {!panelVisibility.leftPanel && (
               <button
                 onClick={() => togglePanel('leftPanel')}
-                className="p-2 rounded hover:bg-secondary transition-colors text-muted-foreground"
+                className="px-3 py-1.5 rounded hover:bg-secondary transition-colors text-muted-foreground text-sm flex items-center gap-1.5"
                 title="Show lyrics panel"
               >
-                <ChevronRight className="w-4 h-4" />
+                <Music className="w-4 h-4" />
+                Lyrics
               </button>
             )}
             {!panelVisibility.rightPanel && (
               <button
                 onClick={() => togglePanel('rightPanel')}
-                className="p-2 rounded hover:bg-secondary transition-colors text-muted-foreground"
+                className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-1.5 transition-colors"
                 title="Show settings panel"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <SettingsIcon className="w-4 h-4" />
+                Settings
               </button>
             )}
 
@@ -310,13 +360,13 @@ const SongDetailsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Content - 3 Panel Layout */}
-      <PanelGroup direction="horizontal" className="flex-1">
+      {/* Main Content - 3 Panel Layout - Fixed height, no page scroll */}
+      <PanelGroup direction="horizontal" className="flex-1 overflow-hidden">
         {/* Left Panel - Lyrics & Sections */}
         {panelVisibility.leftPanel && (
           <>
             <Panel defaultSize={25} minSize={20} maxSize={40}>
-              <div className="h-full bg-card border-r border-border flex flex-col">
+              <div className="h-full bg-card border-r border-border">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-secondary/50">
                   <div className="text-sm font-medium">Lyrics & Sections</div>
                   <button
@@ -328,10 +378,11 @@ const SongDetailsPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-3">
+                <div className="p-3 overflow-y-auto" style={{ height: 'calc(100vh - 160px)' }}>
                   <SongSectionEditor
                     sections={sections}
                     onChange={setSections}
+                    onSectionClick={handleSectionClick}
                   />
                 </div>
               </div>
@@ -473,7 +524,7 @@ const SongDetailsPage: React.FC = () => {
           <>
             <PanelResizeHandle className="w-1 bg-border hover:bg-blue-500 transition-colors" />
             <Panel defaultSize={25} minSize={20} maxSize={35}>
-              <div className="h-full bg-card border-l border-border flex flex-col">
+              <div className="h-full bg-card border-l border-border">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-secondary/50">
                   <div className="text-sm font-medium flex items-center gap-2">
                     <SettingsIcon className="w-4 h-4" />
@@ -488,7 +539,7 @@ const SongDetailsPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                <div className="p-3 overflow-y-auto space-y-4" style={{ height: 'calc(100vh - 160px)' }}>
                   <SongSlideSettingsPanel
                     settings={slideSettings}
                     onChange={setSlideSettings}

@@ -184,16 +184,6 @@ export const SongSlideSettingsPanel: React.FC<SongSlideSettingsProps> = ({
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
-              checked={settings.showChords ?? false}
-              onChange={(e) => handleToggle('showChords', e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-sm text-foreground">Show chords</span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
               checked={settings.showCopyright ?? true}
               onChange={(e) => handleToggle('showCopyright', e.target.checked)}
               className="rounded"
