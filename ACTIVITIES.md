@@ -4,6 +4,49 @@ This file tracks significant development activities for PraisePresent v2.
 
 ---
 
+## 2025-01-25 - 🎯 REFACTORED TO CENTRALIZED PRESENTATION STATE MACHINE
+**Time:** Evening Session
+**Description:** Implemented a robust, single-source-of-truth presentation state machine that eliminates content persistence issues and simplifies all presentation logic.
+
+**Problem Solved:**
+- Songs would persist when switching to scriptures
+- Dual state management systems (unified + legacy) caused conflicts
+- Tab switching logic was inconsistent
+- Manual synchronization between preview and live display
+
+**Solution Architecture:**
+- Created centralized `usePresentationManager` hook (atomic state machine)
+- Built standardized content builders for all content types
+- Single presentation state replaces 5+ scattered state variables
+- Automatic live display synchronization
+- Content-type agnostic design
+
+**New Files Created:**
+1. **[src/hooks/usePresentationManager.ts](src/hooks/usePresentationManager.ts)** - Centralized presentation state machine with atomic operations
+2. **[src/lib/contentBuilders.ts](src/lib/contentBuilders.ts)** - Standardized content builders for scripture, songs, announcements
+
+**Files Heavily Modified:**
+1. **[src/pages/LivePresentationPage.tsx](src/pages/LivePresentationPage.tsx)** - Migrated from dual state systems to unified PresentationManager
+
+**Technical Implementation:**
+- Single `PresentationManagerState` object replaces `presentation`, `presentationOwner`, `selectedItem`, `currentSlideIndex`, `isPresenting`, `presentationMode`
+- Atomic operations ensure no partial state updates
+- Auto-clear on tab switch (unless live presenting)
+- Content builders use actual template system to generate slides
+- Type-safe state transitions
+- Built-in navigation history
+
+**Benefits:**
+- ✅ Zero content persistence bugs
+- ✅ Predictable state transitions
+- ✅ Easier to test and debug
+- ✅ Extensible to new content types
+- ✅ Automatic live display sync
+- ✅ No race conditions possible
+- ✅ Single source of truth
+
+---
+
 ## 2025-01-25 - 🎵 COMPLETED SONG EDITOR ADVANCED FEATURES & ANNOUNCEMENT COMPONENTS
 **Time:** Late Afternoon/Evening Session
 **Description:** Implemented advanced Song editor features (sections, arrangement, lyric import, chord editor) and created Announcement enhancement components (templates, date/time picker, recurring manager).
