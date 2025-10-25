@@ -1,7 +1,5 @@
 1. Right now I have a ui right after the smart search that shows Genesis and sometimes it shows slected slide. That ui is not needed. I need to remove it and all of the codes related to it.
 
-3. The installation exe after installation start but it is full dark and nothing shows. 
-
 4. Add search online tab for scriptures where I can search for a scripture using vage references or paraphrases.
 
 

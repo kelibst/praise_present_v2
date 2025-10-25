@@ -39,13 +39,8 @@ const BookGrid: React.FC<BookGridProps> = ({ books, onBookSelect, className = ''
       `}
       title={`${book.name} - ${book.chapters} chapters`}
     >
-      {/* Book name */}
-      <div className="text-sm font-semibold text-white mb-1 text-center">
-        {book.name}
-      </div>
-
       {/* Short name */}
-      <div className="text-xs text-gray-400 mb-2">
+      <div className="text-sm font-semibold text-white mb-2 text-center">
         {book.shortName}
       </div>
 

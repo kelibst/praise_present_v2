@@ -53,6 +53,9 @@ import {
   selectCanNavigate
 } from '../lib/scriptureNavigationSlice';
 
+// Import plan execution Redux slice
+import { selectIsExecuting } from '../lib/planExecutionSlice';
+
 // Import drag and drop utilities
 import {
   DndContext,
@@ -164,6 +167,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // Scripture navigation Redux state
   const scriptureNav = useSelector(selectScriptureNavigation);
   const canNavigate = useSelector(selectCanNavigate);
+
+  // Plan execution Redux state
+  const isExecutingService = useSelector(selectIsExecuting);
 
   // ============================================
   // NEW: CENTRALIZED PRESENTATION MANAGER

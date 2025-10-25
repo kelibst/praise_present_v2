@@ -3743,9 +3743,9 @@ class LiveDisplayWindow {
       }, 100);
       this.setupWindowEvents();
       this.currentDisplayId = config.displayId;
-      if ("http://localhost:5173") {
+      if ("http://localhost:5174") {
         await this.liveWindow.loadURL(
-          `${"http://localhost:5173"}?mode=live-display`
+          `${"http://localhost:5174"}?mode=live-display`
         );
       }
       console.log("Live window created successfully");
@@ -4979,8 +4979,8 @@ const createWindow = () => {
     `).catch(console.error);
   });
   {
-    console.log("[MAIN] Loading from dev server:", "http://localhost:5173");
-    mainWindow.loadURL("http://localhost:5173");
+    console.log("[MAIN] Loading from dev server:", "http://localhost:5174");
+    mainWindow.loadURL("http://localhost:5174");
   }
   mainWindow.webContents.openDevTools();
   mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {
