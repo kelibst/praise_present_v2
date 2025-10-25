@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Monitor } from 'lucide-react';
+import { useDispatch } from 'react-redux';
+import { updateDisplayState } from '../../lib/presentationSlice';
+import type { AppDispatch } from '../../lib/store';
 import { CoordinateNormalizer, COORDINATE_SYSTEMS, Point, Bounds } from '../../rendering/utils/CoordinateTransform';
 import { ShapeSerializer, SerializedSlide } from '../../rendering/serialization/ShapeSerializer';
 
@@ -23,6 +26,7 @@ interface ServiceItem {
 
 // Hook for managing live display state and functions
 export const useLiveDisplay = () => {
+  const dispatch = useDispatch<AppDispatch>();
   const [liveDisplayActive, setLiveDisplayActive] = useState(false);
   const [liveDisplayStatus, setLiveDisplayStatus] = useState('Disconnected');
 
@@ -37,23 +41,29 @@ export const useLiveDisplay = () => {
           if (status?.hasWindow && status?.isVisible) {
             setLiveDisplayActive(true);
             setLiveDisplayStatus('Active');
+            // Sync with Redux
+            dispatch(updateDisplayState({ isActive: true }));
             console.log('✅ LiveDisplayManager: Live display is active');
           } else {
             console.log('ℹ️ LiveDisplayManager: Live display is not active');
             setLiveDisplayActive(false);
             setLiveDisplayStatus('Disconnected');
+            // Sync with Redux
+            dispatch(updateDisplayState({ isActive: false }));
           }
         } catch (error) {
           console.error('❌ LiveDisplayManager: Error checking status:', error);
           setLiveDisplayActive(false);
           setLiveDisplayStatus('Disconnected');
+          // Sync with Redux
+          dispatch(updateDisplayState({ isActive: false }));
         }
       } else {
         console.warn('⚠️ LiveDisplayManager: No electronAPI available');
       }
     };
     checkStatus();
-  }, []);
+  }, [dispatch]);
 
   const createLiveDisplay = async () => {
     try {
@@ -63,7 +73,9 @@ export const useLiveDisplay = () => {
       if (result?.success) {
         setLiveDisplayActive(true);
         setLiveDisplayStatus('Active');
-        console.log('✅ LiveDisplayManager: Live display created successfully');
+        // Sync with Redux
+        dispatch(updateDisplayState({ isActive: true }));
+        console.log('✅ LiveDisplayManager: Live display created successfully and synced to Redux');
       } else {
         console.error('❌ LiveDisplayManager: Failed to create - result:', result);
         setLiveDisplayStatus('Error');
@@ -79,6 +91,8 @@ export const useLiveDisplay = () => {
       await window.electronAPI?.invoke('live-display:close');
       setLiveDisplayActive(false);
       setLiveDisplayStatus('Disconnected');
+      // Sync with Redux
+      dispatch(updateDisplayState({ isActive: false }));
     } catch (error) {
       console.error('Failed to close live display:', error);
     }

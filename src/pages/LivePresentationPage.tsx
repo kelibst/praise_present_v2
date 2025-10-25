@@ -995,18 +995,24 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
       // Update Redux scripture navigation state
       const navigatedVerses = verses.map(v => ({ ...v })) as NavigatedVerse[];
-      const groups = scriptureNavigationService.groupConsecutiveVerses(navigatedVerses);
+
+      // Create one slide per verse (instead of grouping) for better navigation
+      const individualGroups = navigatedVerses.map(verse => ({
+        verses: [verse],
+        reference: `${verse.book} ${verse.chapter}:${verse.verse}`,
+        isConsecutive: false
+      }));
 
       dispatch(setScriptureSelection({
         verses: navigatedVerses,
-        groups: groups
+        groups: individualGroups
       }));
 
       // Build presentation content using content builder
       const scriptureContent = await buildScriptureContent(
         navigatedVerses,
         scriptureSettings,
-        groups
+        individualGroups
       );
 
       // Switch to new scripture content in presentation manager
@@ -1021,15 +1027,72 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   };
 
   // ============================================
-  // NAVIGATION FUNCTIONS - Using Presentation Manager
+  // SCRIPTURE VERSE NAVIGATION (O(1) with metadata)
+  // ============================================
+  const goToPreviousVerse = async () => {
+    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigatePrevious) return;
+
+    console.log('⬆️ Navigating to previous verse in Bible');
+    const result = await dispatch(navigateToPreviousVerse()).unwrap();
+    if (result) {
+      // Generate slide for the new verse
+      await handleScriptureSelect([result as ScriptureVerse]);
+    }
+  };
+
+  const goToNextVerse = async () => {
+    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigateNext) return;
+
+    console.log('⬇️ Navigating to next verse in Bible');
+    const result = await dispatch(navigateToNextVerse()).unwrap();
+    if (result) {
+      // Generate slide for the new verse
+      await handleScriptureSelect([result as ScriptureVerse]);
+    }
+  };
+
+  const goToPreviousChapter = async () => {
+    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigatePreviousChapter) return;
+
+    console.log('⏮️ Navigating to previous chapter');
+    const result = await dispatch(navigateToPreviousChapter()).unwrap();
+    if (result) {
+      await handleScriptureSelect([result as ScriptureVerse]);
+    }
+  };
+
+  const goToNextChapter = async () => {
+    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigateNextChapter) return;
+
+    console.log('⏭️ Navigating to next chapter');
+    const result = await dispatch(navigateToNextChapter()).unwrap();
+    if (result) {
+      await handleScriptureSelect([result as ScriptureVerse]);
+    }
+  };
+
+  // ============================================
+  // UNIFIED NAVIGATION (Smart routing)
   // ============================================
   const goToPrevious = React.useCallback(async () => {
-    await presentation.previous();
-  }, [presentation]);
+    // For scripture with O(1) navigation metadata, use verse navigation
+    if (presentation.current.content?.type === 'scripture' && scriptureNav.canNavigatePrevious) {
+      await goToPreviousVerse();
+    } else {
+      // For other content types, use slide navigation
+      await presentation.previous();
+    }
+  }, [presentation, scriptureNav.canNavigatePrevious]);
 
   const goToNext = React.useCallback(async () => {
-    await presentation.next();
-  }, [presentation]);
+    // For scripture with O(1) navigation metadata, use verse navigation
+    if (presentation.current.content?.type === 'scripture' && scriptureNav.canNavigateNext) {
+      await goToNextVerse();
+    } else {
+      // For other content types, use slide navigation
+      await presentation.next();
+    }
+  }, [presentation, scriptureNav.canNavigateNext]);
 
   // Keyboard shortcuts for presentation control
   useEffect(() => {
@@ -1085,49 +1148,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       window.removeEventListener('keydown', handleKeyPress);
     };
   }, [presentation, goToNext, goToPrevious]);
-
-  // Cross-verse navigation functions
-  const goToPreviousVerse = async () => {
-    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigatePrevious) return;
-
-    console.log('⬆️ Navigating to previous verse in Bible');
-    const result = await dispatch(navigateToPreviousVerse()).unwrap();
-    if (result) {
-      // Generate slide for the new verse
-      await handleScriptureSelect([result as ScriptureVerse]);
-    }
-  };
-
-  const goToNextVerse = async () => {
-    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigateNext) return;
-
-    console.log('⬇️ Navigating to next verse in Bible');
-    const result = await dispatch(navigateToNextVerse()).unwrap();
-    if (result) {
-      // Generate slide for the new verse
-      await handleScriptureSelect([result as ScriptureVerse]);
-    }
-  };
-
-  const goToPreviousChapter = async () => {
-    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigatePreviousChapter) return;
-
-    console.log('⏮️ Navigating to previous chapter');
-    const result = await dispatch(navigateToPreviousChapter()).unwrap();
-    if (result) {
-      await handleScriptureSelect([result as ScriptureVerse]);
-    }
-  };
-
-  const goToNextChapter = async () => {
-    if (selectedItem?.type !== 'scripture' || !scriptureNav.canNavigateNextChapter) return;
-
-    console.log('⏭️ Navigating to next chapter');
-    const result = await dispatch(navigateToNextChapter()).unwrap();
-    if (result) {
-      await handleScriptureSelect([result as ScriptureVerse]);
-    }
-  };
 
   // Present current slide (go live)
   const presentCurrentSlide = async () => {
@@ -2427,7 +2447,11 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     <div className="flex items-center justify-center gap-4 mb-2">
                       <button
                         onClick={goToPrevious}
-                        disabled={!presentation.canGoPrevious}
+                        disabled={
+                          presentation.current.content?.type === 'scripture'
+                            ? !scriptureNav.canNavigatePrevious
+                            : !presentation.canGoPrevious
+                        }
                         className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         title={`Slide ${presentation.current.slideIndex + 1} of ${presentation.slideCount}`}
                       >
@@ -2465,7 +2489,11 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                       <button
                         onClick={goToNext}
-                        disabled={!presentation.canGoNext}
+                        disabled={
+                          presentation.current.content?.type === 'scripture'
+                            ? !scriptureNav.canNavigateNext
+                            : !presentation.canGoNext
+                        }
                         className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         title={`Slide ${presentation.current.slideIndex + 1} of ${presentation.slideCount}`}
                       >
