@@ -7,6 +7,7 @@ import serviceItemsSlice from './serviceItemsSlice';
 import mediaSlice from './mediaSlice';
 import scriptureNavigationSlice from './scriptureNavigationSlice';
 import planExecutionSlice from './planExecutionSlice';
+import { presentationMiddleware } from './middleware/presentationMiddleware';
 
 // Store configuration with presentation slice
 export const store = configureStore({
@@ -27,10 +28,12 @@ export const store = configureStore({
         // Shape instances need to stay as class instances for rendering
         // We serialize/deserialize when saving to/loading from localStorage
         // Ignore media items - they contain Date objects from Prisma
-        ignoredActionPaths: ['payload', 'payload.slides', 'meta.arg', 'payload.createdAt', 'payload.updatedAt', 'payload.lastUsed'],
-        ignoredPaths: ['serviceItems', 'media.items'],
+        // Ignore presentation slides - they contain Shape class instances
+        ignoredActionPaths: ['payload', 'payload.slides', 'payload.content', 'meta.arg', 'payload.createdAt', 'payload.updatedAt', 'payload.lastUsed'],
+        ignoredPaths: ['serviceItems', 'media.items', 'presentation.current.content.slides', 'presentation.display.currentSlide', 'presentation.history'],
       },
-    }),
+    })
+    .concat(presentationMiddleware), // Add presentation middleware for auto live display sync
 });
 
 export type RootState = ReturnType<typeof store.getState>;

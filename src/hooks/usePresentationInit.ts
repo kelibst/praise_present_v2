@@ -1,32 +1,23 @@
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { AppDispatch } from "../lib/store";
-import {
-  initializePresentationSystem,
-  sendContentToLiveDisplay,
-  createDefaultPlaceholder,
-} from "../lib/presentationSlice";
 
+/**
+ * Presentation initialization hook
+ *
+ * Note: The new Redux-based presentation system initializes automatically
+ * through the Redux store. This hook is kept for compatibility but is
+ * now essentially a no-op.
+ *
+ * The presentation system will be ready to use immediately through the
+ * usePresentation() hook.
+ */
 export const usePresentationInit = () => {
   const dispatch = useDispatch<AppDispatch>();
 
   useEffect(() => {
-    // Initialize presentation system with placeholders on app start
-    dispatch(initializePresentationSystem());
-
-    // Initialize live display with placeholder after a short delay
-    const initLiveDisplay = async () => {
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for app to fully load
-        const placeholder = createDefaultPlaceholder();
-        dispatch(sendContentToLiveDisplay(placeholder));
-      } catch (error) {
-        console.log(
-          "Live display initialization will happen when first content is sent"
-        );
-      }
-    };
-
-    initLiveDisplay();
+    // New Redux-based presentation system doesn't require explicit initialization
+    // The store initializes with the proper initial state automatically
+    console.log('[usePresentationInit] Presentation system ready (Redux-based)');
   }, [dispatch]);
 };

@@ -18,7 +18,6 @@ import {
   PresentationState,
   PresentationItem,
   ContentLibrary,
-  ActiveTab,
   INITIAL_PRESENTATION_STATE,
   INITIAL_CONTENT_LIBRARY
 } from '../types/presentation';
@@ -27,22 +26,15 @@ import {
   serviceItemToPresentationItem
 } from '../lib/presentationUtils';
 
-// NEW: Presentation Manager (centralized state machine)
-import {
-  usePresentationManager,
-  hasContent,
-  isLive as isPresentationLive,
-  getCurrentSlide as getManagerCurrentSlide,
-  canNavigateNext as managerCanNavigateNext,
-  canNavigatePrevious as managerCanNavigatePrevious,
-  getSlideCount
-} from '../hooks/usePresentationManager';
+// Redux Presentation Management
+import { usePresentation } from '../hooks/usePresentation';
 import {
   buildScriptureContent,
   buildSongContent,
   buildAnnouncementContent,
   serviceItemToContent
 } from '../lib/contentBuilders';
+import type { ActiveTab } from '../lib/presentationSlice';
 
 // Import scripture navigation Redux slice
 import {
@@ -174,8 +166,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // ============================================
   // NEW: CENTRALIZED PRESENTATION MANAGER
   // ============================================
-  const presentationManager = usePresentationManager();
-  const { state: presentationState, actions: presentationActions } = presentationManager;
+  // Redux Presentation Hook
+  const presentation = usePresentation();
 
   // Active tab state
   const [activeTab, setActiveTab] = useState<ActiveTab>('scripture');
@@ -190,19 +182,19 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // Song management state
   const [pendingSongs, setPendingSongs] = useState<ServiceItem[]>([]);
 
-  // Legacy compatibility - Keep selectedItem in sync with presentation manager
-  const selectedItem = presentationState.current.content ? {
-    id: presentationState.current.content.id,
-    type: presentationState.current.content.type as any,
-    title: presentationState.current.content.title,
-    content: presentationState.current.content.metadata,
-    slides: presentationState.current.content.slides as any[],
+  // Legacy compatibility - Keep selectedItem in sync with Redux presentation state
+  const selectedItem = presentation.current.content ? {
+    id: presentation.current.content.id,
+    type: presentation.current.content.type as any,
+    title: presentation.current.content.title,
+    content: presentation.current.content.metadata,
+    slides: presentation.current.content.slides as any[],
     order: 0
   } : null;
 
-  const currentSlideIndex = presentationState.current.slideIndex;
-  const presentationMode = presentationState.current.status === 'live' ? 'live' : 'preview';
-  const isPresenting = presentationState.current.status === 'live';
+  const currentSlideIndex = presentation.slideIndex;
+  const presentationMode = presentation.isLive ? 'live' : 'preview';
+  const isPresenting = presentation.isLive;
 
   // Feature settings hook
   const { scriptureSettings, songSettings } = useFeatureSettings();
@@ -428,9 +420,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             }
 
             // Auto-select the first song if none selected and no active presentation
-            if (songs.length > 0 && !presentationState.current.content) {
+            if (songs.length > 0 && !presentation.current.content) {
               const firstSong = buildSongContent(songs[0], songSettings);
-              await presentationActions.present(firstSong, false);
+              await presentation.present(firstSong, { goLive: false });
             }
           }
         } catch (error) {
@@ -458,7 +450,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
     };
-  }, [pendingSongs.length, presentationState.current.content]);
+  }, [pendingSongs.length, presentation.current.content]);
 
   // ============================================
   // TAB SWITCHING - Auto-clear on tab change (unless live)
@@ -473,9 +465,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       console.log(`🔄 PresentationManager: Tab changed: ${prevTab} → ${activeTab}`);
 
       // Clear presentation when switching tabs (unless currently live)
-      if (!isPresentationLive(presentationState)) {
+      if (!presentation.isLive) {
         console.log('🧹 PresentationManager: Clearing presentation on tab switch');
-        presentationActions.clear();
+        presentation.clear();
       } else {
         console.log('⚠️ PresentationManager: Tab switched during live presentation - keeping content');
       }
@@ -483,7 +475,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       // Update the ref
       prevTabRef.current = activeTab;
     }
-  }, [activeTab, presentationState, presentationActions]); // Depend on manager state
+  }, [activeTab, presentation, presentation]); // Depend on manager state
 
   // Initialize service for plan functionality
   useEffect(() => {
@@ -627,8 +619,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         itemId: item.id,
         slideCount: item.slides.length
       });
-      setSelectedItem(item);
-      setCurrentSlideIndex(0);
 
       // Auto-present if requested
       if (autoPresent && item.slides[0] && liveDisplayActive) {
@@ -999,9 +989,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       }
 
       const updatedItem = { ...item, slides };
-      setSelectedItem(updatedItem);
-      setCurrentSlideIndex(0);
-      setPresentationMode(autoPresent ? 'live' : 'preview');
 
       // Update the item in Redux store
       dispatch(updateServiceItem(updatedItem));
@@ -1009,7 +996,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       // Auto-present if double-clicked
       if (autoPresent && slides.length > 0 && liveDisplayActive) {
         await sendSlideToLive(slides[0], updatedItem, 0);
-        setIsPresenting(true);
       }
 
     } catch (error) {
@@ -1030,9 +1016,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       generateSlidesForItem(item, false);
     } else {
       console.log('✅ Using existing slides for item:', item.id, 'slides:', item.slides.length);
-      setSelectedItem(item);
-      setCurrentSlideIndex(0);
-      setPresentationMode('preview');
     }
   };
 
@@ -1051,12 +1034,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         if (needsGeneration) {
           generateSlidesForItem(item, true);
         } else {
-          setSelectedItem(item);
-          setCurrentSlideIndex(0);
-          setPresentationMode('live');
           if (item.slides && item.slides.length > 0) {
             sendSlideToLive(item.slides[0], item, 0);
-            setIsPresenting(true);
           }
         }
       }, 500);
@@ -1064,12 +1043,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       if (needsGeneration) {
         generateSlidesForItem(item, true);
       } else {
-        setSelectedItem(item);
-        setCurrentSlideIndex(0);
-        setPresentationMode('live');
         if (item.slides && item.slides.length > 0) {
           sendSlideToLive(item.slides[0], item, 0);
-          setIsPresenting(true);
         }
       }
     }
@@ -1113,7 +1088,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       );
 
       // Switch to new scripture content in presentation manager
-      await presentationActions.switchContent(scriptureContent);
+      await presentation.switchTo(scriptureContent);
 
       console.log('✅ Scripture content loaded in presentation manager');
     } catch (error) {
@@ -1127,12 +1102,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // NAVIGATION FUNCTIONS - Using Presentation Manager
   // ============================================
   const goToPrevious = React.useCallback(async () => {
-    await presentationActions.previous();
-  }, [presentationActions]);
+    await presentation.previous();
+  }, [presentation]);
 
   const goToNext = React.useCallback(async () => {
-    await presentationActions.next();
-  }, [presentationActions]);
+    await presentation.next();
+  }, [presentation]);
 
   // Keyboard shortcuts for presentation control
   useEffect(() => {
@@ -1164,19 +1139,19 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
         case 'KeyB':
           // Black screen
-          await presentationActions.showBlack();
+          await presentation.showBlack();
           break;
 
         case 'Escape':
           // Stop live presentation
-          if (isPresentationLive(presentationState)) {
-            await presentationActions.stopLive();
+          if (presentation.isLive) {
+            await presentation.stopLive();
           }
           break;
 
         case 'KeyF':
           // Go to live mode (present current slide)
-          if (hasContent(presentationState)) {
+          if (presentation.hasContent) {
             await presentCurrentSlide();
           }
           break;
@@ -1187,7 +1162,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyPress);
     };
-  }, [presentationState, goToNext, goToPrevious]);
+  }, [presentation, goToNext, goToPrevious]);
 
   // Cross-verse navigation functions
   const goToPreviousVerse = async () => {
@@ -1234,8 +1209,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Present current slide (go live)
   const presentCurrentSlide = async () => {
-    if (hasContent(presentationState)) {
-      await presentationActions.goLive();
+    if (presentation.hasContent) {
+      await presentation.startLive();
     } else {
       console.warn('⚠️ No content loaded to present');
     }
@@ -1504,7 +1479,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     dispatch(updateServiceItem(item));
     // If this is the selected item, update it
     if (selectedItem?.id === item.id) {
-      setSelectedItem(item);
     }
   };
 
@@ -1515,15 +1489,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
     // If this was the selected item, clear selection
     if (selectedItem?.id === itemId) {
-      setSelectedItem(null);
-      setCurrentSlideIndex(0);
     }
   };
 
   // Session management functions
   const clearAllItems = () => {
     dispatch(clearServiceItems());
-    setSelectedItem(null);
     setSelectedPlan(null);
   };
 
@@ -1536,11 +1507,11 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   };
 
   // Get current slide from presentation manager
-  const currentSlide = getManagerCurrentSlide(presentationState);
+  const currentSlide = presentation.currentSlide;
 
   // Update active verse numbers based on current slide
   useEffect(() => {
-    if (presentationState.current.content?.type === 'scripture' && currentSlide) {
+    if (presentation.current.content?.type === 'scripture' && currentSlide) {
       if ((currentSlide as any).verseNumbers) {
         console.log('📖 Updating active verses to:', (currentSlide as any).verseNumbers);
         setActiveVerseNumbers((currentSlide as any).verseNumbers);
@@ -1549,7 +1520,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       // Clear active verses if not scripture
       setActiveVerseNumbers([]);
     }
-  }, [presentationState.current.slideIndex, presentationState.current.content, currentSlide]);
+  }, [presentation.current.slideIndex, presentation.current.content, currentSlide]);
 
   // Reset thumbnail refs when item changes
   useEffect(() => {
@@ -1603,7 +1574,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     dispatch(updateServiceItem(updatedServiceItem));
 
     // Update selected item
-    setSelectedItem(updatedServiceItem);
   }, [selectedItem, currentSlideIndex, dispatch]);
 
   return (
@@ -1920,7 +1890,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                         key={song.id}
                         className={`
                           group relative bg-card border rounded-lg p-4 cursor-pointer transition-all
-                          ${presentationState.current.content?.id === song.id
+                          ${presentation.current.content?.id === song.id
                             ? 'border-orange-500 bg-orange-900/20 shadow-lg shadow-orange-900/50'
                             : 'border-border hover:border-orange-400 hover:bg-orange-900/10'
                           }
@@ -1929,13 +1899,13 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                           console.log('🎵 Song selected:', song.title);
                           // Build song content and present in preview mode
                           const songContent = buildSongContent(song, songSettings);
-                          await presentationActions.present(songContent, false);
+                          await presentation.present(songContent, { goLive: false });
                         }}
                         onDoubleClick={async () => {
                           console.log('🎵 Song double-clicked (go live):', song.title);
                           // Build song content and present live
                           const songContent = buildSongContent(song, songSettings);
-                          await presentationActions.present(songContent, true);
+                          await presentation.present(songContent, { goLive: true });
                         }}
                       >
                         <div className="flex items-start justify-between">
@@ -1943,7 +1913,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                             <div className="flex items-center gap-2 mb-1">
                               <Music className="w-4 h-4 text-orange-400" />
                               <h4 className="font-semibold text-foreground">{song.title}</h4>
-                              {presentationState.current.content?.id === song.id && (
+                              {presentation.current.content?.id === song.id && (
                                 <span className="px-2 py-0.5 bg-orange-600 text-white text-xs rounded-full">
                                   Selected
                                 </span>
@@ -1982,8 +1952,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                                 setPendingSongs(newSongs);
                                 localStorage.setItem('pendingSongs', JSON.stringify(newSongs));
                                 // Clear presentation if removing the active song
-                                if (presentationState.current.content?.id === song.id) {
-                                  presentationActions.clear();
+                                if (presentation.current.content?.id === song.id) {
+                                  presentation.clear();
                                 }
                               }}
                               className="px-3 py-1.5 bg-red-600 text-white rounded text-xs hover:bg-red-700"
@@ -1994,7 +1964,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                         </div>
 
                         {/* Slide thumbnail preview */}
-                        {presentationState.current.content?.id === song.id && song.slides && song.slides.length > 0 && (
+                        {presentation.current.content?.id === song.id && song.slides && song.slides.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-border">
                             <div className="text-xs font-medium text-muted-foreground mb-2">Preview</div>
                             <div className="grid grid-cols-4 gap-2">
@@ -2004,7 +1974,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                                   className="aspect-video bg-black rounded border border-border overflow-hidden cursor-pointer hover:border-orange-400"
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    await presentationActions.goToSlide(slideIdx);
+                                    await presentation.jumpTo(slideIdx);
                                   }}
                                 >
                                   <div className="w-full h-full flex items-center justify-center text-xs text-white/50">
@@ -2291,7 +2261,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                             if (selectedPlan?.id === planId) {
                               setSelectedPlan(null);
                               dispatch(clearServiceItems());
-                              setSelectedItem(null);
                             }
                           }}
                           className=""
@@ -2465,23 +2434,23 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 </div>
 
                 {/* Navigation Controls */}
-                {(presentationState.current.content?.slides || selectedItem?.slides) && (
+                {(presentation.current.content?.slides || selectedItem?.slides) && (
                   <div className="border-t border-border bg-card p-3">
                     {/* Slide Thumbnails Strip */}
-                    {((presentationState.current.content?.slides && presentationState.current.content.slides.length > 1) || (selectedItem?.slides && selectedItem.slides.length > 1)) && (
+                    {((presentation.current.content?.slides && presentation.current.content.slides.length > 1) || (selectedItem?.slides && selectedItem.slides.length > 1)) && (
                       <div className="mb-3">
                         <div className="text-xs text-muted-foreground mb-1 font-medium">Slides</div>
                         <div
                           ref={thumbnailsContainerRef}
                           className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent"
                         >
-                          {(presentationState.current.content?.slides || selectedItem?.slides || []).map((slide, index) => (
+                          {(presentation.current.content?.slides || selectedItem?.slides || []).map((slide, index) => (
                             <button
                               key={slide.id}
                               ref={(el) => { thumbnailRefs.current[index] = el; }}
                               onClick={async () => {
                                 // Use unified presentation manager - it handles live display sync automatically
-                                await presentationActions.goToSlide(index);
+                                await presentation.jumpTo(index);
 
                                 // Update Redux navigation state if scripture
                                 if (selectedItem?.type === 'scripture' && scriptureNav.currentGroups.length > 0) {
@@ -2489,7 +2458,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                                 }
                               }}
                               className={`flex-shrink-0 border-2 rounded transition-all ${
-                                index === presentationState.current.slideIndex
+                                index === presentation.current.slideIndex
                                   ? 'border-primary ring-2 ring-primary/50 scale-105'
                                   : 'border-border hover:border-primary/50'
                               }`}
@@ -2539,9 +2508,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     <div className="flex items-center justify-center gap-4 mb-2">
                       <button
                         onClick={goToPrevious}
-                        disabled={!managerCanNavigatePrevious(presentationState)}
+                        disabled={!presentation.canGoPrevious}
                         className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        title={`Slide ${presentationState.current.slideIndex + 1} of ${getSlideCount(presentationState)}`}
+                        title={`Slide ${presentation.current.slideIndex + 1} of ${presentation.slideCount}`}
                       >
                         <SkipBack className="w-4 h-4" />
                         Previous
@@ -2564,22 +2533,22 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                       <button
                         onClick={presentCurrentSlide}
-                        disabled={!presentationState.display.isActive || !hasContent(presentationState)}
+                        disabled={!presentation.display.isActive || !presentation.hasContent}
                         className={`px-6 py-2 rounded flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                          isPresentationLive(presentationState)
+                          presentation.isLive
                             ? 'bg-green-600 text-white hover:bg-green-700'
                             : 'bg-blue-600 text-white hover:bg-blue-700'
                         }`}
                       >
                         <Play className="w-4 h-4" />
-                        {isPresentationLive(presentationState) ? 'Update Live' : 'Present Live'}
+                        {presentation.isLive ? 'Update Live' : 'Present Live'}
                       </button>
 
                       <button
                         onClick={goToNext}
-                        disabled={!managerCanNavigateNext(presentationState)}
+                        disabled={!presentation.canGoNext}
                         className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        title={`Slide ${presentationState.current.slideIndex + 1} of ${getSlideCount(presentationState)}`}
+                        title={`Slide ${presentation.current.slideIndex + 1} of ${presentation.slideCount}`}
                       >
                         Next
                         <SkipForward className="w-4 h-4" />

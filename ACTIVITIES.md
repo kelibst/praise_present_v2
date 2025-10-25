@@ -4,6 +4,112 @@ This file tracks significant development activities for PraisePresent v2.
 
 ---
 
+## 2025-01-25 - 🚀 MIGRATED TO REDUX-BASED PRESENTATION STATE MANAGEMENT
+**Time:** Late Evening Session
+**Description:** Completely migrated presentation state management from custom React hooks to Redux, leveraging the app's existing Redux infrastructure for better performance, debugging, and maintainability.
+
+**Problem Solved:**
+- Custom `usePresentationManager` hook created isolated state not accessible across components
+- No Redux DevTools integration for debugging presentation issues
+- Inconsistent architecture (everything else uses Redux, presentation didn't)
+- Manual live display synchronization prone to errors
+- No state persistence or history tracking
+
+**Solution Architecture:**
+- **Enhanced `presentationSlice.ts`** - Full Redux slice with comprehensive state management
+- **Created `presentationMiddleware.ts`** - Automatic live display synchronization via middleware
+- **Created `usePresentation()` hook** - Convenience hook for easy Redux access
+- **Per-tab state tracking** - Know exactly what's presenting on each tab
+- **Built-in history** - Quick switching between recent presentations
+
+**New Files Created:**
+1. **[src/lib/presentationSlice.ts](src/lib/presentationSlice.ts)** (570 lines) - Enhanced Redux slice with full presentation state
+2. **[src/lib/middleware/presentationMiddleware.ts](src/lib/middleware/presentationMiddleware.ts)** - Auto-sync middleware for live display IPC
+3. **[src/hooks/usePresentation.ts](src/hooks/usePresentation.ts)** - Convenience hook wrapping Redux selectors and actions
+
+**Files Modified:**
+1. **[src/lib/store.ts](src/lib/store.ts)** - Added presentationMiddleware to middleware chain
+2. **[src/lib/contentBuilders.ts](src/lib/contentBuilders.ts)** - Updated to import PresentationContent from Redux slice
+3. **[src/pages/LivePresentationPage.tsx](src/pages/LivePresentationPage.tsx)** - Migrated from usePresentationManager to usePresentation
+
+**Files Removed:**
+1. **src/hooks/usePresentationManager.ts** - Replaced by Redux approach
+
+**Technical Implementation:**
+
+**Redux State Structure:**
+```typescript
+{
+  current: {
+    content: PresentationContent | null,
+    slideIndex: number,
+    status: 'idle' | 'preview' | 'live',
+    owner: ActiveTab | null
+  },
+  display: {
+    isActive: boolean,
+    currentSlide: Slide | null,
+    contentType: ContentType | null,
+    slideIndex: number
+  },
+  tabs: {
+    [tabName]: {
+      contentId, slideIndex, isLive
+    }
+  },
+  history: PresentationContent[]
+}
+```
+
+**Key Actions:**
+- `presentContent()` - Present any content type (songs, scriptures, announcements)
+- `switchContent()` - Switch between content without going live
+- `nextSlide()` / `previousSlide()` / `goToSlide()` - Navigation
+- `goLive()` / `stopLive()` - Control live presentation
+- `clearPresentation()` / `clearTabPresentation()` - Clear state
+- `showBlackScreen()` - Show black screen on live display
+
+**Middleware Features:**
+- Automatic IPC communication when slides change during live presentation
+- Auto-creates live display window when going live
+- Black screen handling
+- Performance metrics tracking
+- Error handling for IPC failures
+
+**Benefits:**
+- ✅ **Redux DevTools Integration** - Full time-travel debugging of presentation state
+- ✅ **Centralized State** - All presentation state in single Redux store
+- ✅ **Automatic Persistence** - Can leverage existing debounced persistence middleware
+- ✅ **Consistent Architecture** - Same pattern as serviceItems, scriptureNavigation, etc.
+- ✅ **Better Testing** - Pure Redux reducers easy to test
+- ✅ **Performance Monitoring** - Middleware tracks all presentation actions
+- ✅ **Cross-Component Access** - Any component can access presentation state
+- ✅ **Per-Tab Tracking** - Perfect state tracking of which slide is active on each tab
+- ✅ **Automatic Live Display Sync** - Middleware handles all IPC communication
+- ✅ **Type Safety** - Full TypeScript support with Redux Toolkit
+
+**Migration from Custom Hook to Redux:**
+- Replaced `presentationManager.state` with `presentation.current`
+- Replaced `presentationActions.present()` with `presentation.present()`
+- Replaced `hasContent(state)` with `presentation.hasContent`
+- Replaced `isLive(state)` with `presentation.isLive`
+- All helper functions now computed properties on the hook
+- Automatic live display sync (no manual sendToLive calls needed)
+
+**Performance Improvements:**
+- Reduced re-renders through memoized selectors (createSelector)
+- Single state update per action (atomic operations)
+- Middleware batches IPC calls automatically
+- Shape caching still works with Redux state
+
+**Debugging Capabilities:**
+- Redux DevTools shows every presentation action
+- Time-travel debugging to reproduce issues
+- State snapshots for bug reports
+- Action history for understanding user flow
+
+---
+
 ## 2025-01-25 - 🎯 REFACTORED TO CENTRALIZED PRESENTATION STATE MACHINE
 **Time:** Evening Session
 **Description:** Implemented a robust, single-source-of-truth presentation state machine that eliminates content persistence issues and simplifies all presentation logic.

@@ -7,7 +7,7 @@
  * a PresentationContent object.
  */
 
-import { PresentationContent } from '../hooks/usePresentationManager';
+import { PresentationContent } from './presentationSlice';
 import type { Slide } from '../components/slides/SlideRenderer';
 import { ScriptureTemplate } from '../rendering/templates/ScriptureTemplate';
 import { SongTemplate } from '../rendering/templates/SongTemplate';
