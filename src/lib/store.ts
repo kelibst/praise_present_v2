@@ -7,12 +7,14 @@ import serviceItemsSlice from './serviceItemsSlice';
 import mediaSlice from './mediaSlice';
 import scriptureNavigationSlice from './scriptureNavigationSlice';
 import planExecutionSlice from './planExecutionSlice';
+import uiSlice from './uiSlice';
 import { presentationMiddleware } from './middleware/presentationMiddleware';
 
 // Store configuration with presentation slice
 export const store = configureStore({
   reducer: {
     presentation: presentationSlice,
+    ui: uiSlice,
     bible: bibleSlice,
     settings: settingsSlice,
     featureSettings: featureSettingsSlice,

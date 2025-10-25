@@ -1,0 +1,61 @@
+
+    /**
+     * Save current presentation to tab memory
+     */
+    saveTabState: (state, action: PayloadAction<ActiveTab>) => {
+      const tabName = action.payload;
+      if (state.current.content) {
+        state.tabs[tabName] = {
+          tabName,
+          contentId: state.current.content.id,
+          slideIndex: state.current.slideIndex,
+          isLive: state.current.status === 'live'
+        };
+        console.log(`[PresentationSlice] Saved ${tabName} tab state`);
+      }
+    },
+
+    /**
+     * Restore presentation from tab memory
+     */
+    restoreTabState: (state, action: PayloadAction<ActiveTab>) => {
+      const tabName = action.payload;
+      const tabState = state.tabs[tabName];
+      if (tabState?.contentId) {
+        const content = state.history.find(item => item.id === tabState.contentId);
+        if (content) {
+          state.current = {
+            content,
+            slideIndex: tabState.slideIndex,
+            status: tabState.isLive ? 'live' : 'preview',
+            owner: tabName
+          };
+          console.log(`[PresentationSlice] Restored ${tabName} tab`);
+        }
+      }
+    },
+
+    /**
+     * Smart tab switch
+     */
+    switchTab: (state, action: PayloadAction<{ fromTab: ActiveTab; toTab: ActiveTab }>) => {
+      const { fromTab, toTab } = action.payload;
+      if (state.current.content && state.current.owner === fromTab) {
+        state.tabs[fromTab] = {
+          tabName: fromTab,
+          contentId: state.current.content.id,
+          slideIndex: state.current.slideIndex,
+          isLive: state.current.status === 'live'
+        };
+      }
+      if (state.current.status === 'live') return;
+      const targetTabState = state.tabs[toTab];
+      if (targetTabState?.contentId) {
+        const content = state.history.find(item => item.id === targetTabState.contentId);
+        if (content) {
+          state.current = { content, slideIndex: targetTabState.slideIndex, status: 'preview', owner: toTab };
+          return;
+        }
+      }
+      state.current = { content: null, slideIndex: 0, status: 'idle', owner: null };
+    },

@@ -474,6 +474,89 @@ const presentationSlice = createSlice({
         };
         console.log(`[PresentationSlice] Loaded from history: ${content.title}`);
       }
+    },
+
+    /**
+     * Save current presentation to tab memory
+     */
+    saveTabState: (state, action: PayloadAction<ActiveTab>) => {
+      const tabName = action.payload;
+      if (state.current.content) {
+        state.tabs[tabName] = {
+          tabName,
+          contentId: state.current.content.id,
+          slideIndex: state.current.slideIndex,
+          isLive: state.current.status === 'live'
+        };
+        console.log(`[PresentationSlice] Saved ${tabName} tab state:`, { contentId: state.current.content.id, slideIndex: state.current.slideIndex });
+      }
+    },
+
+    /**
+     * Restore presentation from tab memory
+     */
+    restoreTabState: (state, action: PayloadAction<ActiveTab>) => {
+      const tabName = action.payload;
+      const tabState = state.tabs[tabName];
+      if (tabState?.contentId) {
+        const content = state.history.find(item => item.id === tabState.contentId);
+        if (content) {
+          state.current = {
+            content,
+            slideIndex: tabState.slideIndex,
+            status: tabState.isLive ? 'live' : 'preview',
+            owner: tabName
+          };
+          console.log(`[PresentationSlice] Restored ${tabName} tab:`, { title: content.title, slideIndex: tabState.slideIndex });
+          if (tabState.isLive && content.slides[tabState.slideIndex]) {
+            state.display = {
+              isActive: true,
+              currentSlide: content.slides[tabState.slideIndex],
+              contentType: content.type,
+              contentId: content.id,
+              slideIndex: tabState.slideIndex
+            };
+          }
+        }
+      }
+    },
+
+    /**
+     * Smart tab switch - saves current, restores target
+     */
+    switchTab: (state, action: PayloadAction<{ fromTab: ActiveTab; toTab: ActiveTab }>) => {
+      const { fromTab, toTab } = action.payload;
+
+      // Save current tab state
+      if (state.current.content && state.current.owner === fromTab) {
+        state.tabs[fromTab] = {
+          tabName: fromTab,
+          contentId: state.current.content.id,
+          slideIndex: state.current.slideIndex,
+          isLive: state.current.status === 'live'
+        };
+      }
+
+      // Don't switch if live
+      if (state.current.status === 'live') {
+        console.log(`[PresentationSlice] Tab switch ${fromTab} → ${toTab} - keeping live presentation`);
+        return;
+      }
+
+      // Restore target tab state
+      const targetTabState = state.tabs[toTab];
+      if (targetTabState?.contentId) {
+        const content = state.history.find(item => item.id === targetTabState.contentId);
+        if (content) {
+          state.current = { content, slideIndex: targetTabState.slideIndex, status: 'preview', owner: toTab };
+          console.log(`[PresentationSlice] Restored ${toTab} content: ${content.title}`);
+          return;
+        }
+      }
+
+      // No saved state - clear
+      state.current = { content: null, slideIndex: 0, status: 'idle', owner: null };
+      console.log(`[PresentationSlice] Cleared presentation for ${toTab} tab`);
     }
   },
 });
@@ -564,7 +647,10 @@ export const {
   showBlackScreen,
   updateDisplayState,
   updateSettings,
-  loadFromHistory
+  loadFromHistory,
+  saveTabState,
+  restoreTabState,
+  switchTab
 } = presentationSlice.actions;
 
 export default presentationSlice.reducer;

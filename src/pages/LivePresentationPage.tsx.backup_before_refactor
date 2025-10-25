@@ -169,21 +169,29 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // ============================================
   // Redux Presentation Hook
   const presentation = usePresentation();
-  const hasAutoSwitchedRef = useRef(false);
-  const ui = useUI();
 
-  // Local-only state (things that don't need Redux)
+  // Active tab state
+  const [activeTab, setActiveTab] = useState<ActiveTab>('scripture');
+
+  // UI state
+  const [scriptureSubTab, setScriptureSubTab] = useState<'browse' | 'type'>('browse');
+  const [activeVerseNumbers, setActiveVerseNumbers] = useState<number[]>([]);
+  const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [navigationFieldsPopulated, setNavigationFieldsPopulated] = useState<boolean | null>(null);
 
+  // Song management state
+  const [pendingSongs, setPendingSongs] = useState<ServiceItem[]>([]);
+
   // Legacy compatibility - Keep selectedItem in sync with Redux presentation state
-  const selectedItem = useMemo(() => presentation.current.content ? {
+  const selectedItem = presentation.current.content ? {
     id: presentation.current.content.id,
     type: presentation.current.content.type as any,
     title: presentation.current.content.title,
     content: presentation.current.content.metadata,
     slides: presentation.current.content.slides as any[],
     order: 0
-  } : null, [presentation.current.content]);
+  } : null;
 
   const currentSlideIndex = presentation.slideIndex;
   const presentationMode = presentation.isLive ? 'live' : 'preview';
@@ -191,6 +199,10 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Feature settings hook
   const { scriptureSettings, songSettings } = useFeatureSettings();
+
+  // Service management for plan functionality
+  const [currentServiceId, setCurrentServiceId] = useState<string | null>(null);
+  const [isLoadingService, setIsLoadingService] = useState(true);
 
   // Live display management
   const {
@@ -207,15 +219,28 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const thumbnailsContainerRef = useRef<HTMLDivElement>(null);
   const thumbnailRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
+  // Plan loading state
+  const [isPlanLoading, setIsPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+
+  // Inline media addition state
+  const [showInlineMediaModal, setShowInlineMediaModal] = useState(false);
+  const [inlineMediaType, setInlineMediaType] = useState<'song' | 'scripture' | 'presentation' | 'announcement' | null>(null);
+  const [insertPosition, setInsertPosition] = useState<number>(0);
+
+  // Service execution state
+  const [isExecutingService, setIsExecutingService] = useState(false);
+
   // Plan integration management
   const { handlePlanSelect, handlePlanCreate } = usePlanIntegration({
     onPlanLoaded: (items, plan) => {
       setSelectedPlan(plan);
       dispatch(setServiceItems(items));
-      ui.clearLoading();
+      setIsPlanLoading(false);
+      setPlanError(null);
 
       // Auto-switch to Current Service tab and select first item
-      ui.setActiveTab('plan');
+      setActiveTab('plan');
       if (items.length > 0) {
         generateSlidesForItem(items[0]);
       }
@@ -227,13 +252,15 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Wrap handlePlanSelect to add loading state and error handling
   const handlePlanSelectWithLoading = async (plan: any) => {
-    ui.setLoading({ type: "loading-plan", planId: plan.id });
+    setIsPlanLoading(true);
+    setPlanError(null);
 
     try {
       await handlePlanSelect(plan);
     } catch (error) {
       console.error('Error loading plan:', error);
-      ui.setLoading({ type: "loading-plan", planId: plan.id, error: error instanceof Error ? error.message : 'Failed to load plan content' });
+      setPlanError(error instanceof Error ? error.message : 'Failed to load plan content');
+      setIsPlanLoading(false);
     }
   };
 
@@ -374,52 +401,104 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     };
   }, []);
 
-  // NOTE: Pending songs are now managed through Redux (uiSlice)
-  // Other pages can dispatch ui.addPendingSong(song) and it will appear here instantly
-  // No more localStorage polling needed!
+  // Initialize and check for pending songs
+  useEffect(() => {
+    let hasAutoSwitched = false; // Track if we've already auto-switched
+
+    const checkPendingSongs = async (shouldAutoSwitch: boolean = false) => {
+      const pendingSongsData = localStorage.getItem('pendingSongs');
+      if (pendingSongsData) {
+        try {
+          const songs = JSON.parse(pendingSongsData);
+          if (Array.isArray(songs) && songs.length > 0) {
+            const previousCount = pendingSongs.length;
+            setPendingSongs(songs);
+
+            // Only auto-switch if new songs were added and we haven't already switched
+            if (shouldAutoSwitch && !hasAutoSwitched && songs.length > previousCount) {
+              setActiveTab('songs');
+              hasAutoSwitched = true;
+            }
+
+            // Auto-select the first song if none selected and no active presentation
+            if (songs.length > 0 && !presentation.current.content) {
+              const firstSong = buildSongContent(songs[0], songSettings);
+              await presentation.present(firstSong, { goLive: false });
+            }
+          }
+        } catch (error) {
+          console.error('Error loading pending songs:', error);
+          localStorage.removeItem('pendingSongs');
+        }
+      }
+    };
+
+    checkPendingSongs(false); // Initial check without auto-switch
+
+    // Set up listener for storage events
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'pendingSongs' && e.newValue) {
+        checkPendingSongs(true); // Allow auto-switch on storage change
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // Check periodically for same-window updates (without auto-switching)
+    const interval = setInterval(() => checkPendingSongs(false), 1000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [pendingSongs.length, presentation.current.content]);
 
   // ============================================
-  // TAB SWITCHING - Smart tab switching with content restoration
+  // TAB SWITCHING - Auto-clear on tab change (unless live)
   // ============================================
-  const prevTabRef = useRef<ActiveTab>(ui.activeTab);
+  const prevTabRef = useRef<ActiveTab>(activeTab);
 
   useEffect(() => {
     const prevTab = prevTabRef.current;
 
     // Only process if tab actually changed
-    if (prevTab !== ui.activeTab) {
-      console.log(`🔄 Tab Switch: ${prevTab} → ${ui.activeTab}`);
+    if (prevTab !== activeTab) {
+      console.log(`🔄 PresentationManager: Tab changed: ${prevTab} → ${activeTab}`);
 
-      // Use smart tab switching from presentationSlice
-      // This will save current tab state and restore target tab automatically
-      presentation.switchTab(prevTab, ui.activeTab);
+      // Clear presentation when switching tabs (unless currently live)
+      if (!presentation.isLive) {
+        console.log('🧹 PresentationManager: Clearing presentation on tab switch');
+        presentation.clear();
+      } else {
+        console.log('⚠️ PresentationManager: Tab switched during live presentation - keeping content');
+      }
 
       // Update the ref
-      prevTabRef.current = ui.activeTab;
+      prevTabRef.current = activeTab;
     }
-  }, [ui.activeTab, presentation]);
+  }, [activeTab, presentation, presentation]); // Depend on manager state
 
   // Initialize service for plan functionality
   useEffect(() => {
     const initializeService = async () => {
       try {
-        ui.setLoading({ type: "initializing-service" });
+        setIsLoadingService(true);
 
         // Check if there's a stored current service ID
-        const storedServiceId = localStorage.getItem('ui.currentServiceId');
+        const storedServiceId = localStorage.getItem('currentServiceId');
 
         if (storedServiceId && window.electronAPI) {
           // Verify the stored service still exists
           try {
             const service = await window.electronAPI.invoke('db:getService', storedServiceId);
             if (service) {
-              ui.setCurrentServiceId(storedServiceId);
+              setCurrentServiceId(storedServiceId);
               console.log('✅ Using existing service:', service.name);
               return;
             }
           } catch (error) {
             console.warn('Stored service no longer exists, creating new one');
-            localStorage.removeItem('ui.currentServiceId');
+            localStorage.removeItem('currentServiceId');
           }
         }
 
@@ -442,8 +521,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               console.log('📝 Created default service for live presentation');
             }
 
-            ui.setCurrentServiceId(defaultService.id);
-            localStorage.setItem('ui.currentServiceId', defaultService.id);
+            setCurrentServiceId(defaultService.id);
+            localStorage.setItem('currentServiceId', defaultService.id);
             console.log('✅ Initialized service:', defaultService.name);
 
           } catch (error) {
@@ -454,7 +533,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       } catch (error) {
         console.error('Error initializing service:', error);
       } finally {
-        ui.clearLoading();
+        setIsLoadingService(false);
       }
     };
 
@@ -532,7 +611,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Generate slides for selected item
   const generateSlidesForItem = async (item: ServiceItem, autoPresent = false) => {
-    if (ui.isGeneratingSlides) return; // Prevent multiple concurrent generations
+    if (isGeneratingSlides) return; // Prevent multiple concurrent generations
 
     // IMPORTANT: If this item already has slides, use them instead of regenerating
     // This preserves user customizations (background colors, shape sizes/positions, etc.)
@@ -552,7 +631,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     }
 
     try {
-      ui.setLoading({ type: "generating-slides", itemId: item.id });
+      setIsGeneratingSlides(true);
       let slides: Slide[] = [];
 
       if (item.type === 'scripture' && item.content.verses) {
@@ -923,7 +1002,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     } catch (error) {
       console.error('Failed to generate slides:', error);
     } finally {
-      ui.clearLoading();
+      setIsGeneratingSlides(false);
     }
   };
 
@@ -978,7 +1057,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const handleScriptureSelect = async (verses: ScriptureVerse[]) => {
     console.log('📖 PresentationManager: Scripture selected', {
       versesCount: verses.length,
-      activeTab: ui.activeTab
+      activeTab
     });
 
     if (verses.length === 0) {
@@ -987,11 +1066,11 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     }
 
     try {
-      ui.setLoading({ type: "generating-slides", itemId: `scripture-${Date.now()}` });
+      setIsGeneratingSlides(true);
 
       // Set active verse numbers for UI highlighting
       const verseNumbers = verses.map(v => v.verse);
-      ui.setActiveVerseNumbers(verseNumbers);
+      setActiveVerseNumbers(verseNumbers);
 
       // Update Redux scripture navigation state
       const navigatedVerses = verses.map(v => ({ ...v })) as NavigatedVerse[];
@@ -1016,7 +1095,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     } catch (error) {
       console.error('❌ Failed to load scripture content:', error);
     } finally {
-      ui.clearLoading();
+      setIsGeneratingSlides(false);
     }
   };
 
@@ -1279,11 +1358,14 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Inline media addition handlers
   const openInlineMediaModal = (type: 'song' | 'scripture' | 'presentation' | 'announcement', position: number) => {
-    ui.openInlineMediaModal(type, position);
+    setInlineMediaType(type);
+    setInsertPosition(position);
+    setShowInlineMediaModal(true);
   };
 
   const closeInlineMediaModal = () => {
-    ui.closeInlineMediaModal();
+    setShowInlineMediaModal(false);
+    setInlineMediaType(null);
   };
 
   const handleInlineSongSelect = async (song: any) => {
@@ -1295,12 +1377,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         lyrics: song.lyrics || '',
         artist: song.artist || ''
       },
-      order: ui.inlineMediaModal.insertPosition + 1
+      order: insertPosition + 1
     };
 
     // Insert at specific position
     const newItems = [...serviceItems];
-    newItems.splice(ui.inlineMediaModal.insertPosition, 0, songItem);
+    newItems.splice(insertPosition, 0, songItem);
 
     // Update order for all items
     const reorderedItems = newItems.map((item, index) => ({ ...item, order: index + 1 }));
@@ -1323,12 +1405,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         chapter: scripture.chapter,
         verses: scripture.text ? [scripture] : []
       },
-      order: ui.inlineMediaModal.insertPosition + 1
+      order: insertPosition + 1
     };
 
     // Insert at specific position
     const newItems = [...serviceItems];
-    newItems.splice(ui.inlineMediaModal.insertPosition, 0, scriptureItem);
+    newItems.splice(insertPosition, 0, scriptureItem);
 
     // Update order for all items
     const reorderedItems = newItems.map((item, index) => ({ ...item, order: index + 1 }));
@@ -1349,12 +1431,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         name: presentation.name,
         slideCount: presentation.slideCount
       },
-      order: ui.inlineMediaModal.insertPosition + 1
+      order: insertPosition + 1
     };
 
     // Insert at specific position
     const newItems = [...serviceItems];
-    newItems.splice(ui.inlineMediaModal.insertPosition, 0, presentationItem);
+    newItems.splice(insertPosition, 0, presentationItem);
 
     // Update order for all items
     const reorderedItems = newItems.map((item, index) => ({ ...item, order: index + 1 }));
@@ -1376,12 +1458,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
         description: ''
       },
       duration: announcement.duration || 60,
-      order: ui.inlineMediaModal.insertPosition + 1
+      order: insertPosition + 1
     };
 
     // Insert at specific position
     const newItems = [...serviceItems];
-    newItems.splice(ui.inlineMediaModal.insertPosition, 0, announcementItem);
+    newItems.splice(insertPosition, 0, announcementItem);
 
     // Update order for all items
     const reorderedItems = newItems.map((item, index) => ({ ...item, order: index + 1 }));
@@ -1433,11 +1515,11 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     if (presentation.current.content?.type === 'scripture' && currentSlide) {
       if ((currentSlide as any).verseNumbers) {
         console.log('📖 Updating active verses to:', (currentSlide as any).verseNumbers);
-        ui.setActiveVerseNumbers((currentSlide as any).verseNumbers);
+        setActiveVerseNumbers((currentSlide as any).verseNumbers);
       }
     } else {
       // Clear active verses if not scripture
-      ui.setActiveVerseNumbers([]);
+      setActiveVerseNumbers([]);
     }
   }, [presentation.current.slideIndex, presentation.current.content, currentSlide]);
 
@@ -1508,7 +1590,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           <div className="flex items-center gap-3">
             {/* Settings Button */}
             <button
-              onClick={() => ui.setSettingsModalOpen(true)}
+              onClick={() => setSettingsModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg border border-gray-600 transition-colors"
               title="Feature Settings"
             >
@@ -1533,9 +1615,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
       {/* Feature Settings Modal */}
       <FeatureSettingsModal
-        isOpen={ui.settingsModalOpen}
-        onClose={() => ui.setSettingsModalOpen(false)}
-        initialTab={ui.activeTab === 'scripture' ? 'scriptures' : 'songs'}
+        isOpen={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        initialTab={activeTab === 'scripture' ? 'scriptures' : 'songs'}
       />
 
       {/* Keyboard Shortcuts Help & Panel Controls */}
@@ -1614,7 +1696,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               { key: 'plan', label: 'Current Service', icon: Play, color: 'green' },
               { key: 'plans', label: 'Plan Manager', icon: Calendar, color: 'blue' }
             ].map(({ key, label, icon: Icon, color }) => {
-              const isActive = ui.activeTab === key;
+              const isActive = activeTab === key;
 
               // Color-specific styling
               const colorClasses = {
@@ -1640,12 +1722,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 }
               };
 
-              const itemCount = key === 'plan' ? serviceItems.length : key === 'songs' ? ui.pendingSongsCount : 0;
+              const itemCount = key === 'plan' ? serviceItems.length : key === 'songs' ? pendingSongs.length : 0;
 
               return (
                 <button
                   key={key}
-                  onClick={() => ui.setActiveTab(key as any)}
+                  onClick={() => setActiveTab(key as any)}
                   className={`
                     relative flex-1 px-4 py-3 text-sm font-medium
                     border-r border-gray-700 last:border-r-0
@@ -1689,7 +1771,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
           {/* Tab Content */}
           <div className="p-4 overflow-y-auto" style={{ height: 'calc(100vh - 220px)' }}>
-            {ui.activeTab === 'scripture' && (
+            {activeTab === 'scripture' && (
               <div className="space-y-4">
                 <div className="mb-3">
                   <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -1741,9 +1823,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 {/* Scripture Sub-Tabs */}
                 <div className="flex gap-2 mb-4 border-b border-border">
                   <button
-                    onClick={() => ui.setScriptureSubTab('browse')}
+                    onClick={() => setScriptureSubTab('browse')}
                     className={`px-4 py-2 font-medium transition-colors flex items-center gap-2 ${
-                      ui.scriptureSubTab === 'browse'
+                      scriptureSubTab === 'browse'
                         ? 'border-b-2 border-purple-500 text-purple-400'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
@@ -1752,9 +1834,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     Browse Books
                   </button>
                   <button
-                    onClick={() => ui.setScriptureSubTab('type')}
+                    onClick={() => setScriptureSubTab('type')}
                     className={`px-4 py-2 font-medium transition-colors flex items-center gap-2 ${
-                      ui.scriptureSubTab === 'type'
+                      scriptureSubTab === 'type'
                         ? 'border-b-2 border-purple-500 text-purple-400'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
@@ -1765,24 +1847,24 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 </div>
 
                 {/* Sub-Tab Content */}
-                {ui.scriptureSubTab === 'browse' && (
+                {scriptureSubTab === 'browse' && (
                   <BibleBrowseSelector
                     onVerseSelect={handleScriptureSelect}
                     defaultVersion="kjv"
                   />
                 )}
 
-                {ui.scriptureSubTab === 'type' && (
+                {scriptureSubTab === 'type' && (
                   <BibleSelector
                     onVerseSelect={handleScriptureSelect}
                     defaultVersion="kjv"
-                    activeVerses={ui.activeVerseNumbers}
+                    activeVerses={activeVerseNumbers}
                   />
                 )}
               </div>
             )}
 
-            {ui.activeTab === 'songs' && (
+            {activeTab === 'songs' && (
               <div className="space-y-4">
                 <div className="mb-3">
                   <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -1794,7 +1876,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   </p>
                 </div>
 
-                {ui.pendingSongsCount === 0 ? (
+                {pendingSongs.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <Music className="w-16 h-16 mx-auto mb-4 opacity-50" />
                     <div className="text-lg font-medium mb-2">No songs added yet</div>
@@ -1804,7 +1886,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {ui.pendingSongs.map((song, index) => (
+                    {pendingSongs.map((song, index) => (
                       <div
                         key={song.id}
                         className={`
@@ -1867,9 +1949,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const newSongs = ui.pendingSongs.filter(s => s.id !== song.id);
-                                ui.addPendingSongs(newSongs);
-                                localStorage.setItem('ui.pendingSongs', JSON.stringify(newSongs));
+                                const newSongs = pendingSongs.filter(s => s.id !== song.id);
+                                setPendingSongs(newSongs);
+                                localStorage.setItem('pendingSongs', JSON.stringify(newSongs));
                                 // Clear presentation if removing the active song
                                 if (presentation.current.content?.id === song.id) {
                                   presentation.clear();
@@ -1911,7 +1993,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
               </div>
             )}
 
-            {ui.activeTab === 'plan' && (
+            {activeTab === 'plan' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between mb-4">
                   <div>
@@ -1978,7 +2060,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     </p>
                     <div className="grid grid-cols-1 gap-3 max-w-sm mx-auto">
                       <button
-                        onClick={() => ui.setActiveTab('plans')}
+                        onClick={() => setActiveTab('plans')}
                         className="flex items-center justify-center gap-3 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                       >
                         <Calendar className="w-5 h-5" />
@@ -2056,7 +2138,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   <SortableContext items={serviceItems.map(item => item.id)}>
                     {serviceItems.map((item, index) => {
                       const isSelected = selectedItem?.id === item.id;
-                      const isLoading = ui.isGeneratingSlides && isSelected;
+                      const isLoading = isGeneratingSlides && isSelected;
                       const isPresentingThis = isPresenting && isSelected && presentationMode === 'live';
 
                       return (
@@ -2143,7 +2225,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
             )}
 
 
-            {ui.activeTab === 'plans' && (
+            {activeTab === 'plans' && (
               <div className="space-y-4">
                 {/* Saved Plans Section */}
                 <div className="bg-card rounded-lg border border-border">
@@ -2163,7 +2245,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     ) : (
                       <>
                         <PlanManager
-                          serviceId={ui.currentServiceId}
+                          serviceId={currentServiceId}
                           onPlanSelect={handlePlanSelectWithLoading}
                           onPlanCreate={(plan) => {
                             handlePlanCreate(plan);
@@ -2186,12 +2268,12 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                         />
 
                         {/* Plan Error Display */}
-                        {ui.planError && (
+                        {planError && (
                         <div className="bg-red-900/50 border border-red-600 rounded-lg p-4 mb-4">
                           <div className="flex items-center justify-between">
                             <div>
                               <h4 className="text-sm font-semibold text-red-300 mb-1">Plan Loading Error</h4>
-                              <p className="text-sm text-red-200">{ui.planError}</p>
+                              <p className="text-sm text-red-200">{planError}</p>
                             </div>
                             <button
                               onClick={() => setPlanError(null)}
@@ -2205,7 +2287,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                       )}
 
                         {/* Plan Statistics */}
-                        {ui.isPlanLoading ? (
+                        {isPlanLoading ? (
                           <div className="bg-card rounded-lg border border-border p-4 mb-4">
                             <div className="flex items-center justify-center py-4">
                               <div className="text-gray-400">Loading plan content...</div>
@@ -2229,7 +2311,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                         <span className="text-green-700 dark:text-green-300 text-xs">({selectedPlan.planItems?.length || 0} items)</span>
                       </div>
                       <button
-                        onClick={() => ui.setActiveTab('plan')}
+                        onClick={() => setActiveTab('plan')}
                         className="text-green-700 dark:text-green-300 text-xs hover:text-green-600 dark:hover:text-green-200 underline"
                       >
                         View in Current Service →
@@ -2573,28 +2655,28 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       </PanelGroup>
 
       {/* Inline Media Addition Modal */}
-      {ui.inlineMediaModal.open && (
+      {showInlineMediaModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
           <div className="bg-background rounded-lg shadow-2xl w-full max-w-3xl max-h-[80vh] border border-border overflow-hidden">
-            {ui.inlineMediaModal.mediaType === 'song' && (
+            {inlineMediaType === 'song' && (
               <InlineSongSelector
                 onSelect={handleInlineSongSelect}
                 onCancel={closeInlineMediaModal}
               />
             )}
-            {ui.inlineMediaModal.mediaType === 'scripture' && (
+            {inlineMediaType === 'scripture' && (
               <InlineScriptureSelector
                 onSelect={handleInlineScriptureSelect}
                 onCancel={closeInlineMediaModal}
               />
             )}
-            {ui.inlineMediaModal.mediaType === 'presentation' && (
+            {inlineMediaType === 'presentation' && (
               <InlinePresentationSelector
                 onSelect={handleInlinePresentationSelect}
                 onCancel={closeInlineMediaModal}
               />
             )}
-            {ui.inlineMediaModal.mediaType === 'announcement' && (
+            {inlineMediaType === 'announcement' && (
               <InlineAnnouncementEditor
                 onSave={handleInlineAnnouncementSave}
                 onCancel={closeInlineMediaModal}

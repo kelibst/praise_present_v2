@@ -12,6 +12,7 @@ import {
   selectCanNavigatePrevious,
   selectCurrentContentInfo,
   selectHistory,
+  selectTabs,
   presentContent,
   switchContent,
   nextSlide,
@@ -22,6 +23,9 @@ import {
   clearPresentation,
   clearTabPresentation,
   showBlackScreen,
+  saveTabState,
+  restoreTabState,
+  switchTab,
   PresentationContent,
   ActiveTab
 } from '../lib/presentationSlice';
@@ -58,6 +62,7 @@ export const usePresentation = () => {
   const canGoPrevious = useSelector(selectCanNavigatePrevious);
   const contentInfo = useSelector(selectCurrentContentInfo);
   const history = useSelector(selectHistory);
+  const tabs = useSelector(selectTabs);
 
   // Actions
   const present = useCallback((content: PresentationContent, options?: { goLive?: boolean; tabName?: ActiveTab }) => {
@@ -104,6 +109,18 @@ export const usePresentation = () => {
     dispatch(showBlackScreen());
   }, [dispatch]);
 
+  const saveTab = useCallback((tabName: ActiveTab) => {
+    dispatch(saveTabState(tabName));
+  }, [dispatch]);
+
+  const restoreTab = useCallback((tabName: ActiveTab) => {
+    dispatch(restoreTabState(tabName));
+  }, [dispatch]);
+
+  const handleTabSwitch = useCallback((fromTab: ActiveTab, toTab: ActiveTab) => {
+    dispatch(switchTab({ fromTab, toTab }));
+  }, [dispatch]);
+
   // Computed values
   const slideNumber = current.slideIndex + 1; // 1-indexed for display
   const slideProgress = useMemo(() => {
@@ -126,6 +143,7 @@ export const usePresentation = () => {
     canGoPrevious,
     contentInfo,
     history,
+    tabs,
     status: current.status,
     owner: current.owner,
 
@@ -139,7 +157,10 @@ export const usePresentation = () => {
     stopLive: stopLivePresentation,
     clear,
     clearTab,
-    showBlack
+    showBlack,
+    saveTab,
+    restoreTab,
+    switchTab: handleTabSwitch
   };
 };
 
