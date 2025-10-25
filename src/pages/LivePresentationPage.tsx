@@ -363,17 +363,25 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Initialize and check for pending songs
   useEffect(() => {
-    const checkPendingSongs = () => {
+    let hasAutoSwitched = false; // Track if we've already auto-switched
+
+    const checkPendingSongs = (shouldAutoSwitch: boolean = false) => {
       const pendingSongsData = localStorage.getItem('pendingSongs');
       if (pendingSongsData) {
         try {
           const songs = JSON.parse(pendingSongsData);
           if (Array.isArray(songs) && songs.length > 0) {
+            const previousCount = pendingSongs.length;
             setPendingSongs(songs);
-            // Auto-switch to songs tab when songs are added
-            setActiveTab('songs');
-            // Auto-select the first song
-            if (songs.length > 0) {
+
+            // Only auto-switch if new songs were added and we haven't already switched
+            if (shouldAutoSwitch && !hasAutoSwitched && songs.length > previousCount) {
+              setActiveTab('songs');
+              hasAutoSwitched = true;
+            }
+
+            // Auto-select the first song if none selected
+            if (songs.length > 0 && !selectedSong) {
               setSelectedSong(songs[0]);
               setCurrentSlideIndex(0);
             }
@@ -385,25 +393,25 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       }
     };
 
-    checkPendingSongs();
+    checkPendingSongs(false); // Initial check without auto-switch
 
     // Set up listener for storage events
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'pendingSongs' && e.newValue) {
-        checkPendingSongs();
+        checkPendingSongs(true); // Allow auto-switch on storage change
       }
     };
 
     window.addEventListener('storage', handleStorageChange);
 
-    // Check periodically for same-window updates
-    const interval = setInterval(checkPendingSongs, 1000);
+    // Check periodically for same-window updates (without auto-switching)
+    const interval = setInterval(() => checkPendingSongs(false), 1000);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
     };
-  }, []);
+  }, [pendingSongs.length, selectedSong]);
 
   // Initialize service for plan functionality
   useEffect(() => {

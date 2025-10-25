@@ -1,6 +1,7 @@
 import { SlideTemplate, TemplateTheme, TemplateContent } from './SlideTemplate';
 import { Shape } from '../core/Shape';
-import { Size } from '../types/geometry';
+import { Size, Point } from '../types/geometry';
+import { ShapeStyle } from '../types/shapes';
 
 export interface TemplateRegistration {
   template: SlideTemplate;
@@ -14,12 +15,37 @@ export interface TemplateRegistration {
   };
 }
 
+/**
+ * Template placeholder override
+ * Allows customizing individual placeholder positions/styles
+ */
+export interface PlaceholderOverride {
+  placeholderId: string;
+  position?: Point;
+  size?: Size;
+  style?: Partial<ShapeStyle>;
+}
+
+/**
+ * Template override set
+ * Collection of overrides for a specific template instance
+ */
+export interface TemplateOverrides {
+  templateId: string;
+  overrideId: string; // Unique ID for this override set
+  name?: string;
+  placeholderOverrides: PlaceholderOverride[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface SlideGenerationOptions {
   templateId: string;
   content: TemplateContent;
   theme?: TemplateTheme;
   slideSize?: Size;
   customizations?: any;
+  overrides?: TemplateOverrides; // Apply saved overrides
 }
 
 export interface SlideGenerationResult {
@@ -40,6 +66,7 @@ export class TemplateManager {
   private defaultTheme: TemplateTheme;
   private initialized: boolean = false;
   private slideSize: Size;
+  private overrides: Map<string, TemplateOverrides> = new Map(); // Store template overrides
 
   constructor(slideSize?: Size) {
     this.slideSize = slideSize || { width: 1920, height: 1080 };
@@ -474,6 +501,157 @@ export class TemplateManager {
       valid: errors.length === 0,
       errors,
       warnings
+    };
+  }
+
+  // ========================
+  // Template Override Methods
+  // ========================
+
+  /**
+   * Save template overrides for reuse
+   */
+  public saveOverrides(overrides: TemplateOverrides): void {
+    this.overrides.set(overrides.overrideId, overrides);
+    console.log(`✅ Saved template overrides: ${overrides.name || overrides.overrideId}`);
+  }
+
+  /**
+   * Get template overrides by ID
+   */
+  public getOverrides(overrideId: string): TemplateOverrides | null {
+    return this.overrides.get(overrideId) || null;
+  }
+
+  /**
+   * Get all overrides for a specific template
+   */
+  public getOverridesForTemplate(templateId: string): TemplateOverrides[] {
+    return Array.from(this.overrides.values())
+      .filter(override => override.templateId === templateId);
+  }
+
+  /**
+   * Delete template overrides
+   */
+  public deleteOverrides(overrideId: string): boolean {
+    return this.overrides.delete(overrideId);
+  }
+
+  /**
+   * Create new override set from customizations
+   */
+  public createOverrides(
+    templateId: string,
+    placeholderOverrides: PlaceholderOverride[],
+    name?: string
+  ): TemplateOverrides {
+    const now = new Date();
+    return {
+      templateId,
+      overrideId: `override-${templateId}-${Date.now()}`,
+      name,
+      placeholderOverrides,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  /**
+   * Apply overrides to generated shapes
+   * This modifies shape positions/styles based on saved overrides
+   */
+  public applyOverridesToShapes(shapes: Shape[], overrides: TemplateOverrides): Shape[] {
+    if (!overrides || overrides.placeholderOverrides.length === 0) {
+      return shapes;
+    }
+
+    // Create a map of placeholder overrides for quick lookup
+    const overrideMap = new Map<string, PlaceholderOverride>();
+    overrides.placeholderOverrides.forEach(override => {
+      overrideMap.set(override.placeholderId, override);
+    });
+
+    // Apply overrides to matching shapes
+    return shapes.map(shape => {
+      // Try to find matching override by shape metadata
+      const placeholderId = shape.metadata?.placeholderId || shape.metadata?.role;
+      if (!placeholderId) return shape;
+
+      const override = overrideMap.get(placeholderId);
+      if (!override) return shape;
+
+      // Apply position override
+      if (override.position) {
+        shape.position = { ...override.position };
+      }
+
+      // Apply size override
+      if (override.size) {
+        shape.size = { ...override.size };
+      }
+
+      // Apply style override (for shapes that have a style property)
+      if (override.style && 'style' in shape) {
+        (shape as any).style = { ...(shape as any).style, ...override.style };
+      }
+
+      return shape;
+    });
+  }
+
+  /**
+   * Export overrides to JSON for storage
+   */
+  public exportOverrides(overrideId: string): string | null {
+    const overrides = this.getOverrides(overrideId);
+    if (!overrides) return null;
+
+    return JSON.stringify(overrides, null, 2);
+  }
+
+  /**
+   * Import overrides from JSON
+   */
+  public importOverrides(overridesData: string): { success: boolean; error?: string; overrideId?: string } {
+    try {
+      const overrides: TemplateOverrides = JSON.parse(overridesData);
+
+      if (!overrides.templateId || !overrides.overrideId || !overrides.placeholderOverrides) {
+        return { success: false, error: 'Invalid overrides format' };
+      }
+
+      this.saveOverrides(overrides);
+
+      return {
+        success: true,
+        overrideId: overrides.overrideId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to parse overrides data: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  }
+
+  /**
+   * Get override statistics
+   */
+  public getOverrideStats(): {
+    totalOverrides: number;
+    overridesByTemplate: Record<string, number>;
+  } {
+    const overridesByTemplate: Record<string, number> = {};
+
+    for (const override of this.overrides.values()) {
+      const templateId = override.templateId;
+      overridesByTemplate[templateId] = (overridesByTemplate[templateId] || 0) + 1;
+    }
+
+    return {
+      totalOverrides: this.overrides.size,
+      overridesByTemplate
     };
   }
 }

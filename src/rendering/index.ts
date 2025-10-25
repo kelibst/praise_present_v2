@@ -7,6 +7,9 @@ export * from './shapes';
 // Template system
 export * from './templates';
 
+// Content type system
+export * from './content';
+
 // Responsive rendering system
 export * from './responsive';
 

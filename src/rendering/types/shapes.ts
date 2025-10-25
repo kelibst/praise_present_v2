@@ -1,6 +1,51 @@
 import { Point, Size, Rectangle, Transform, Color, Gradient, Border } from './geometry';
 import { RenderContext } from './rendering';
 
+/**
+ * Extended shape metadata for editor state and content type tracking
+ */
+export interface ShapeMetadata {
+  /**
+   * Content type this shape belongs to
+   */
+  contentType?: string;
+
+  /**
+   * Whether this shape is editable
+   */
+  editable?: boolean;
+
+  /**
+   * Whether this shape is locked (cannot be moved/resized)
+   */
+  locked?: boolean;
+
+  /**
+   * Whether this shape is grouped with others
+   */
+  groupId?: string;
+
+  /**
+   * Layer name for organization
+   */
+  layer?: string;
+
+  /**
+   * Custom role/purpose (e.g., 'verse', 'chorus', 'overlay', 'background')
+   */
+  role?: string;
+
+  /**
+   * Reference to source content (e.g., overlayId for media overlays)
+   */
+  sourceId?: string;
+
+  /**
+   * Any additional custom metadata
+   */
+  [key: string]: any;
+}
+
 export interface ShapeProps {
   id?: string;
   position?: Point;
@@ -10,7 +55,7 @@ export interface ShapeProps {
   zIndex?: number;
   visible?: boolean;
   transform?: Transform;
-  metadata?: Record<string, any>; // For storing shape-specific data like type (verse/reference/translation)
+  metadata?: ShapeMetadata; // Enhanced metadata with editor support
 }
 
 export interface ShapeStyle {
@@ -81,7 +126,8 @@ export const defaultShapeProps: Required<ShapeProps> = {
     rotation: 0,
     scaleX: 1,
     scaleY: 1
-  }
+  },
+  metadata: {}
 };
 
 export const defaultTextStyle: TextStyle = {
