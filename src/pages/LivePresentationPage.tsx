@@ -36,6 +36,7 @@ import {
   serviceItemToContent
 } from '../lib/contentBuilders';
 import type { ActiveTab } from '../lib/presentationSlice';
+import { updateSlide } from '../lib/presentationSlice';
 
 // Import scripture navigation Redux slice
 import {
@@ -1009,6 +1010,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       }));
 
       // Build presentation content using content builder
+      // NOTE: buildScriptureContent now uses scriptureSettings from featureSettingsSlice
+      // which is the single source of truth for all scripture formatting
       const scriptureContent = await buildScriptureContent(
         navigatedVerses,
         scriptureSettings,
@@ -1494,11 +1497,11 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   const handleSlideUpdate = React.useCallback((updatedSlide: Slide) => {
     if (!selectedItem || !selectedItem.slides) return;
 
-    // console.log('🎨 LivePresentationPage: Slide updated', {
-    //   slideId: updatedSlide.id,
-    //   shapeCount: updatedSlide.shapes.length,
-    //   currentSlideIndex
-    // });
+    console.log('🎨 LivePresentationPage: Slide updated', {
+      slideId: updatedSlide.id,
+      shapeCount: updatedSlide.shapes.length,
+      currentSlideIndex
+    });
 
     // Update the slide in the service item
     const updatedSlides = [...selectedItem.slides];
@@ -1509,11 +1512,20 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       slides: updatedSlides
     };
 
-    // Update Redux store with new slides
+    // CRITICAL FIX: Update BOTH Redux slices for complete synchronization
+
+    // 1. Update serviceItemsSlice (for persistence and service item list)
     dispatch(updateServiceItem(updatedServiceItem));
 
-    // Update selected item
-  }, [selectedItem, currentSlideIndex, dispatch]);
+    // 2. Update presentationSlice (for currentSlide display)
+    // This is what was missing - the presentation slice needs to know about slide changes!
+    dispatch(updateSlide({ slideIndex: currentSlideIndex, slide: updatedSlide }));
+
+    console.log('✅ Updated both serviceItems and presentation slices');
+
+    // NOTE: Removed scriptureFormattingSlice save - now using featureSettingsSlice as single source of truth
+    // Users must explicitly "Save as Default" via toolbar to persist formatting changes
+  }, [selectedItem, currentSlideIndex, dispatch, presentation]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">

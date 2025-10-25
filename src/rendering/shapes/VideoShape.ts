@@ -38,6 +38,13 @@ export class VideoShape extends Shape {
 
   constructor(props: VideoShapeProps = {}, style: ImageStyle = {}) {
     super(props, style);
+
+    // Generate ID after type is set (fixes 'shape_undefined_...' issue)
+    // Note: VideoShape uses ShapeType.IMAGE (see line 23)
+    if (!this.id) {
+      this.id = this.generateId(ShapeType.IMAGE);
+    }
+
     this.src = props.src || '';
     this.videoStyle = { ...style };
     this.loop = props.loop !== undefined ? props.loop : true; // Default to loop

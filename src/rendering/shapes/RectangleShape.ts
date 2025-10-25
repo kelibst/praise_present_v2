@@ -14,6 +14,12 @@ export class RectangleShape extends Shape {
 
   constructor(props: RectangleShapeProps = {}, style: RectangleStyle = {}) {
     super(props, style);
+
+    // Generate ID after type is set (fixes 'shape_undefined_...' issue)
+    if (!this.id) {
+      this.id = this.generateId(ShapeType.RECTANGLE);
+    }
+
     this.rectangleStyle = { ...this.style, ...style };
     this.borderRadius = props.borderRadius || 0;
   }

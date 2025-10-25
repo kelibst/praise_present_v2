@@ -21,7 +21,8 @@ export abstract class Shape {
   constructor(props: ShapeProps = {}, style: ShapeStyle = {}) {
     const mergedProps = { ...defaultShapeProps, ...props };
 
-    this.id = mergedProps.id || this.generateId();
+    // Note: this.id is set by subclasses after they initialize this.type
+    this.id = mergedProps.id || '';  // Will be set by subclass if empty
     this.position = { ...mergedProps.position };
     this.size = { ...mergedProps.size };
     this.rotation = mergedProps.rotation;
@@ -33,8 +34,9 @@ export abstract class Shape {
     this.style = { ...style };
   }
 
-  protected generateId(): string {
-    return `shape_${this.type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  protected generateId(type?: string): string {
+    const shapeType = type || this.type || 'unknown';
+    return `shape_${shapeType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
   /**

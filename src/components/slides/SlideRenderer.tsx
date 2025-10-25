@@ -145,7 +145,13 @@ const createSlideFingerprint = (slide: Slide): string => {
       // Add text content if it's a TextShape (duck typing)
       const textKey = (shape as any).text ? `text:${(shape as any).text}` : '';
 
-      return `${baseKey}${textKey}`;
+      // CRITICAL: Add textStyle to fingerprint for formatting changes
+      const textStyle = (shape as any).textStyle;
+      const styleKey = textStyle
+        ? `style:${textStyle.fontSize}-${textStyle.fontFamily}-${textStyle.fontWeight}-${textStyle.color}-${textStyle.textAlign}`
+        : '';
+
+      return `${baseKey}${textKey}${styleKey}`;
     })
     .join('|');
 
@@ -386,6 +392,51 @@ export const SlideRenderer = React.memo(
         prevShape.size.width !== nextShape.size.width ||
         prevShape.size.height !== nextShape.size.height
       ) {
+        return false;
+      }
+
+      // CRITICAL FIX: Check textStyle changes (color, font, size, etc.)
+      // This was missing and caused toolbar changes to not trigger re-renders
+      const prevStyle = (prevShape as any).textStyle;
+      const nextStyle = (nextShape as any).textStyle;
+      if (prevStyle && nextStyle) {
+        // Check critical style properties that affect rendering
+        if (
+          prevStyle.fontSize !== nextStyle.fontSize ||
+          prevStyle.fontFamily !== nextStyle.fontFamily ||
+          prevStyle.fontWeight !== nextStyle.fontWeight ||
+          prevStyle.fontStyle !== nextStyle.fontStyle ||
+          prevStyle.textDecoration !== nextStyle.textDecoration ||
+          prevStyle.textAlign !== nextStyle.textAlign ||
+          prevStyle.lineHeight !== nextStyle.lineHeight
+        ) {
+          return false; // Re-render needed
+        }
+
+        // Check color (handles both string and object format)
+        const prevColor = typeof prevStyle.color === 'string'
+          ? prevStyle.color
+          : JSON.stringify(prevStyle.color);
+        const nextColor = typeof nextStyle.color === 'string'
+          ? nextStyle.color
+          : JSON.stringify(nextStyle.color);
+        if (prevColor !== nextColor) {
+          return false; // Re-render needed
+        }
+
+        // Check background fill
+        const prevFill = prevStyle.fill ? JSON.stringify(prevStyle.fill) : null;
+        const nextFill = nextStyle.fill ? JSON.stringify(nextStyle.fill) : null;
+        if (prevFill !== nextFill) {
+          return false; // Re-render needed
+        }
+
+        // Check opacity
+        if (prevStyle.opacity !== nextStyle.opacity) {
+          return false; // Re-render needed
+        }
+      } else if (prevStyle !== nextStyle) {
+        // One has style, other doesn't
         return false;
       }
     }

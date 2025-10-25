@@ -31,6 +31,12 @@ export class ImageShape extends Shape {
 
   constructor(props: ImageShapeProps = {}, style: ImageStyle = {}) {
     super(props, style);
+
+    // Generate ID after type is set (fixes 'shape_undefined_...' issue)
+    if (!this.id) {
+      this.id = this.generateId(ShapeType.IMAGE);
+    }
+
     this.src = props.src || '';
     this.imageStyle = { ...style };
     this.crossOrigin = props.crossOrigin;

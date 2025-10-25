@@ -18,6 +18,12 @@ export class BackgroundShape extends Shape {
   constructor(props: BackgroundShapeProps) {
     // Background shapes typically fill the entire canvas/slide
     super(props, {});
+
+    // Generate ID after type is set (fixes 'shape_undefined_...' issue)
+    if (!this.id) {
+      this.id = this.generateId(ShapeType.BACKGROUND);
+    }
+
     this.backgroundStyle = props.backgroundStyle;
 
     // Background shapes are typically at the lowest z-index

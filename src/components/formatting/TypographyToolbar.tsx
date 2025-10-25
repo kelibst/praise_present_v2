@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import {
   Type,
   Bold,
@@ -11,10 +11,23 @@ import {
   Plus,
   Palette,
   Save,
-  Square
+  Square,
+  RotateCcw,
+  CheckCircle2,
+  Pencil
 } from 'lucide-react';
 import { TextShape } from '../../rendering/shapes/TextShape';
 import { TextStyle } from '../../rendering/types/shapes';
+import {
+  normalizeColor,
+  hexToRgb,
+  clampFontSize,
+  clampLineHeight,
+  clampOpacity,
+  isUsingDefaults,
+  getElementTypeLabel,
+  PRESENTATION_FONTS
+} from '../../utils/shapeUtils';
 
 interface TypographyToolbarProps {
   /**
@@ -33,6 +46,11 @@ interface TypographyToolbarProps {
   onSaveAsDefault?: () => void;
 
   /**
+   * Optional callback to revert shape to default settings
+   */
+  onRevertToDefaults?: () => void;
+
+  /**
    * Optional CSS class
    */
   className?: string;
@@ -41,237 +59,153 @@ interface TypographyToolbarProps {
 /**
  * TypographyToolbar - PowerPoint-style formatting toolbar for text shapes
  *
+ * REDESIGNED ARCHITECTURE (v2.0):
+ * - No Redux formatting state - reads directly from selectedShape prop
+ * - No useEditorFormatting hook - simpler, direct callbacks
+ * - Memoized computed values for performance
+ * - Re-renders on every prop change to ensure toolbar stays in sync
+ * - All handlers call onFormatChange immediately (no debouncing here)
+ *
  * Features:
  * - Font family dropdown (10 common presentation fonts)
  * - Font size controls (slider + numeric input + +/- buttons)
  * - Text style toggles (Bold, Italic, Underline)
  * - Text alignment buttons (Left, Center, Right)
  * - Color picker with hex display
+ * - Background color and opacity controls
+ * - Line height slider
  * - Live preview of changes
  *
  * Architecture:
  * - Only visible when a text shape is selected
- * - Changes apply immediately to selected shape
+ * - Changes apply immediately via onFormatChange callback
+ * - Parent component handles debouncing and persistence
  * - Works with auto-shrink: user-set size becomes maxFontSize
- * - Updates propagate through slide → preview → live display
  */
 export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
   selectedShape,
   onFormatChange,
   onSaveAsDefault,
+  onRevertToDefaults,
   className = ''
 }) => {
-  // Local state for form controls (synced with selected shape)
-  const [fontSize, setFontSize] = useState(64);
-  const [fontFamily, setFontFamily] = useState('Arial');
-  const [isBold, setIsBold] = useState(false);
-  const [isItalic, setIsItalic] = useState(false);
-  const [isUnderline, setIsUnderline] = useState(false);
-  const [textAlign, setTextAlign] = useState<'left' | 'center' | 'right'>('center');
-  const [textColor, setTextColor] = useState('#ffffff');
-  const [lineHeight, setLineHeight] = useState(1.5);
-  const [backgroundColor, setBackgroundColor] = useState('#000000');
-  const [hasBackground, setHasBackground] = useState(false);
-  const [backgroundOpacity, setBackgroundOpacity] = useState(1.0);
-
-  // Sync local state with selected shape
-  useEffect(() => {
-    if (!selectedShape) return;
-
-    const style = selectedShape.textStyle;
-    if (!style) return;
-
-    console.log('📊 TypographyToolbar syncing from shape:', {
-      shapeId: selectedShape.id,
-      fontSize: style.fontSize,
-      color: style.color,
-      fullStyle: { ...style }
-    });
-
-    setFontSize(style.fontSize || 64);
-    setFontFamily(style.fontFamily || 'Arial');
-    setIsBold(style.fontWeight === 'bold');
-    setIsItalic(style.fontStyle === 'italic');
-    setIsUnderline(style.textDecoration === 'underline');
-    setTextAlign((style.textAlign as 'left' | 'center' | 'right') || 'center');
-    setLineHeight(style.lineHeight || 1.5);
-
-    // Convert Color object to hex string
-    if (style.color) {
-      if (typeof style.color === 'string') {
-        setTextColor(style.color);
-      } else {
-        const hex = `#${style.color.r.toString(16).padStart(2, '0')}${style.color.g.toString(16).padStart(2, '0')}${style.color.b.toString(16).padStart(2, '0')}`;
-        setTextColor(hex);
-      }
-    }
-
-    // Sync background color and opacity
-    const fill = style.fill || selectedShape.style?.fill;
-    if (fill && typeof fill === 'object' && 'r' in fill) {
-      const bgColor = fill as any;
-      const bgHex = `#${bgColor.r.toString(16).padStart(2, '0')}${bgColor.g.toString(16).padStart(2, '0')}${bgColor.b.toString(16).padStart(2, '0')}`;
-      setBackgroundColor(bgHex);
-      setHasBackground(true);
-      setBackgroundOpacity(style.opacity !== undefined ? style.opacity : 1.0);
-    } else {
-      setHasBackground(false);
-      setBackgroundOpacity(1.0);
-    }
-  }, [selectedShape]);
-
   // If no shape selected, don't render toolbar
   if (!selectedShape) {
     return null;
   }
 
-  // Convert hex color to Color object
-  const hexToColor = (hex: string) => {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16),
-      a: 1.0
-    } : { r: 255, g: 255, b: 255, a: 1.0 };
-  };
+  const style = selectedShape.textStyle;
 
-  // Apply formatting change
-  const applyFormat = (updates: Partial<TextStyle>) => {
-    if (!selectedShape) return;
+  // Memoized computed values for performance
+  const textColor = useMemo(() => normalizeColor(style.color), [style.color]);
 
-    // CRITICAL: Remove undefined values to prevent overwriting existing properties
-    const cleanedUpdates = Object.fromEntries(
-      Object.entries(updates).filter(([_, value]) => value !== undefined)
-    ) as Partial<TextStyle>;
+  const backgroundColor = useMemo(() => {
+    if (!style.fill || typeof style.fill === 'string') return '#000000';
+    if ('r' in style.fill) {
+      const { r, g, b } = style.fill;
+      return `#${[r, g, b].map(x => Math.round(x).toString(16).padStart(2, '0')).join('')}`;
+    }
+    return '#000000';
+  }, [style.fill]);
 
-    console.log('🎨 TypographyToolbar applying format:', {
-      original: updates,
-      cleaned: cleanedUpdates
-    });
+  // Extract values from shape with defaults
+  const fontSize = style.fontSize ?? 64;
+  const fontFamily = style.fontFamily ?? 'Arial';
+  const isBold = style.fontWeight === 'bold';
+  const isItalic = style.fontStyle === 'italic';
+  const isUnderline = style.textDecoration === 'underline';
+  const textAlign = (style.textAlign as 'left' | 'center' | 'right') ?? 'center';
+  const lineHeight = style.lineHeight ?? 1.5;
+  const hasBackground = !!style.fill;
+  const backgroundOpacity = style.opacity ?? 1.0;
 
-    // Pass only the updates - SlideEditorWithToolbar will merge with existing style
-    onFormatChange(selectedShape.id, cleanedUpdates);
-  };
+  // Formatting status
+  const usingDefaults = isUsingDefaults(selectedShape);
+  const elementLabel = getElementTypeLabel(selectedShape);
+
+  // Update formatting helper
+  const updateFormat = useCallback((updates: Partial<TextStyle>) => {
+    onFormatChange(selectedShape.id, updates);
+  }, [selectedShape.id, onFormatChange]);
 
   // Font size handlers
-  const handleFontSizeChange = (newSize: number) => {
-    const clampedSize = Math.max(8, Math.min(200, newSize));
-    setFontSize(clampedSize);
+  const handleFontSizeChange = useCallback((newSize: number) => {
+    updateFormat({ fontSize: clampFontSize(newSize) });
+  }, [updateFormat]);
 
-    // Note: maxFontSize is handled separately in SlideEditorWithToolbar
-    // since it's a property of TextShape, not TextStyle
-    applyFormat({
-      fontSize: clampedSize
-    });
-  };
+  const incrementFontSize = useCallback(() => {
+    handleFontSizeChange(fontSize + 2);
+  }, [fontSize, handleFontSizeChange]);
 
-  const incrementFontSize = () => handleFontSizeChange(fontSize + 2);
-  const decrementFontSize = () => handleFontSizeChange(fontSize - 2);
+  const decrementFontSize = useCallback(() => {
+    handleFontSizeChange(fontSize - 2);
+  }, [fontSize, handleFontSizeChange]);
 
   // Font family handler
-  const handleFontFamilyChange = (family: string) => {
-    setFontFamily(family);
-    applyFormat({ fontFamily: family });
-  };
+  const handleFontFamilyChange = useCallback((family: string) => {
+    updateFormat({ fontFamily: family });
+  }, [updateFormat]);
 
   // Style toggle handlers
-  const toggleBold = () => {
-    const newBold = !isBold;
-    setIsBold(newBold);
-    applyFormat({ fontWeight: newBold ? 'bold' : 'normal' });
-  };
+  const toggleBold = useCallback(() => {
+    updateFormat({ fontWeight: isBold ? 'normal' : 'bold' });
+  }, [isBold, updateFormat]);
 
-  const toggleItalic = () => {
-    const newItalic = !isItalic;
-    setIsItalic(newItalic);
-    applyFormat({ fontStyle: newItalic ? 'italic' : 'normal' });
-  };
+  const toggleItalic = useCallback(() => {
+    updateFormat({ fontStyle: isItalic ? 'normal' : 'italic' });
+  }, [isItalic, updateFormat]);
 
-  const toggleUnderline = () => {
-    const newUnderline = !isUnderline;
-    setIsUnderline(newUnderline);
-    applyFormat({ textDecoration: newUnderline ? 'underline' : 'none' });
-  };
+  const toggleUnderline = useCallback(() => {
+    updateFormat({ textDecoration: isUnderline ? 'none' : 'underline' });
+  }, [isUnderline, updateFormat]);
 
   // Alignment handler
-  const handleAlignmentChange = (align: 'left' | 'center' | 'right') => {
-    setTextAlign(align);
-    applyFormat({ textAlign: align });
-  };
+  const handleAlignmentChange = useCallback((align: 'left' | 'center' | 'right') => {
+    updateFormat({ textAlign: align });
+  }, [updateFormat]);
 
   // Color handler
-  const handleColorChange = (hex: string) => {
-    setTextColor(hex);
-    // Pass hex string directly - rendering system handles conversion
-    applyFormat({ color: hex as any });
-  };
+  const handleColorChange = useCallback((hex: string) => {
+    updateFormat({ color: hex as any });
+  }, [updateFormat]);
 
   // Line height handler
-  const handleLineHeightChange = (height: number) => {
-    const clampedHeight = Math.max(0.8, Math.min(3.0, height));
-    setLineHeight(clampedHeight);
-    applyFormat({ lineHeight: clampedHeight });
-  };
+  const handleLineHeightChange = useCallback((height: number) => {
+    updateFormat({ lineHeight: clampLineHeight(height) });
+  }, [updateFormat]);
 
-  // Background color toggle
-  const toggleBackground = () => {
-    const newHasBackground = !hasBackground;
-    setHasBackground(newHasBackground);
-
-    if (newHasBackground) {
-      // Enable background with current color
-      const bgColor = hexToColor(backgroundColor);
-      applyFormat({
-        fill: bgColor,
-        opacity: backgroundOpacity
-      });
-    } else {
+  // Background toggle
+  const toggleBackground = useCallback(() => {
+    if (hasBackground) {
       // Disable background
-      applyFormat({
+      updateFormat({
         fill: undefined as any,
         opacity: undefined as any
       });
+    } else {
+      // Enable background with current color
+      const bgColor = hexToRgb(backgroundColor);
+      updateFormat({
+        fill: bgColor,
+        opacity: backgroundOpacity
+      });
     }
-  };
+  }, [hasBackground, backgroundColor, backgroundOpacity, updateFormat]);
 
   // Background color handler
-  const handleBackgroundColorChange = (hex: string) => {
-    setBackgroundColor(hex);
+  const handleBackgroundColorChange = useCallback((hex: string) => {
     if (hasBackground) {
-      const bgColor = hexToColor(hex);
-      applyFormat({ fill: bgColor });
+      const bgColor = hexToRgb(hex);
+      updateFormat({ fill: bgColor });
     }
-  };
+  }, [hasBackground, updateFormat]);
 
   // Background opacity handler
-  const handleBackgroundOpacityChange = (opacity: number) => {
-    const clampedOpacity = Math.max(0, Math.min(1, opacity));
-    setBackgroundOpacity(clampedOpacity);
+  const handleBackgroundOpacityChange = useCallback((opacity: number) => {
     if (hasBackground) {
-      applyFormat({ opacity: clampedOpacity });
+      updateFormat({ opacity: clampOpacity(opacity) });
     }
-  };
-
-  // Common presentation fonts
-  const fonts = [
-    'Arial',
-    'Times New Roman',
-    'Georgia',
-    'Verdana',
-    'Trebuchet MS',
-    'Courier New',
-    'Impact',
-    'Comic Sans MS',
-    'Calibri',
-    'Helvetica'
-  ];
-
-  // Get the element type from metadata for display
-  const elementType = selectedShape?.metadata?.elementType || 'text';
-  const elementLabel = elementType === 'verse' ? 'Verse' :
-                      elementType === 'reference' ? 'Reference' :
-                      elementType === 'translation' ? 'Translation' : 'Text';
+  }, [hasBackground, updateFormat]);
 
   return (
     <div className={`bg-gray-900/95 border-b border-gray-700 px-4 py-2 ${className}`}>
@@ -280,6 +214,24 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
         <div className="flex items-center gap-2 px-3 py-1 bg-blue-900/50 border border-blue-600 rounded">
           <span className="text-xs font-semibold text-blue-300">Editing:</span>
           <span className="text-sm font-bold text-white">{elementLabel}</span>
+        </div>
+
+        {/* Formatting Status Indicator */}
+        <div className={usingDefaults
+          ? "flex items-center gap-2 px-3 py-1 bg-green-900/30 border border-green-600/50 rounded"
+          : "flex items-center gap-2 px-3 py-1 bg-orange-900/30 border border-orange-600/50 rounded"
+        }>
+          {usingDefaults ? (
+            <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+          ) : (
+            <Pencil className="w-3.5 h-3.5 text-orange-500" />
+          )}
+          <span className={usingDefaults
+            ? "text-xs font-medium text-green-300"
+            : "text-xs font-medium text-orange-300"
+          }>
+            {usingDefaults ? 'Using Defaults' : 'Custom'}
+          </span>
         </div>
 
         {/* Divider */}
@@ -294,7 +246,7 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
             className="bg-gray-800 text-white text-sm border border-gray-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
             style={{ minWidth: '140px' }}
           >
-            {fonts.map(font => (
+            {PRESENTATION_FONTS.map(font => (
               <option key={font} value={font} style={{ fontFamily: font }}>
                 {font}
               </option>
@@ -522,6 +474,21 @@ export const TypographyToolbar: React.FC<TypographyToolbarProps> = ({
             </>
           )}
         </div>
+
+        {/* Revert to Defaults Button - Only show when custom formatting */}
+        {onRevertToDefaults && !usingDefaults && (
+          <>
+            <div className="h-6 w-px bg-gray-600" />
+            <button
+              onClick={onRevertToDefaults}
+              className="flex items-center gap-2 px-3 py-1 bg-orange-700 hover:bg-orange-600 text-white text-sm rounded border border-orange-600 transition-colors"
+              title="Revert to default settings from Feature Settings"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Revert to Defaults
+            </button>
+          </>
+        )}
 
         {/* Save as Default Button */}
         {onSaveAsDefault && (

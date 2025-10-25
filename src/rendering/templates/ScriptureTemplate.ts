@@ -203,7 +203,10 @@ export class ScriptureTemplate extends SlideTemplate {
         width: placeholder.bounds.width,
         height: placeholder.bounds.height
       },
-      metadata: { elementType: 'verse' }, // Tag this as the verse element
+      metadata: {
+        elementType: 'verse',
+        isDefaultFormatting: true // Track that this uses default settings
+      },
       wordWrap: true,
       autoSize: false, // Fixed bounds - never expand
       overflowBehavior: 'shrink-to-fit', // PowerPoint-style: shrink font if text overflows
@@ -324,7 +327,10 @@ export class ScriptureTemplate extends SlideTemplate {
         width: bounds.width,
         height: bounds.height
       },
-      metadata: { elementType: 'reference' }, // Tag this as the reference element
+      metadata: {
+        elementType: 'reference',
+        isDefaultFormatting: true // Track that this uses default settings
+      },
       wordWrap: false,
       autoSize: false,
       overflowBehavior: 'clip' // Reference stays fixed size
@@ -388,7 +394,10 @@ export class ScriptureTemplate extends SlideTemplate {
         width: placeholder.bounds.width,
         height: placeholder.bounds.height
       },
-      metadata: { elementType: 'translation' }, // Tag this as the translation element
+      metadata: {
+        elementType: 'translation',
+        isDefaultFormatting: true // Track that this uses default settings
+      },
       wordWrap: false,
       autoSize: false,
       overflowBehavior: 'clip' // Translation stays fixed size

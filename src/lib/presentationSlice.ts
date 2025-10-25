@@ -557,6 +557,42 @@ const presentationSlice = createSlice({
       // No saved state - clear
       state.current = { content: null, slideIndex: 0, status: 'idle', owner: null };
       console.log(`[PresentationSlice] Cleared presentation for ${toTab} tab`);
+    },
+
+    /**
+     * Update a specific slide in the current presentation
+     * This is needed when slide formatting changes in the editor
+     */
+    updateSlide: (state, action: PayloadAction<{ slideIndex: number; slide: Slide }>) => {
+      if (!state.current.content) return;
+
+      const { slideIndex, slide } = action.payload;
+      const maxIndex = state.current.content.slides.length - 1;
+
+      if (slideIndex >= 0 && slideIndex <= maxIndex) {
+        console.log(`[PresentationSlice] 🔄 Updating slide ${slideIndex + 1}/${state.current.content.slides.length}`, {
+          contentId: state.current.content.id,
+          slideId: slide.id,
+          shapeCount: slide.shapes.length
+        });
+
+        // Update the slide in the content
+        state.current.content.slides[slideIndex] = slide;
+
+        // If this is the current slide and we're live, update display
+        if (state.current.status === 'live' && state.current.slideIndex === slideIndex) {
+          state.display.currentSlide = slide;
+        }
+
+        // Update history entry too (to persist changes)
+        const historyIndex = state.history.findIndex(item => item.id === state.current.content!.id);
+        if (historyIndex !== -1) {
+          state.history[historyIndex].slides[slideIndex] = slide;
+          console.log(`[PresentationSlice] ✅ Also updated history entry`);
+        } else {
+          console.warn(`[PresentationSlice] ⚠️ Content not found in history!`, state.current.content.id);
+        }
+      }
     }
   },
 });
@@ -647,6 +683,7 @@ export const {
   showBlackScreen,
   updateDisplayState,
   updateSettings,
+  updateSlide,
   loadFromHistory,
   saveTabState,
   restoreTabState,
