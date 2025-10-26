@@ -3743,9 +3743,9 @@ class LiveDisplayWindow {
       }, 100);
       this.setupWindowEvents();
       this.currentDisplayId = config.displayId;
-      if ("http://localhost:5174") {
+      if ("http://localhost:5173") {
         await this.liveWindow.loadURL(
-          `${"http://localhost:5174"}?mode=live-display`
+          `${"http://localhost:5173"}?mode=live-display`
         );
       }
       console.log("Live window created successfully");
@@ -4549,6 +4549,7 @@ class MediaService {
         filename: input.filename,
         originalName: input.originalName,
         path: input.path,
+        thumbnailPath: input.thumbnailPath,
         type: input.type,
         mimeType: input.mimeType,
         size: input.size,
@@ -4736,10 +4737,63 @@ function generateUniqueFilename(originalName) {
   return `${sanitized}_${timestamp}_${random}${ext}`;
 }
 async function getImageDimensions(filePath) {
-  return null;
+  try {
+    let buffer;
+    if (filePath.startsWith("data:")) {
+      const matches = filePath.match(/^data:([^;]+);base64,(.+)$/);
+      if (!matches) return null;
+      buffer = Buffer.from(matches[2], "base64");
+    } else {
+      if (!fs__namespace.existsSync(filePath)) return null;
+      buffer = fs__namespace.readFileSync(filePath);
+    }
+    if (buffer[0] === 137 && buffer[1] === 80 && buffer[2] === 78 && buffer[3] === 71) {
+      return {
+        width: buffer.readUInt32BE(16),
+        height: buffer.readUInt32BE(20),
+        format: "png"
+      };
+    }
+    if (buffer[0] === 255 && buffer[1] === 216) {
+      let offset = 2;
+      while (offset < buffer.length) {
+        if (buffer[offset] !== 255) break;
+        const marker = buffer[offset + 1];
+        const size = buffer.readUInt16BE(offset + 2);
+        if (marker >= 192 && marker <= 195 || marker >= 197 && marker <= 199 || marker >= 201 && marker <= 203 || marker >= 205 && marker <= 207) {
+          return {
+            height: buffer.readUInt16BE(offset + 5),
+            width: buffer.readUInt16BE(offset + 7),
+            format: "jpeg"
+          };
+        }
+        offset += 2 + size;
+      }
+    }
+    console.warn("Could not parse image dimensions - unsupported format or corrupted file");
+    return null;
+  } catch (error) {
+    console.error("Error getting image dimensions:", error);
+    return null;
+  }
 }
 async function getVideoMetadata(filePath) {
-  return null;
+  try {
+    console.log("ℹ️ Video metadata extraction requires ffmpeg - skipping for now");
+    return null;
+  } catch (error) {
+    console.error("Error getting video metadata:", error);
+    return null;
+  }
+}
+async function generateVideoThumbnail(videoPath, outputDir) {
+  try {
+    console.log("ℹ️ Video thumbnail generation requires ffmpeg - skipping for now");
+    return null;
+  } catch (error) {
+    console.error("Error in generateVideoThumbnail:", error);
+    return null;
+  }
 }
 async function saveFileToFilesystem(dataUrl, originalName, type) {
   const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -4810,24 +4864,44 @@ function initializeMediaHandlers() {
       let width;
       let height;
       let duration;
+      let thumbnailPath;
       if (type === "image") {
+        console.log("📐 Extracting image dimensions...");
         const dims = await getImageDimensions(storagePath);
         if (dims) {
           width = dims.width;
           height = dims.height;
+          console.log(`✅ Image dimensions: ${width}x${height}`);
+        } else {
+          console.warn("⚠️ Could not extract image dimensions");
         }
-      } else {
+      } else if (type === "video") {
+        console.log("📐 Extracting video metadata...");
         const meta = await getVideoMetadata(storagePath);
         if (meta) {
           width = meta.width;
           height = meta.height;
           duration = meta.duration;
+          console.log(`✅ Video metadata: ${width}x${height}, ${duration}s`);
+        } else {
+          console.warn("⚠️ Could not extract video metadata");
+        }
+        if (!storagePath.startsWith("data:")) {
+          console.log("🎬 Generating video thumbnail...");
+          const thumbnailDir = getMediaDirectory("images");
+          thumbnailPath = await generateVideoThumbnail(storagePath, thumbnailDir) || void 0;
+          if (thumbnailPath) {
+            console.log("✅ Video thumbnail generated:", thumbnailPath);
+          } else {
+            console.warn("⚠️ Could not generate video thumbnail");
+          }
         }
       }
       const mediaItem = await MediaService.createMediaItem({
         filename: path__namespace.basename(storagePath),
         originalName,
         path: storagePath,
+        thumbnailPath,
         type,
         mimeType,
         size,
@@ -4979,8 +5053,8 @@ const createWindow = () => {
     `).catch(console.error);
   });
   {
-    console.log("[MAIN] Loading from dev server:", "http://localhost:5174");
-    mainWindow.loadURL("http://localhost:5174");
+    console.log("[MAIN] Loading from dev server:", "http://localhost:5173");
+    mainWindow.loadURL("http://localhost:5173");
   }
   mainWindow.webContents.openDevTools();
   mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {

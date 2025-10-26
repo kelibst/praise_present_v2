@@ -261,6 +261,12 @@ export class SongTemplate extends SlideTemplate {
   }
 
   private processLyrics(lyrics: string): string {
+    // Handle non-string inputs gracefully
+    if (!lyrics || typeof lyrics !== 'string') {
+      console.warn('SongTemplate: lyrics is not a string, converting...', typeof lyrics, lyrics);
+      return String(lyrics || '');
+    }
+
     return lyrics
       .trim()
       .replace(/\n\s*\n/g, '\n\n') // Normalize paragraph breaks

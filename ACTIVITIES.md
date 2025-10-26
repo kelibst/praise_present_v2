@@ -4,6 +4,49 @@ This file tracks significant development activities for PraisePresent v2.
 
 ---
 
+## 2025-10-25 - ✨ Implemented Lightweight Image Dimension Extraction
+**Time:** Late Night
+**Description:** Implemented lightweight image metadata extraction using native Node.js buffer parsing for PNG and JPEG images. Avoided heavy dependencies like sharp/ffmpeg to prevent Electron native module issues.
+
+### Features Added
+1. **Image Dimension Extraction**: Automatically extracts width, height, and format from uploaded PNG and JPEG images
+2. **Native Buffer Parsing**: Uses direct buffer parsing of image headers (no external dependencies)
+3. **Base64 & Filesystem Support**: Works with both base64 data URLs and filesystem paths
+4. **Database Schema**: Added `thumbnailPath` field to MediaItem model for future video thumbnail support
+
+### Implementation Details
+- **No Native Dependencies**: Avoided sharp/fluent-ffmpeg to prevent Electron compilation issues
+- **Direct Buffer Parsing**:
+  - PNG: Reads IHDR chunk for dimensions (offset 16-24)
+  - JPEG: Parses SOF markers for dimensions
+  - Future: Can add WebP, GIF support using same approach
+- **Graceful Degradation**: If parsing fails, upload still succeeds without dimensions
+
+### Files Changed
+- [prisma/schema.prisma:155](prisma/schema.prisma#L155) - Added `thumbnailPath` field to MediaItem
+- [src/main/media-main.ts:50-103](src/main/media-main.ts#L50-L103) - Implemented lightweight `getImageDimensions()`
+- [src/main/media-main.ts:111-121](src/main/media-main.ts#L111-L121) - Stubbed `getVideoMetadata()` for future implementation
+- [src/main/media-main.ts:128-137](src/main/media-main.ts#L128-L137) - Stubbed `generateVideoThumbnail()` for future
+- [src/main/media-main.ts:299-332](src/main/media-main.ts#L299-L332) - Updated upload handler to extract image metadata
+- [src/lib/services/mediaService.ts:9](src/lib/services/mediaService.ts#L9) - Added `thumbnailPath` to CreateMediaItemInput
+- [src/lib/services/mediaService.ts:56](src/lib/services/mediaService.ts#L56) - Added `thumbnailPath` to database operations
+
+### Technical Notes
+- **PNG Format**: Magic bytes `89 50 4E 47`, dimensions at bytes 16-20 (width) and 20-24 (height) in big-endian
+- **JPEG Format**: Magic bytes `FF D8`, searches for SOF markers `C0-CF` containing dimensions
+- **Future Video Support**: Video metadata requires ffmpeg, can be added later when properly configured
+- Errors in metadata extraction don't prevent upload (graceful degradation)
+- Console logging added for debugging
+
+### Benefits
+- **Zero Native Dependencies**: No Electron rebuild issues, works immediately
+- **Proper Scaling**: With dimensions known, can properly scale/fit images in slides
+- **User Experience**: Shows image dimensions in media library
+- **Lightweight**: Minimal performance impact, instant extraction
+- **Foundation**: Database schema ready for video thumbnails when ffmpeg is added
+
+---
+
 ## 2025-10-25 - 🔧 Fixed Toolbar State Synchronization Bug (DEEP FIX)
 **Time:** Late Night
 **Description:** Fixed critical bug where toolbar controls (font size slider, color pickers, etc.) weren't updating visually when shape properties changed after the Redux migration.

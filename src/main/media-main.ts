@@ -44,21 +44,96 @@ function generateUniqueFilename(originalName: string): string {
 }
 
 /**
- * Get image dimensions
+ * Get image dimensions from data URL or file
+ * Uses simple buffer parsing for common formats (JPEG, PNG)
  */
-async function getImageDimensions(filePath: string): Promise<{ width: number; height: number } | null> {
-  // TODO: Implement using sharp or similar library
-  // For now, return null
-  return null;
+async function getImageDimensions(filePath: string): Promise<{ width: number; height: number; format?: string } | null> {
+  try {
+    let buffer: Buffer;
+
+    // Get buffer from either data URL or file
+    if (filePath.startsWith('data:')) {
+      const matches = filePath.match(/^data:([^;]+);base64,(.+)$/);
+      if (!matches) return null;
+      buffer = Buffer.from(matches[2], 'base64');
+    } else {
+      if (!fs.existsSync(filePath)) return null;
+      buffer = fs.readFileSync(filePath);
+    }
+
+    // Parse dimensions based on file signature
+    // PNG: Check for IHDR chunk
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+      return {
+        width: buffer.readUInt32BE(16),
+        height: buffer.readUInt32BE(20),
+        format: 'png'
+      };
+    }
+
+    // JPEG: Parse SOF marker
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8) {
+      let offset = 2;
+      while (offset < buffer.length) {
+        if (buffer[offset] !== 0xFF) break;
+        const marker = buffer[offset + 1];
+        const size = buffer.readUInt16BE(offset + 2);
+
+        // SOF markers
+        if ((marker >= 0xC0 && marker <= 0xC3) || (marker >= 0xC5 && marker <= 0xC7) ||
+            (marker >= 0xC9 && marker <= 0xCB) || (marker >= 0xCD && marker <= 0xCF)) {
+          return {
+            height: buffer.readUInt16BE(offset + 5),
+            width: buffer.readUInt16BE(offset + 7),
+            format: 'jpeg'
+          };
+        }
+        offset += 2 + size;
+      }
+    }
+
+    // For other formats or if parsing fails, return null
+    // TODO: Add WebP, GIF support if needed
+    console.warn('Could not parse image dimensions - unsupported format or corrupted file');
+    return null;
+  } catch (error) {
+    console.error('Error getting image dimensions:', error);
+    return null;
+  }
 }
 
 /**
  * Get video metadata
+ * Note: Full metadata extraction requires ffmpeg/ffprobe which needs external binaries
+ * For now, we'll extract basic info from the file or return null
+ * TODO: Implement proper video metadata extraction when ffmpeg is properly configured
  */
-async function getVideoMetadata(filePath: string): Promise<{ width?: number; height?: number; duration?: number } | null> {
-  // TODO: Implement using ffprobe or similar library
-  // For now, return null
-  return null;
+async function getVideoMetadata(filePath: string): Promise<{ width?: number; height?: number; duration?: number; format?: string } | null> {
+  try {
+    // For now, we can't reliably extract video metadata without ffmpeg
+    // Return null - the upload will still succeed, just without dimensions/duration
+    console.log('ℹ️ Video metadata extraction requires ffmpeg - skipping for now');
+    return null;
+  } catch (error) {
+    console.error('Error getting video metadata:', error);
+    return null;
+  }
+}
+
+/**
+ * Generate thumbnail for video
+ * Note: Requires ffmpeg which needs external binaries
+ * TODO: Implement when ffmpeg is properly configured
+ */
+async function generateVideoThumbnail(videoPath: string, outputDir: string): Promise<string | null> {
+  try {
+    // Skip thumbnail generation for now
+    console.log('ℹ️ Video thumbnail generation requires ffmpeg - skipping for now');
+    return null;
+  } catch (error) {
+    console.error('Error in generateVideoThumbnail:', error);
+    return null;
+  }
 }
 
 /**
@@ -174,19 +249,40 @@ export function initializeMediaHandlers() {
       let width: number | undefined;
       let height: number | undefined;
       let duration: number | undefined;
+      let thumbnailPath: string | undefined;
 
       if (type === 'image') {
+        console.log('📐 Extracting image dimensions...');
         const dims = await getImageDimensions(storagePath);
         if (dims) {
           width = dims.width;
           height = dims.height;
+          console.log(`✅ Image dimensions: ${width}x${height}`);
+        } else {
+          console.warn('⚠️ Could not extract image dimensions');
         }
-      } else {
+      } else if (type === 'video') {
+        console.log('📐 Extracting video metadata...');
         const meta = await getVideoMetadata(storagePath);
         if (meta) {
           width = meta.width;
           height = meta.height;
           duration = meta.duration;
+          console.log(`✅ Video metadata: ${width}x${height}, ${duration}s`);
+        } else {
+          console.warn('⚠️ Could not extract video metadata');
+        }
+
+        // Generate thumbnail for videos (only for filesystem-stored videos)
+        if (!storagePath.startsWith('data:')) {
+          console.log('🎬 Generating video thumbnail...');
+          const thumbnailDir = getMediaDirectory('images'); // Store thumbnails with images
+          thumbnailPath = await generateVideoThumbnail(storagePath, thumbnailDir) || undefined;
+          if (thumbnailPath) {
+            console.log('✅ Video thumbnail generated:', thumbnailPath);
+          } else {
+            console.warn('⚠️ Could not generate video thumbnail');
+          }
         }
       }
 
@@ -195,6 +291,7 @@ export function initializeMediaHandlers() {
         filename: path.basename(storagePath),
         originalName,
         path: storagePath,
+        thumbnailPath,
         type,
         mimeType,
         size,

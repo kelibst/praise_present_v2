@@ -6,6 +6,7 @@ export interface CreateMediaItemInput {
   filename: string;
   originalName: string;
   path: string;
+  thumbnailPath?: string;
   type: 'image' | 'video';
   mimeType: string;
   size: number;
@@ -52,6 +53,7 @@ export class MediaService {
         filename: input.filename,
         originalName: input.originalName,
         path: input.path,
+        thumbnailPath: input.thumbnailPath,
         type: input.type,
         mimeType: input.mimeType,
         size: input.size,

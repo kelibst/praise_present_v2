@@ -152,6 +152,7 @@ model MediaItem {
   filename    String
   originalName String
   path        String
+  thumbnailPath String? // Path to generated thumbnail (for videos)
   type        String // "image", "video", "audio"
   mimeType    String
   size        Int
@@ -164,10 +165,10 @@ model MediaItem {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   lastUsed    DateTime?
-  
+
   slides      Slide[]
   backgrounds Background[]
-  
+
   @@index([type])
   @@index([category])
   @@map("media_items")

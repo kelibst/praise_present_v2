@@ -735,10 +735,13 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
         if (songContent.verses && Array.isArray(songContent.verses)) {
           // Process verses array
-          songContent.verses.forEach((verse: string, index: number) => {
+          songContent.verses.forEach((verse: any, index: number) => {
+            // Handle both string verses and object verses
+            const verseText = typeof verse === 'string' ? verse : (verse?.text || verse?.lyrics || String(verse));
+
             const songSlideContent = {
               title: songContent.title || 'Untitled Song',
-              lyrics: verse,
+              lyrics: verseText,
               section: 'verse',
               sectionNumber: index + 1,
               author: songContent.author,
@@ -2194,7 +2197,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   </div>
 
                   <div className="p-4">
-                    {isLoadingService ? (
+                    {ui.isLoadingService ? (
                       <div className="flex items-center justify-center py-8">
                         <div className="text-gray-400">Initializing service for plans...</div>
                       </div>
