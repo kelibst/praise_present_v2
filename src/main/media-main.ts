@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import { MediaService, CreateMediaItemInput } from '../lib/services/mediaService';
 
 /**
@@ -15,6 +16,13 @@ import { MediaService, CreateMediaItemInput } from '../lib/services/mediaService
 const SMALL_FILE_THRESHOLD = 2 * 1024 * 1024; // 2MB - store as base64
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+
+/**
+ * Calculate SHA-256 hash of file content
+ */
+function calculateFileHash(buffer: Buffer): string {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
 
 /**
  * Get user data directory for media storage
@@ -143,7 +151,7 @@ async function saveFileToFilesystem(
   dataUrl: string,
   originalName: string,
   type: 'image' | 'video'
-): Promise<{ path: string; size: number }> {
+): Promise<{ path: string; size: number; fileHash: string }> {
   // Extract base64 data
   const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!matches) {
@@ -154,6 +162,9 @@ async function saveFileToFilesystem(
   const base64Data = matches[2];
   const buffer = Buffer.from(base64Data, 'base64');
   const size = buffer.length;
+
+  // Calculate file hash for deduplication
+  const fileHash = calculateFileHash(buffer);
 
   // Validate size
   const maxSize = type === 'image' ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE;
@@ -177,7 +188,7 @@ async function saveFileToFilesystem(
     storagePath = filePath;
   }
 
-  return { path: storagePath, size };
+  return { path: storagePath, size, fileHash };
 }
 
 /**
@@ -238,12 +249,35 @@ export function initializeMediaHandlers() {
         else if (ext === '.mov') mimeType = 'video/quicktime';
       }
 
-      // Save file
-      const { path: storagePath, size } = await saveFileToFilesystem(
+      // Save file and calculate hash
+      const { path: storagePath, size, fileHash } = await saveFileToFilesystem(
         filePath,
         originalName,
         type
       );
+
+      // Check for duplicate based on file hash
+      console.log('🔍 Checking for duplicate file...');
+      const existingMedia = await MediaService.findMediaByHash(fileHash);
+      if (existingMedia) {
+        console.log('⚠️ Duplicate file detected:', existingMedia.originalName);
+
+        // Clean up the newly uploaded file if it was written to filesystem
+        // (Don't delete if it's stored as base64 data URL)
+        if (!storagePath.startsWith('data:')) {
+          deleteFileFromFilesystem(storagePath);
+          console.log('🗑️ Cleaned up duplicate file from filesystem');
+        }
+
+        // Return existing media item with a flag indicating it's a duplicate
+        return {
+          success: true,
+          data: existingMedia,
+          duplicate: true,
+          message: `File already exists as "${existingMedia.originalName}"`
+        };
+      }
+      console.log('✅ No duplicate found, proceeding with upload');
 
       // Get dimensions/metadata
       let width: number | undefined;
@@ -291,6 +325,7 @@ export function initializeMediaHandlers() {
         filename: path.basename(storagePath),
         originalName,
         path: storagePath,
+        fileHash,
         thumbnailPath,
         type,
         mimeType,
@@ -318,10 +353,16 @@ export function initializeMediaHandlers() {
     type?: 'image' | 'video';
     category?: string;
     search?: string;
+    includeReferences?: boolean;
   }) => {
     try {
-      const items = await MediaService.getMediaItems(options);
-      return { success: true, data: items };
+      if (options?.includeReferences) {
+        const items = await MediaService.getMediaItemsWithReferences(options);
+        return { success: true, data: items };
+      } else {
+        const items = await MediaService.getMediaItems(options);
+        return { success: true, data: items };
+      }
     } catch (error) {
       console.error('Error listing media:', error);
       return {
@@ -380,6 +421,27 @@ export function initializeMediaHandlers() {
   ipcMain.handle('media:delete', async (event, data: { ids: string[] }) => {
     try {
       const { ids } = data;
+
+      // Check each item for references before deleting
+      const referenceChecks = await Promise.all(
+        ids.map((id) => MediaService.canDeleteMediaItem(id))
+      );
+
+      // Find items that cannot be deleted
+      const cannotDelete = referenceChecks.filter(check => !check.canDelete);
+
+      if (cannotDelete.length > 0) {
+        const totalReferences = cannotDelete.reduce((sum, check) => sum + check.referenceCount, 0);
+        const firstReferences = cannotDelete[0].references?.slice(0, 3).join(', ') || '';
+        const moreText = cannotDelete[0].referenceCount! > 3 ? ` and ${cannotDelete[0].referenceCount! - 3} more` : '';
+
+        return {
+          success: false,
+          error: `Cannot delete ${cannotDelete.length} item(s). They are used in ${totalReferences} background(s): ${firstReferences}${moreText}`,
+          cannotDelete: true,
+          referenceCount: totalReferences,
+        };
+      }
 
       // Get items to delete (for file cleanup)
       const itemsToDelete = await Promise.all(

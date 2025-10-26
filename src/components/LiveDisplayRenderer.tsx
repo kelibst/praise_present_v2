@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SlideRenderer, Slide } from './slides/SlideRenderer';
 
 /**
@@ -23,6 +23,7 @@ const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
   height = 1080
 }) => {
   const [currentSlide, setCurrentSlide] = useState<Slide | null>(null);
+  const [currentMedia, setCurrentMedia] = useState<any | null>(null);
   const [isBlackScreen, setIsBlackScreen] = useState(false);
   const [showLogo, setShowLogo] = useState(false);
 
@@ -39,11 +40,20 @@ const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
         setIsBlackScreen(false);
         setShowLogo(false);
 
-        if (content && content.slide) {
+        // Handle different content types
+        if (content?.type === 'media' && content?.mediaItem) {
+          // Media content from MediaPage
+          console.log('LiveDisplayRenderer: Displaying media content', content.mediaItem);
+          setCurrentMedia(content.mediaItem);
+          setCurrentSlide(null);
+        } else if (content && content.slide) {
+          // Slide content
           setCurrentSlide(content.slide);
+          setCurrentMedia(null);
         } else if (content) {
           // If content is sent directly as a slide
           setCurrentSlide(content);
+          setCurrentMedia(null);
         }
       });
     }
@@ -54,6 +64,7 @@ const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
       removeClearListener = window.electronAPI.onLiveContentClear(() => {
         console.log('LiveDisplayRenderer: Clearing content');
         setCurrentSlide(null);
+        setCurrentMedia(null);
         setIsBlackScreen(false);
         setShowLogo(false);
       });
@@ -154,6 +165,54 @@ const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
         >
           Live Display Ready
         </div>
+      </div>
+    );
+  }
+
+  // Render media content
+  if (currentMedia) {
+    return (
+      <div
+        style={{
+          width: '100vw',
+          height: '100vh',
+          margin: 0,
+          padding: 0,
+          overflow: 'hidden',
+          backgroundColor: '#000000',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
+        {currentMedia.type === 'image' && (
+          <img
+            src={currentMedia.path}
+            alt={currentMedia.description || 'Media'}
+            style={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain'
+            }}
+          />
+        )}
+        {currentMedia.type === 'video' && (
+          <video
+            src={currentMedia.path}
+            autoPlay
+            loop
+            muted
+            style={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain'
+            }}
+          />
+        )}
       </div>
     );
   }

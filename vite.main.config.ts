@@ -9,6 +9,8 @@ export default defineConfig({
   },
   build: {
     target: 'node18',
+    sourcemap: false,  // Disable source maps for smaller bundle
+    minify: 'terser',  // Enable minification
     rollupOptions: {
       external: [
         '@prisma/client',

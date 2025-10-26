@@ -8,6 +8,7 @@ import {
   Check,
   Monitor,
   Calendar,
+  Link2,
 } from 'lucide-react';
 import { MediaItem as MediaItemType } from '@prisma/client';
 
@@ -15,7 +16,7 @@ interface MediaItemProps {
   /**
    * Media item data
    */
-  item: MediaItemType;
+  item: MediaItemType & { referenceCount?: number };
 
   /**
    * Whether this item is selected
@@ -156,6 +157,14 @@ export const MediaItem: React.FC<MediaItemProps> = ({
           )}
           {item.type.toUpperCase()}
         </div>
+
+        {/* Reference Count Badge */}
+        {item.referenceCount !== undefined && item.referenceCount > 0 && (
+          <div className="absolute bottom-2 left-2 px-2 py-1 bg-blue-500/90 rounded text-xs font-medium text-white flex items-center gap-1" title={`Used in ${item.referenceCount} background${item.referenceCount > 1 ? 's' : ''}`}>
+            <Link2 className="w-3 h-3" />
+            {item.referenceCount}
+          </div>
+        )}
 
         {/* Selection Checkbox */}
         {onSelect && (

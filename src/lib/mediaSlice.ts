@@ -3,7 +3,7 @@ import { MediaItem } from '@prisma/client';
 import { RootState } from './store';
 
 export interface MediaState {
-  items: MediaItem[];
+  items: Array<MediaItem & { referenceCount?: number }>;
   selectedItems: string[];
   filterType: 'all' | 'image' | 'video';
   filterCategory: string | null;
@@ -11,6 +11,7 @@ export interface MediaState {
   isLoading: boolean;
   error: string | null;
   uploadProgress: number | null;
+  duplicateMessage: string | null;
 }
 
 const initialState: MediaState = {
@@ -22,6 +23,7 @@ const initialState: MediaState = {
   isLoading: false,
   error: null,
   uploadProgress: null,
+  duplicateMessage: null,
 };
 
 // Async thunks for IPC communication
@@ -35,12 +37,15 @@ export const fetchMediaItems = createAsyncThunk(
     type?: 'image' | 'video';
     category?: string;
     search?: string;
+    includeReferences?: boolean;
   } = {}) => {
-    const result = await window.electronAPI?.invoke('media:list', options);
+    // Always include references by default
+    const optionsWithRefs = { ...options, includeReferences: options.includeReferences ?? true };
+    const result = await window.electronAPI?.invoke('media:list', optionsWithRefs);
     if (!result?.success) {
       throw new Error(result?.error || 'Failed to fetch media items');
     }
-    return result.data as MediaItem[];
+    return result.data as Array<MediaItem & { referenceCount?: number }>;
   }
 );
 
@@ -58,7 +63,11 @@ export const uploadMediaItem = createAsyncThunk(
     if (!result?.success) {
       throw new Error(result?.error || 'Failed to upload media');
     }
-    return result.data as MediaItem;
+    return {
+      data: result.data as MediaItem,
+      duplicate: result.duplicate || false,
+      message: result.message || null
+    };
   }
 );
 
@@ -149,6 +158,11 @@ const mediaSlice = createSlice({
     clearError: (state) => {
       state.error = null;
     },
+
+    // Clear duplicate message
+    clearDuplicateMessage: (state) => {
+      state.duplicateMessage = null;
+    },
   },
 
   extraReducers: (builder) => {
@@ -172,11 +186,21 @@ const mediaSlice = createSlice({
       .addCase(uploadMediaItem.pending, (state) => {
         state.isLoading = true;
         state.error = null;
+        state.duplicateMessage = null;
         state.uploadProgress = 0;
       })
       .addCase(uploadMediaItem.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.items.unshift(action.payload); // Add to beginning
+
+        // Check if this is a duplicate
+        if (action.payload.duplicate) {
+          state.duplicateMessage = action.payload.message || 'This file already exists in the library';
+          // Don't add duplicate to items - it's already there
+        } else {
+          // Add new item to beginning
+          state.items.unshift(action.payload.data);
+        }
+
         state.uploadProgress = null;
       })
       .addCase(uploadMediaItem.rejected, (state, action) => {
@@ -232,6 +256,7 @@ export const {
   clearSelection,
   setUploadProgress,
   clearError,
+  clearDuplicateMessage,
 } = mediaSlice.actions;
 
 // Selectors
@@ -243,6 +268,7 @@ export const selectSearchQuery = (state: RootState) => state.media.searchQuery;
 export const selectIsLoading = (state: RootState) => state.media.isLoading;
 export const selectError = (state: RootState) => state.media.error;
 export const selectUploadProgress = (state: RootState) => state.media.uploadProgress;
+export const selectDuplicateMessage = (state: RootState) => state.media.duplicateMessage;
 
 // Filtered items selector
 export const selectFilteredMediaItems = (state: RootState) => {

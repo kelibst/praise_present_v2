@@ -6,10 +6,13 @@ import {
   Upload,
   Trash2,
   Video as VideoIcon,
-  Save
+  Save,
+  FolderOpen
 } from 'lucide-react';
 import debounce from 'lodash/debounce';
 import { Color } from '../../rendering/types/geometry';
+import { MediaPickerDialog } from '../media/MediaPickerDialog';
+import { MediaItem as MediaItemType } from '@prisma/client';
 
 export interface SlideBackground {
   type: 'color' | 'gradient' | 'image' | 'video';
@@ -91,6 +94,8 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
   });
 
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [mediaPickerType, setMediaPickerType] = useState<'image' | 'video'>('image');
 
   // Sync local state with current background
   // Optimized to use shallow comparison instead of JSON.stringify
@@ -356,6 +361,25 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
     debouncedApplyBackground(update);
   }, [backgroundState, debouncedApplyBackground]);
 
+  // Handle media selection from library
+  const handleMediaSelect = useCallback((mediaItem: MediaItemType) => {
+    console.log('[BackgroundToolbar] Media selected from library:', mediaItem);
+
+    if (mediaItem.type === 'image') {
+      handleImageChange(mediaItem.path);
+    } else if (mediaItem.type === 'video') {
+      handleVideoChange(mediaItem.path);
+    }
+
+    setShowMediaPicker(false);
+  }, [handleImageChange, handleVideoChange]);
+
+  // Open media picker dialog
+  const handleOpenMediaPicker = useCallback((type: 'image' | 'video') => {
+    setMediaPickerType(type);
+    setShowMediaPicker(true);
+  }, []);
+
   // Handle Save as Default
   const handleSaveAsDefault = useCallback(() => {
     if (!onSaveAsDefault) return;
@@ -576,6 +600,16 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
         {backgroundState.type === 'image' && (
           <>
             <div className="flex items-center gap-2">
+              {/* Browse Library Button */}
+              <button
+                onClick={() => handleOpenMediaPicker('image')}
+                className="px-3 py-1 text-xs rounded border transition-colors cursor-pointer flex items-center gap-1 bg-green-600 hover:bg-green-700 border-green-500 text-white"
+                title="Browse media library"
+              >
+                <FolderOpen className="w-3 h-3" />
+                Browse Library
+              </button>
+
               {/* Upload Button */}
               <label className={`px-3 py-1 text-xs rounded border transition-colors cursor-pointer flex items-center gap-1 ${
                 uploadState.isUploading
@@ -629,6 +663,16 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
         {backgroundState.type === 'video' && (
           <>
             <div className="flex items-center gap-2">
+              {/* Browse Library Button */}
+              <button
+                onClick={() => handleOpenMediaPicker('video')}
+                className="px-3 py-1 text-xs rounded border transition-colors cursor-pointer flex items-center gap-1 bg-green-600 hover:bg-green-700 border-green-500 text-white"
+                title="Browse media library"
+              >
+                <FolderOpen className="w-3 h-3" />
+                Browse Library
+              </button>
+
               {/* Upload Button */}
               <label className={`px-3 py-1 text-xs rounded border transition-colors cursor-pointer flex items-center gap-1 ${
                 uploadState.isUploading
@@ -703,6 +747,15 @@ export const BackgroundToolbar: React.FC<BackgroundToolbarProps> = ({
           <span className="text-xs text-white w-10">{Math.round(backgroundState.opacity * 100)}%</span>
         </div>
       </div>
+
+      {/* Media Picker Dialog */}
+      <MediaPickerDialog
+        isOpen={showMediaPicker}
+        onClose={() => setShowMediaPicker(false)}
+        onSelect={handleMediaSelect}
+        typeFilter={mediaPickerType}
+        title={`Select ${mediaPickerType === 'image' ? 'Background Image' : 'Background Video'}`}
+      />
     </div>
   );
 };

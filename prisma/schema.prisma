@@ -7,7 +7,7 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./dev.db"
+  url      = env("DATABASE_URL")  // Uses DATABASE_URL env var, defaults to dev.db in development
 }
 
 // Bible and Scripture Models
@@ -152,6 +152,7 @@ model MediaItem {
   filename    String
   originalName String
   path        String
+  fileHash    String? // SHA-256 hash for duplicate detection
   thumbnailPath String? // Path to generated thumbnail (for videos)
   type        String // "image", "video", "audio"
   mimeType    String
@@ -171,6 +172,7 @@ model MediaItem {
 
   @@index([type])
   @@index([category])
+  @@index([fileHash])
   @@map("media_items")
 }
 

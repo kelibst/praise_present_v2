@@ -6,6 +6,7 @@ export interface CreateMediaItemInput {
   filename: string;
   originalName: string;
   path: string;
+  fileHash?: string;
   thumbnailPath?: string;
   type: 'image' | 'video';
   mimeType: string;
@@ -53,6 +54,7 @@ export class MediaService {
         filename: input.filename,
         originalName: input.originalName,
         path: input.path,
+        fileHash: input.fileHash,
         thumbnailPath: input.thumbnailPath,
         type: input.type,
         mimeType: input.mimeType,
@@ -130,6 +132,71 @@ export class MediaService {
     return await prisma.mediaItem.findUnique({
       where: { id },
     });
+  }
+
+  /**
+   * Find media item by file hash (for duplicate detection)
+   */
+  static async findMediaByHash(fileHash: string): Promise<MediaItem | null> {
+    return await prisma.mediaItem.findFirst({
+      where: { fileHash },
+    });
+  }
+
+  /**
+   * Get reference count for a media item (how many backgrounds use it)
+   */
+  static async getMediaReferenceCount(mediaItemId: string): Promise<number> {
+    const count = await prisma.background.count({
+      where: { mediaItemId },
+    });
+    return count;
+  }
+
+  /**
+   * Get media items with their reference counts
+   */
+  static async getMediaItemsWithReferences(options: {
+    type?: 'image' | 'video';
+    category?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<Array<MediaItem & { referenceCount: number }>> {
+    const items = await this.getMediaItems(options);
+
+    // For each item, get its reference count
+    const itemsWithCounts = await Promise.all(
+      items.map(async (item) => {
+        const referenceCount = await this.getMediaReferenceCount(item.id);
+        return { ...item, referenceCount };
+      })
+    );
+
+    return itemsWithCounts;
+  }
+
+  /**
+   * Check if a media item can be safely deleted (has no references)
+   */
+  static async canDeleteMediaItem(mediaItemId: string): Promise<{ canDelete: boolean; referenceCount: number; references?: string[] }> {
+    const referenceCount = await this.getMediaReferenceCount(mediaItemId);
+
+    if (referenceCount === 0) {
+      return { canDelete: true, referenceCount: 0 };
+    }
+
+    // Get the background names that reference this media
+    const backgrounds = await prisma.background.findMany({
+      where: { mediaItemId },
+      select: { id: true, name: true },
+    });
+
+    return {
+      canDelete: false,
+      referenceCount,
+      references: backgrounds.map(bg => bg.name),
+    };
   }
 
   /**

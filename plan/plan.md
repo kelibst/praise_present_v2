@@ -3,7 +3,13 @@
 4. Add search online tab for scriptures where I can search for a scripture using vage references or paraphrases.
 
 
-
+lets improve the app media handling better. I need to update the current feature where the user directly uploads media on the live presentation slide formating toolbar or settings to update the background to that toolbar and setting making use of the media uploaded from the media page. also the media uploaded from the media page do not currently get displayed on the live screen clicking on the icon it just breaks with the message:
+✅ LiveDisplayManager: Live display created successfully and synced to Redux
+MediaPage.tsx:127 Sent to live display: image_1761458771896
+LiveDisplayManager.tsx:207 📤 LiveDisplayManager: Sending media to live display: image_1761458771896
+MediaPage.tsx:127 Sent to live display: image_1761458771896
+LiveDisplayManager.tsx:207 📤 LiveDisplayManager: Sending media to live display: image_1761458771896
+MediaPage.tsx:127 Sent to live display: image_1761458771896
 
 
 Remember to add the size limitations to the readme.

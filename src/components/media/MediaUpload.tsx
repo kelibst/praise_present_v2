@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
-import { Upload, X, Image as ImageIcon, Video as VideoIcon } from 'lucide-react';
-import { useDispatch } from 'react-redux';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Upload, X, Image as ImageIcon, Video as VideoIcon, AlertCircle } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch } from '../../lib/store';
-import { uploadMediaItem, setUploadProgress } from '../../lib/mediaSlice';
+import { uploadMediaItem, setUploadProgress, selectDuplicateMessage, clearDuplicateMessage } from '../../lib/mediaSlice';
 
 interface MediaUploadProps {
   /**
@@ -51,9 +51,18 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  const duplicateMessage = useSelector(selectDuplicateMessage);
+
   const allowedFormats = type === 'image' ? IMAGE_FORMATS : VIDEO_FORMATS;
   const allowedExtensions = type === 'image' ? IMAGE_EXTENSIONS : VIDEO_EXTENSIONS;
   const maxSize = type === 'image' ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE;
+
+  // Clear duplicate message when component unmounts or type changes
+  useEffect(() => {
+    return () => {
+      dispatch(clearDuplicateMessage());
+    };
+  }, [dispatch, type]);
 
   /**
    * Validate file type and size
@@ -249,6 +258,29 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
           </div>
         )}
       </div>
+
+      {/* Duplicate Message */}
+      {duplicateMessage && (
+        <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                Duplicate File Detected
+              </p>
+              <p className="text-sm text-yellow-600 dark:text-yellow-300 mt-1">
+                {duplicateMessage}
+              </p>
+            </div>
+            <button
+              onClick={() => dispatch(clearDuplicateMessage())}
+              className="text-yellow-500 hover:text-yellow-700 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Error Message */}
       {error && (

@@ -5,6 +5,7 @@ import { initializeDatabaseMain } from "./main/database-main";
 import { initializeDisplayMain } from "./main/display-main";
 import { initializeWindowMain } from "./main/window-main";
 import { initializeMediaHandlers } from "./main/media-main";
+import { registerBackgroundHandlers } from "./main/background-main";
 import { liveDisplayWindow } from "./main/LiveDisplayWindow";
 
 // These constants are injected by Electron Forge and Vite
@@ -167,6 +168,14 @@ app.on("ready", async () => {
     console.log("Media handlers initialized successfully");
   } catch (error) {
     console.error("Failed to initialize media handlers:", error);
+  }
+
+  // Initialize background handlers
+  try {
+    registerBackgroundHandlers();
+    console.log("Background handlers initialized successfully");
+  } catch (error) {
+    console.error("Failed to initialize background handlers:", error);
   }
 });
 

@@ -7,7 +7,7 @@ interface MediaGridProps {
   /**
    * Media items to display
    */
-  items: MediaItemType[];
+  items: Array<MediaItemType & { referenceCount?: number }>;
 
   /**
    * Selected item IDs
