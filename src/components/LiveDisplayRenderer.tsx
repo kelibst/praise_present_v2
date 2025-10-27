@@ -24,6 +24,7 @@ const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
 }) => {
   const [currentSlide, setCurrentSlide] = useState<Slide | null>(null);
   const [currentMedia, setCurrentMedia] = useState<any | null>(null);
+  const [currentMediaType, setCurrentMediaType] = useState<string | null>(null);
   const [isBlackScreen, setIsBlackScreen] = useState(false);
   const [showLogo, setShowLogo] = useState(false);
 
@@ -43,17 +44,20 @@ const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
         // Handle different content types
         if (content?.type === 'media' && content?.mediaItem) {
           // Media content from MediaPage
-          console.log('LiveDisplayRenderer: Displaying media content', content.mediaItem);
+          console.log('LiveDisplayRenderer: Displaying media content', content);
           setCurrentMedia(content.mediaItem);
+          setCurrentMediaType(content.mediaType || content.mediaItem.type);
           setCurrentSlide(null);
         } else if (content && content.slide) {
           // Slide content
           setCurrentSlide(content.slide);
           setCurrentMedia(null);
+          setCurrentMediaType(null);
         } else if (content) {
           // If content is sent directly as a slide
           setCurrentSlide(content);
           setCurrentMedia(null);
+          setCurrentMediaType(null);
         }
       });
     }
@@ -65,6 +69,7 @@ const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
         console.log('LiveDisplayRenderer: Clearing content');
         setCurrentSlide(null);
         setCurrentMedia(null);
+        setCurrentMediaType(null);
         setIsBlackScreen(false);
         setShowLogo(false);
       });
@@ -170,7 +175,8 @@ const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
   }
 
   // Render media content
-  if (currentMedia) {
+  if (currentMedia && currentMediaType) {
+    console.log('LiveDisplayRenderer: Rendering media:', { type: currentMediaType, path: currentMedia.path });
     return (
       <div
         style={{
@@ -185,32 +191,32 @@ const LiveDisplayRenderer: React.FC<LiveDisplayRendererProps> = ({
           justifyContent: 'center'
         }}
       >
-        {currentMedia.type === 'image' && (
+        {currentMediaType === 'image' && (
           <img
             src={currentMedia.path}
-            alt={currentMedia.description || 'Media'}
+            alt={currentMedia.originalName || 'Media'}
             style={{
-              maxWidth: '100%',
-              maxHeight: '100%',
-              width: 'auto',
-              height: 'auto',
+              width: '100vw',
+              height: '100vh',
               objectFit: 'contain'
             }}
+            onLoad={() => console.log('LiveDisplayRenderer: Image loaded successfully')}
+            onError={(e) => console.error('LiveDisplayRenderer: Image failed to load', e)}
           />
         )}
-        {currentMedia.type === 'video' && (
+        {currentMediaType === 'video' && (
           <video
             src={currentMedia.path}
             autoPlay
             loop
             muted
             style={{
-              maxWidth: '100%',
-              maxHeight: '100%',
-              width: 'auto',
-              height: 'auto',
+              width: '100vw',
+              height: '100vh',
               objectFit: 'contain'
             }}
+            onLoadedData={() => console.log('LiveDisplayRenderer: Video loaded successfully')}
+            onError={(e) => console.error('LiveDisplayRenderer: Video failed to load', e)}
           />
         )}
       </div>

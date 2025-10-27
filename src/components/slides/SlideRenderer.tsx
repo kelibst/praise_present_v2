@@ -11,8 +11,8 @@ export interface Slide {
   id: string;
   shapes: Shape[];
   background?: {
-    type: 'color' | 'gradient' | 'image';
-    value?: string; // Hex color for solid, or image URL
+    type: 'color' | 'gradient' | 'image' | 'video';
+    value?: string; // Hex color for solid, image URL, or video URL
     gradient?: {
       start: string; // Hex color
       end: string;   // Hex color

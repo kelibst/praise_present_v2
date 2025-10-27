@@ -13,7 +13,7 @@ import { MediaService, CreateMediaItemInput } from '../lib/services/mediaService
  */
 
 // Constants
-const SMALL_FILE_THRESHOLD = 2 * 1024 * 1024; // 2MB - store as base64
+const SMALL_FILE_THRESHOLD = 10 * 1024 * 1024; // 10MB - store as base64
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
 

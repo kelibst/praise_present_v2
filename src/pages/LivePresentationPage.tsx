@@ -640,7 +640,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   opacity: scriptureSettings.background.opacity
                 }
               : {
-                  type: scriptureSettings.background.type as 'color' | 'image',
+                  type: scriptureSettings.background.type as 'color' | 'image' | 'video',
                   value: scriptureSettings.background.value || '#1a1a1a',
                   opacity: scriptureSettings.background.opacity
                 };
@@ -713,7 +713,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   opacity: scriptureSettings.background.opacity
                 }
               : {
-                  type: scriptureSettings.background.type as 'color' | 'image',
+                  type: scriptureSettings.background.type as 'color' | 'image' | 'video',
                   value: scriptureSettings.background.value || '#1a1a1a',
                   opacity: scriptureSettings.background.opacity
                 };
