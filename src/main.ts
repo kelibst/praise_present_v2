@@ -1,5 +1,6 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, protocol } from "electron";
 import path from "node:path";
+import fs from "node:fs";
 import squirrelStartup from "electron-squirrel-startup";
 import { initializeDatabaseMain } from "./main/database-main";
 import { initializeDisplayMain } from "./main/display-main";
@@ -16,6 +17,21 @@ declare const MAIN_WINDOW_VITE_NAME: string;
 if (squirrelStartup) {
   app.quit();
 }
+
+// Register custom protocol as privileged before app is ready
+// This allows the media:// protocol to be used in img/video src attributes
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'media',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: false,
+      bypassCSP: false
+    }
+  }
+]);
 
 // Global reference to the main window
 let mainWindow: BrowserWindow | null = null;
@@ -129,10 +145,62 @@ const createWindow = () => {
   });
 };
 
+/**
+ * Register custom media:// protocol handler
+ * This allows secure access to media files stored on disk
+ * Converts paths like: media://videos/filename.mp4 -> C:\Users\...\media\videos\filename.mp4
+ */
+function registerMediaProtocol() {
+  protocol.registerFileProtocol('media', (request, callback) => {
+    try {
+      // Extract the path after media://
+      // Example: media://videos/video_123.mp4 -> videos/video_123.mp4
+      const url = request.url.replace('media://', '');
+
+      // Get user data directory
+      const userDataPath = app.getPath('userData');
+
+      // Build full path: C:\Users\...\AppData\Roaming\praise_present_v2\media\videos\video_123.mp4
+      const filePath = path.join(userDataPath, 'media', url);
+
+      // Security check: Ensure the path is within the media directory
+      const normalizedPath = path.normalize(filePath);
+      const mediaDir = path.join(userDataPath, 'media');
+
+      if (!normalizedPath.startsWith(mediaDir)) {
+        console.error('[PROTOCOL] Security violation: Path outside media directory:', normalizedPath);
+        callback({ error: -10 }); // ERR_ACCESS_DENIED
+        return;
+      }
+
+      // Check if file exists
+      if (!fs.existsSync(normalizedPath)) {
+        console.error('[PROTOCOL] File not found:', normalizedPath);
+        callback({ error: -6 }); // ERR_FILE_NOT_FOUND
+        return;
+      }
+
+      console.log('[PROTOCOL] Serving media file:', normalizedPath);
+      callback({ path: normalizedPath });
+    } catch (error) {
+      console.error('[PROTOCOL] Error handling media request:', error);
+      callback({ error: -2 }); // ERR_FAILED
+    }
+  });
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on("ready", async () => {
+  // Register custom protocol handler for media files
+  try {
+    registerMediaProtocol();
+    console.log("Custom media:// protocol registered successfully");
+  } catch (error) {
+    console.error("Failed to register media protocol:", error);
+  }
+
   // Create window first - don't block on database initialization
   createWindow();
 

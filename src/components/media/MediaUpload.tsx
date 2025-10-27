@@ -3,6 +3,7 @@ import { Upload, X, Image as ImageIcon, Video as VideoIcon, AlertCircle } from '
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch } from '../../lib/store';
 import { uploadMediaItem, setUploadProgress, selectDuplicateMessage, clearDuplicateMessage } from '../../lib/mediaSlice';
+import VideoDurationWarning from './VideoDurationWarning';
 
 interface MediaUploadProps {
   /**
@@ -28,7 +29,11 @@ const IMAGE_EXTENSIONS = '.jpg,.jpeg,.png,.webp,.gif,.svg';
 const VIDEO_EXTENSIONS = '.mp4,.webm,.ogg,.mov';
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
+
+// Video duration limits (in seconds)
+const MAX_VIDEO_DURATION_SOFT = 5 * 60; // 5 minutes - show warning
+const MAX_VIDEO_DURATION_HARD = 10 * 60; // 10 minutes - reject upload
 
 /**
  * MediaUpload - Drag-and-drop file upload component
@@ -50,6 +55,10 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [videoDuration, setVideoDuration] = useState<number>(0);
+  const [showDurationWarning, setShowDurationWarning] = useState(false);
+  const [durationWarningType, setDurationWarningType] = useState<'warning' | 'error'>('warning');
 
   const duplicateMessage = useSelector(selectDuplicateMessage);
 
@@ -81,18 +90,53 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
   };
 
   /**
-   * Handle file upload
+   * Get video duration using HTML5 video element
    */
-  const handleFileUpload = async (file: File) => {
-    setError(null);
+  const getVideoDuration = (file: File): Promise<number> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
 
-    // Validate file
-    const validationError = validateFile(file);
-    if (validationError) {
-      setError(validationError);
-      return;
+      video.onloadedmetadata = () => {
+        window.URL.revokeObjectURL(video.src);
+        const duration = video.duration;
+
+        // Check for invalid durations
+        if (!isFinite(duration) || duration === 0) {
+          reject(new Error('Could not determine video duration'));
+          return;
+        }
+
+        resolve(duration);
+      };
+
+      video.onerror = () => {
+        window.URL.revokeObjectURL(video.src);
+        reject(new Error('Failed to load video'));
+      };
+
+      video.src = URL.createObjectURL(file);
+    });
+  };
+
+  /**
+   * Validate video duration
+   * Returns: null (ok), 'warning' (5-10min), or 'error' (>10min)
+   */
+  const validateVideoDuration = (duration: number): 'ok' | 'warning' | 'error' => {
+    if (duration > MAX_VIDEO_DURATION_HARD) {
+      return 'error';
     }
+    if (duration > MAX_VIDEO_DURATION_SOFT) {
+      return 'warning';
+    }
+    return 'ok';
+  };
 
+  /**
+   * Proceed with file upload (after validation)
+   */
+  const proceedWithUpload = async (file: File) => {
     setIsUploading(true);
 
     try {
@@ -115,6 +159,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
           ).unwrap();
 
           setIsUploading(false);
+          setPendingFile(null);
           onUploadComplete?.();
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Upload failed');
@@ -132,6 +177,76 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
       setError(err instanceof Error ? err.message : 'Upload failed');
       setIsUploading(false);
     }
+  };
+
+  /**
+   * Handle file upload with duration validation for videos
+   */
+  const handleFileUpload = async (file: File) => {
+    setError(null);
+
+    // Validate file type and size
+    const validationError = validateFile(file);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    // For videos, check duration before uploading
+    if (type === 'video') {
+      try {
+        const duration = await getVideoDuration(file);
+        const durationValidation = validateVideoDuration(duration);
+
+        if (durationValidation === 'error') {
+          // Block upload - show error modal
+          setVideoDuration(duration);
+          setDurationWarningType('error');
+          setShowDurationWarning(true);
+          setPendingFile(null); // Don't save file for error
+          return;
+        }
+
+        if (durationValidation === 'warning') {
+          // Show warning - allow user to decide
+          setVideoDuration(duration);
+          setDurationWarningType('warning');
+          setShowDurationWarning(true);
+          setPendingFile(file); // Save file for later upload if user confirms
+          return;
+        }
+
+        // Duration is OK, proceed with upload
+        await proceedWithUpload(file);
+      } catch (err) {
+        // Could not get duration - allow upload anyway with warning
+        console.warn('Could not determine video duration:', err);
+        setError('Could not determine video duration. Uploading anyway...');
+        await proceedWithUpload(file);
+      }
+    } else {
+      // Images don't need duration check
+      await proceedWithUpload(file);
+    }
+  };
+
+  /**
+   * Handle duration warning confirm (user wants to upload anyway)
+   */
+  const handleDurationWarningConfirm = async () => {
+    setShowDurationWarning(false);
+    if (pendingFile) {
+      await proceedWithUpload(pendingFile);
+    }
+  };
+
+  /**
+   * Handle duration warning cancel
+   */
+  const handleDurationWarningCancel = () => {
+    setShowDurationWarning(false);
+    setPendingFile(null);
+    setVideoDuration(0);
   };
 
   /**
@@ -304,6 +419,15 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
           </div>
         </div>
       )}
+
+      {/* Video Duration Warning Modal */}
+      <VideoDurationWarning
+        duration={videoDuration}
+        type={durationWarningType}
+        open={showDurationWarning}
+        onConfirm={durationWarningType === 'warning' ? handleDurationWarningConfirm : undefined}
+        onCancel={handleDurationWarningCancel}
+      />
     </div>
   );
 };

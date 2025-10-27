@@ -9,6 +9,7 @@ import {
   Monitor,
   Calendar,
   Link2,
+  Clock,
 } from 'lucide-react';
 import { MediaItem as MediaItemType } from '@prisma/client';
 
@@ -97,6 +98,29 @@ export const MediaItem: React.FC<MediaItemProps> = ({
     return `${Math.floor(diffDays / 365)} years ago`;
   };
 
+  /**
+   * Format video duration to MM:SS or HH:MM:SS
+   */
+  const formatDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  /**
+   * Get duration badge color based on length
+   */
+  const getDurationColor = (seconds: number): string => {
+    if (seconds > 10 * 60) return 'bg-red-500/90'; // >10min - error
+    if (seconds > 5 * 60) return 'bg-yellow-500/90'; // 5-10min - warning
+    return 'bg-green-500/90'; // <5min - ok
+  };
+
   const isImage = item.type === 'image';
   const isVideo = item.type === 'video';
 
@@ -158,9 +182,23 @@ export const MediaItem: React.FC<MediaItemProps> = ({
           {item.type.toUpperCase()}
         </div>
 
+        {/* Duration Badge (for videos with duration) */}
+        {isVideo && item.duration && item.duration > 0 && (
+          <div
+            className={`absolute bottom-2 left-2 px-2 py-1 rounded text-xs font-medium text-white flex items-center gap-1 ${getDurationColor(item.duration)}`}
+            title={`Video duration: ${formatDuration(item.duration)}`}
+          >
+            <Clock className="w-3 h-3" />
+            {formatDuration(item.duration)}
+          </div>
+        )}
+
         {/* Reference Count Badge */}
         {item.referenceCount !== undefined && item.referenceCount > 0 && (
-          <div className="absolute bottom-2 left-2 px-2 py-1 bg-blue-500/90 rounded text-xs font-medium text-white flex items-center gap-1" title={`Used in ${item.referenceCount} background${item.referenceCount > 1 ? 's' : ''}`}>
+          <div
+            className={`absolute ${isVideo && item.duration ? 'bottom-2 right-2' : 'bottom-2 left-2'} px-2 py-1 bg-blue-500/90 rounded text-xs font-medium text-white flex items-center gap-1`}
+            title={`Used in ${item.referenceCount} background${item.referenceCount > 1 ? 's' : ''}`}
+          >
             <Link2 className="w-3 h-3" />
             {item.referenceCount}
           </div>

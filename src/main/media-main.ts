@@ -13,9 +13,13 @@ import { MediaService, CreateMediaItemInput } from '../lib/services/mediaService
  */
 
 // Constants
-const SMALL_FILE_THRESHOLD = 10 * 1024 * 1024; // 10MB - store as base64
+const SMALL_FILE_THRESHOLD = 100 * 1024 * 1024; // 100MB - store as base64
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
+
+// Video duration limits (in seconds)
+const MAX_VIDEO_DURATION_SOFT = 5 * 60; // 5 minutes - show warning
+const MAX_VIDEO_DURATION_HARD = 10 * 60; // 10 minutes - reject upload
 
 /**
  * Calculate SHA-256 hash of file content
@@ -179,13 +183,19 @@ async function saveFileToFilesystem(
     // Store as base64 (embed in path)
     storagePath = dataUrl;
   } else {
-    // Save to filesystem
+    // Save to filesystem and use custom media:// protocol
     const mediaDir = getMediaDirectory(type === 'image' ? 'images' : 'videos');
     const filename = generateUniqueFilename(originalName);
     const filePath = path.join(mediaDir, filename);
 
     fs.writeFileSync(filePath, buffer);
-    storagePath = filePath;
+
+    // Convert to media:// protocol URL for secure access
+    // Example: C:\Users\...\media\videos\video_123.mp4 -> media://videos/video_123.mp4
+    const mediaType = type === 'image' ? 'images' : 'videos';
+    storagePath = `media://${mediaType}/${filename}`;
+
+    console.log(`[MEDIA] Large file saved to filesystem with protocol URL: ${storagePath}`);
   }
 
   return { path: storagePath, size, fileHash };
@@ -195,15 +205,29 @@ async function saveFileToFilesystem(
  * Delete file from filesystem
  */
 function deleteFileFromFilesystem(filePath: string): void {
-  // Only delete if it's a filesystem path (not base64)
-  if (!filePath.startsWith('data:')) {
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch (error) {
-      console.error('Error deleting file:', error);
+  // Skip base64 data URLs
+  if (filePath.startsWith('data:')) {
+    return;
+  }
+
+  try {
+    // Convert media:// protocol to actual file path if needed
+    let actualPath = filePath;
+
+    if (filePath.startsWith('media://')) {
+      // Convert: media://videos/video_123.mp4 -> C:\Users\...\media\videos\video_123.mp4
+      const relativePath = filePath.replace('media://', '');
+      const userDataPath = app.getPath('userData');
+      actualPath = path.join(userDataPath, 'media', relativePath);
+      console.log(`[MEDIA] Converting protocol URL for deletion: ${filePath} -> ${actualPath}`);
     }
+
+    if (fs.existsSync(actualPath)) {
+      fs.unlinkSync(actualPath);
+      console.log(`[MEDIA] Deleted file: ${actualPath}`);
+    }
+  } catch (error) {
+    console.error('Error deleting file:', error);
   }
 }
 
