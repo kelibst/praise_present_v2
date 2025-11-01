@@ -19,6 +19,19 @@ export interface SongSlideContent extends TemplateContent {
   tempo?: number;
   showChords?: boolean;
   showCopyright?: boolean;
+  featureSettings?: {
+    background?: any;
+    typography?: {
+      titleFontSize?: number;
+      lyricsFontSize?: number;
+      fontFamily?: string;
+      textColor?: string;
+      textAlign?: 'left' | 'center' | 'right';
+      bold?: boolean;
+      italic?: boolean;
+      lineHeight?: number;
+    };
+  };
 }
 
 export interface SongTemplateStyle {
@@ -109,12 +122,31 @@ export class SongTemplate extends SlideTemplate {
   public generateSlide(content: SongSlideContent): Shape[] {
     const shapes: Shape[] = [];
 
+    // Apply feature settings if provided (override template defaults)
+    if (content.featureSettings?.typography) {
+      const typo = content.featureSettings.typography;
+      this.style = {
+        ...this.style,
+        titleFontSize: typo.titleFontSize ?? this.style.titleFontSize,
+        lyricsFontSize: typo.lyricsFontSize ?? this.style.lyricsFontSize,
+        centerAlign: typo.textAlign === 'center',
+        lineSpacing: typo.lineHeight ?? this.style.lineSpacing
+      };
+
+      console.log('[SongTemplate] Applied feature settings:', {
+        titleFontSize: this.style.titleFontSize,
+        lyricsFontSize: this.style.lyricsFontSize,
+        centerAlign: this.style.centerAlign,
+        lineSpacing: this.style.lineSpacing
+      });
+    }
+
     // Background
     shapes.push(this.createBackgroundShape());
 
     // Title
     if (content.title) {
-      const titleShape = this.createTitleShape(content.title);
+      const titleShape = this.createTitleShape(content.title, content.featureSettings?.typography);
       shapes.push(titleShape);
     }
 
@@ -132,7 +164,7 @@ export class SongTemplate extends SlideTemplate {
 
     // Lyrics (main content)
     if (content.lyrics) {
-      const lyricsShape = this.createLyricsShape(content.lyrics);
+      const lyricsShape = this.createLyricsShape(content.lyrics, content.featureSettings?.typography);
       shapes.push(lyricsShape);
     }
 
@@ -145,11 +177,18 @@ export class SongTemplate extends SlideTemplate {
     return shapes;
   }
 
-  private createTitleShape(title: string): TextShape {
+  private createTitleShape(title: string, typography?: any): TextShape {
     const placeholder = this.getPlaceholder('title')!;
+
+    // Parse color from typography settings
+    let textColor = this.theme.colors.accent;
+    if (typography?.textColor) {
+      textColor = this.parseColor(typography.textColor);
+    }
 
     // Title with shrink-to-fit for long song titles
     return new TextShape({
+      id: 'title',
       text: title,
       position: {
         x: placeholder.bounds.x,
@@ -166,12 +205,13 @@ export class SongTemplate extends SlideTemplate {
       minFontSize: 36, // Keep title readable
       maxFontSize: this.style.titleFontSize
     }, {
-      fontFamily: this.theme.fonts.display,
+      fontFamily: typography?.fontFamily || this.theme.fonts.display,
       fontSize: this.style.titleFontSize!,
-      color: this.theme.colors.accent,
+      color: textColor,
       textAlign: this.style.centerAlign ? 'center' : 'left',
       verticalAlign: 'middle',
-      fontWeight: 'bold',
+      fontWeight: typography?.bold ? 'bold' : 'bold',
+      fontStyle: typography?.italic ? 'italic' : 'normal',
       lineHeight: 1.2
     });
   }
@@ -226,15 +266,22 @@ export class SongTemplate extends SlideTemplate {
     );
   }
 
-  private createLyricsShape(lyrics: string): TextShape {
+  private createLyricsShape(lyrics: string, typography?: any): TextShape {
     const placeholder = this.getPlaceholder('lyrics')!;
 
     // Process lyrics for better display
     const processedLyrics = this.processLyrics(lyrics);
 
+    // Parse color from typography settings
+    let textColor = this.theme.colors.text;
+    if (typography?.textColor) {
+      textColor = this.parseColor(typography.textColor);
+    }
+
     // Lyrics with shrink-to-fit - THE KEY FEATURE for song presentation
     // Long verses/choruses will automatically shrink to fit the slide
     return new TextShape({
+      id: 'lyrics',
       text: processedLyrics,
       position: {
         x: placeholder.bounds.x,
@@ -248,15 +295,20 @@ export class SongTemplate extends SlideTemplate {
       wordWrap: true,
       overflowBehavior: 'shrink-to-fit', // PowerPoint-style: automatically shrink font for long lyrics
       minFontSize: 28, // Don't shrink smaller than 28px (audience readability)
-      maxFontSize: this.style.lyricsFontSize // User's preferred size is the max
+      maxFontSize: this.style.lyricsFontSize, // User's preferred size is the max
+      metadata: {
+        elementType: 'lyrics',
+        isDefaultFormatting: true
+      }
     }, {
-      fontFamily: this.theme.fonts.primary,
+      fontFamily: typography?.fontFamily || this.theme.fonts.primary,
       fontSize: this.style.lyricsFontSize!,
-      color: this.theme.colors.text,
+      color: textColor,
       textAlign: this.style.centerAlign ? 'center' : 'left',
       verticalAlign: 'middle',
-      fontWeight: 'normal',
-      lineHeight: this.style.lineSpacing
+      fontWeight: typography?.bold ? 'bold' : 'normal',
+      fontStyle: typography?.italic ? 'italic' : 'normal',
+      lineHeight: typography?.lineHeight ?? this.style.lineSpacing
     });
   }
 
@@ -398,6 +450,21 @@ export class SongTemplate extends SlideTemplate {
       showChords: false,
       showCopyright: true
     };
+  }
+
+  /**
+   * Parse color from hex string to Color object
+   */
+  private parseColor(hexColor: string): Color {
+    // Remove # if present
+    const hex = hexColor.replace('#', '');
+
+    // Parse RGB values
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+
+    return { r, g, b, a: 255 };
   }
 
   public setStyle(style: SongTemplateStyle): void {

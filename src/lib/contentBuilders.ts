@@ -237,7 +237,12 @@ export function buildSongContent(
       key: songContent.key,
       tempo: songContent.tempo,
       showChords: false,
-      showCopyright: index === sections.length - 1
+      showCopyright: index === sections.length - 1,
+      // 🔑 KEY: Pass feature settings to template
+      featureSettings: {
+        background: settings.background,
+        typography: settings.typography
+      }
     };
 
     const shapes = songTemplate.generateSlide(songSlideContent);

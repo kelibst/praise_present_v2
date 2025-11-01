@@ -27,7 +27,8 @@ import {
   SongSlideSettings
 } from '../lib/presentation/songSlideGenerator';
 import { parseSongLyrics } from '../lib/presentation/songParser';
-import { SlideRenderer } from '../components/slides/SlideRenderer';
+import { SlideRenderer, Slide } from '../components/slides/SlideRenderer';
+import { UnifiedSlideEditor } from '../components/formatting/UnifiedSlideEditor';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useLiveDisplay } from '../components/live/LiveDisplayManager';
 import { addPendingSong, setActiveTab } from '../lib/uiSlice';
@@ -120,8 +121,13 @@ const SongDetailsPage: React.FC = () => {
   }, [songId]);
 
   // Generate slides
-  const slides: SongSlide[] = useMemo(() => {
-    if (!song || !metadata) return [];
+  const [slides, setSlides] = useState<SongSlide[]>([]);
+
+  useEffect(() => {
+    if (!song || !metadata) {
+      setSlides([]);
+      return;
+    }
 
     const songWithSections: Song = {
       ...song,
@@ -136,10 +142,21 @@ const SongDetailsPage: React.FC = () => {
       showCopyrightSlide: slideSettings.showCopyright ?? true
     });
 
-    return generator.generateSlides(songWithSections);
+    setSlides(generator.generateSlides(songWithSections));
   }, [song, metadata, sections, slideSettings]);
 
   const currentSlide = slides[currentSlideIndex];
+
+  // Handler for slide edits
+  const handleSlideChange = (updatedSlide: Slide) => {
+    const newSlides = [...slides];
+    newSlides[currentSlideIndex] = {
+      ...slides[currentSlideIndex],
+      shapes: updatedSlide.shapes,
+      background: updatedSlide.background
+    };
+    setSlides(newSlides);
+  };
 
   // Helper to create service item for live display
   const createServiceItem = () => {
@@ -476,13 +493,19 @@ const SongDetailsPage: React.FC = () => {
             {/* Large Slide Preview - Takes remaining space */}
             <div className="flex-1 min-h-0 flex items-center justify-center p-6 bg-gray-950 overflow-hidden">
               {currentSlide ? (
-                <div className="w-full max-w-5xl aspect-video bg-black rounded-lg overflow-hidden shadow-2xl">
-                  <SlideRenderer
+                <div className="w-full h-full">
+                  <UnifiedSlideEditor
+                    contentType="song"
                     slide={{
                       id: currentSlide.id,
                       shapes: currentSlide.shapes,
                       background: currentSlide.background
                     }}
+                    slideIndex={currentSlideIndex}
+                    onSlideChange={handleSlideChange}
+                    editable={true}
+                    showBackgroundToolbar={true}
+                    showTypographyToolbar={true}
                     targetResolution={{ width: 1920, height: 1080 }}
                     className="w-full h-full"
                   />

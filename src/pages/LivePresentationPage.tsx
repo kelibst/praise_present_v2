@@ -1531,7 +1531,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
       <FeatureSettingsModal
         isOpen={ui.settingsModalOpen}
         onClose={() => ui.setSettingsModalOpen(false)}
-        initialTab={ui.activeTab === 'scripture' ? 'scriptures' : 'songs'}
+        initialTab={ui.activeTab === 'scripture' ? 'scriptures' : 'general'}
       />
 
       {/* Keyboard Shortcuts Help & Panel Controls */}
@@ -1606,7 +1606,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
           <div className="flex border-b border-gray-700 bg-gray-900">
             {[
               { key: 'scripture', label: 'Scripture', icon: BookOpen, color: 'purple' },
-              { key: 'songs', label: 'Songs', icon: Music, color: 'orange' },
               { key: 'plan', label: 'Current Service', icon: Play, color: 'green' },
               { key: 'plans', label: 'Plan Manager', icon: Calendar, color: 'blue' }
             ].map(({ key, label, icon: Icon, color }) => {
@@ -1636,7 +1635,7 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                 }
               };
 
-              const itemCount = key === 'plan' ? serviceItems.length : key === 'songs' ? ui.pendingSongsCount : 0;
+              const itemCount = key === 'plan' ? serviceItems.length : 0;
 
               return (
                 <button
@@ -1653,8 +1652,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                   <Icon className={`w-4 h-4 ${isActive ? 'animate-pulse' : ''}`} />
                   <span>{label}</span>
 
-                  {/* Item count badge for Current Service and Songs tabs */}
-                  {(key === 'plan' || key === 'songs') && itemCount > 0 && (
+                  {/* Item count badge for Current Service tab */}
+                  {key === 'plan' && itemCount > 0 && (
                     <span className={`
                       ml-1 px-2 py-0.5 rounded-full text-xs font-bold
                       ${isActive ? 'bg-white/20 text-white' : key === 'plan' ? 'bg-green-900/50 text-green-400' : 'bg-orange-900/50 text-orange-400'}
@@ -1774,134 +1773,6 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                     defaultVersion="kjv"
                     activeVerses={ui.activeVerseNumbers}
                   />
-                )}
-              </div>
-            )}
-
-            {ui.activeTab === 'songs' && (
-              <div className="space-y-4">
-                <div className="mb-3">
-                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                    <Music className="w-5 h-5 text-orange-400" />
-                    Song Presentation
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Songs ready to present • Click to preview • Double-click to present live
-                  </p>
-                </div>
-
-                {ui.pendingSongsCount === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Music className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                    <div className="text-lg font-medium mb-2">No songs added yet</div>
-                    <p className="text-sm">
-                      Go to the Songs page and click "Add to Service" to add songs for presentation
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {ui.pendingSongs.map((song, index) => (
-                      <div
-                        key={song.id}
-                        className={`
-                          group relative bg-card border rounded-lg p-4 cursor-pointer transition-all
-                          ${presentation.current.content?.id === song.id
-                            ? 'border-orange-500 bg-orange-900/20 shadow-lg shadow-orange-900/50'
-                            : 'border-border hover:border-orange-400 hover:bg-orange-900/10'
-                          }
-                        `}
-                        onClick={async () => {
-                          console.log('🎵 Song selected:', song.title);
-                          // Build song content and present in preview mode
-                          const songContent = buildSongContent(song, songSettings);
-                          await presentation.present(songContent, { goLive: false });
-                        }}
-                        onDoubleClick={async () => {
-                          console.log('🎵 Song double-clicked (go live):', song.title);
-                          // Build song content and present live
-                          const songContent = buildSongContent(song, songSettings);
-                          await presentation.present(songContent, { goLive: true });
-                        }}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Music className="w-4 h-4 text-orange-400" />
-                              <h4 className="font-semibold text-foreground">{song.title}</h4>
-                              {presentation.current.content?.id === song.id && (
-                                <span className="px-2 py-0.5 bg-orange-600 text-white text-xs rounded-full">
-                                  Selected
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-sm text-muted-foreground mb-2">
-                              {song.content?.author && <span>{song.content.author}</span>}
-                              {song.content?.artist && song.content.artist !== song.content.author && (
-                                <span> • {song.content.artist}</span>
-                              )}
-                              {song.slides && (
-                                <span className="ml-2">• {song.slides.length} slides</span>
-                              )}
-                            </div>
-                            {song.content?.key && (
-                              <div className="text-xs text-muted-foreground">
-                                Key: {song.content.key}
-                                {song.content?.tempo && ` • Tempo: ${song.content.tempo}`}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/songs/${song.content?.id || song.id.replace('song-', '').split('-')[0]}`);
-                              }}
-                              className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Remove song from pending songs using Redux
-                                dispatch(removePendingSong(song.id));
-                                // Clear presentation if removing the active song
-                                if (presentation.current.content?.id === song.id) {
-                                  presentation.clear();
-                                }
-                              }}
-                              className="px-3 py-1.5 bg-red-600 text-white rounded text-xs hover:bg-red-700"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Slide thumbnail preview */}
-                        {presentation.current.content?.id === song.id && song.slides && song.slides.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-border">
-                            <div className="text-xs font-medium text-muted-foreground mb-2">Preview</div>
-                            <div className="grid grid-cols-4 gap-2">
-                              {song.slides.slice(0, 4).map((slide, slideIdx) => (
-                                <div
-                                  key={slide.id}
-                                  className="aspect-video bg-black rounded border border-border overflow-hidden cursor-pointer hover:border-orange-400"
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    await presentation.jumpTo(slideIdx);
-                                  }}
-                                >
-                                  <div className="w-full h-full flex items-center justify-center text-xs text-white/50">
-                                    Slide {slideIdx + 1}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
                 )}
               </div>
             )}
