@@ -14,7 +14,8 @@ import {
   Settings as SettingsIcon,
   Maximize2,
   Eye,
-  EyeOff
+  EyeOff,
+  FileText
 } from 'lucide-react';
 import { sampleSongs } from '../../data/sample-songs';
 import { SongMetadataEditor, SongMetadata } from '../components/songs/SongMetadataEditor';
@@ -394,7 +395,7 @@ const SongDetailsPage: React.FC = () => {
             <Panel defaultSize={25} minSize={20} maxSize={40}>
               <div className="h-full bg-card border-r border-border">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-secondary/50">
-                  <div className="text-sm font-medium">Lyrics & Sections</div>
+                  <div className="text-sm font-medium">Slides Navigation</div>
                   <button
                     onClick={() => togglePanel('leftPanel')}
                     className="p-1 rounded hover:bg-muted transition-colors"
@@ -404,12 +405,61 @@ const SongDetailsPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="p-3 overflow-y-auto" style={{ height: 'calc(100vh - 160px)' }}>
+                <div className="p-3 overflow-y-auto space-y-3" style={{ height: 'calc(100vh - 160px)' }}>
+                  {/* Title Slide Navigation */}
+                  <div
+                    onClick={() => setCurrentSlideIndex(0)}
+                    className={`p-3 border rounded-lg cursor-pointer transition-all ${
+                      currentSlideIndex === 0
+                        ? 'bg-blue-600 border-blue-500 text-white'
+                        : 'bg-card border-border hover:bg-secondary/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Music className="w-4 h-4" />
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">Title Slide</div>
+                        <div className={`text-xs ${currentSlideIndex === 0 ? 'text-blue-100' : 'text-muted-foreground'}`}>
+                          {metadata?.title || 'Song Title'}
+                        </div>
+                      </div>
+                      {currentSlideIndex === 0 && (
+                        <div className="w-2 h-2 bg-white rounded-full" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Lyrics Sections */}
                   <SongSectionEditor
                     sections={sections}
                     onChange={setSections}
                     onSectionClick={handleSectionClick}
                   />
+
+                  {/* Copyright Slide Navigation */}
+                  {slideSettings.showCopyright && slides.length > 0 && (
+                    <div
+                      onClick={() => setCurrentSlideIndex(slides.length - 1)}
+                      className={`p-3 border rounded-lg cursor-pointer transition-all ${
+                        currentSlideIndex === slides.length - 1
+                          ? 'bg-blue-600 border-blue-500 text-white'
+                          : 'bg-card border-border hover:bg-secondary/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Copyright Slide</div>
+                          <div className={`text-xs ${currentSlideIndex === slides.length - 1 ? 'text-blue-100' : 'text-muted-foreground'}`}>
+                            {metadata?.copyright || 'Copyright information'}
+                          </div>
+                        </div>
+                        {currentSlideIndex === slides.length - 1 && (
+                          <div className="w-2 h-2 bg-white rounded-full" />
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </Panel>

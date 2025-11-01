@@ -149,6 +149,44 @@ Redux Store (featureSettingsSlice)
 
 ---
 
+## 2025-11-01 - 🔧 Added Title & Copyright Slide Navigation in SongDetailsPage
+**Time:** Late Afternoon
+**Description:** Enhanced the left navigation panel in SongDetailsPage to include clickable navigation for title slide and copyright slide, not just lyric sections.
+
+### Problem
+Previously, users could only click on lyric sections (verse, chorus, etc.) in the left panel to navigate slides. The title slide (first slide) and copyright slide (last slide) were not accessible through the navigation panel, making them hard to edit.
+
+### Solution
+**File:** [src/pages/SongDetailsPage.tsx:407-461](src/pages/SongDetailsPage.tsx#L407-L461)
+
+Added dedicated navigation cards for:
+1. **Title Slide** - Shows at the top of navigation panel
+   - Displays song title as preview
+   - Highlights in blue when active (currentSlideIndex === 0)
+   - Click to navigate to index 0
+
+2. **Copyright Slide** - Shows at the bottom of navigation panel
+   - Only appears when `slideSettings.showCopyright === true`
+   - Displays copyright text as preview
+   - Highlights in blue when active (currentSlideIndex === slides.length - 1)
+   - Click to navigate to last slide
+
+### UI Improvements
+- Changed panel title from "Lyrics & Sections" to "Slides Navigation"
+- Added visual indicators (Music icon for title, FileText icon for copyright)
+- Active slide shows blue background + white dot indicator
+- Hover states for better interactivity
+- Consistent spacing with lyric sections
+
+### Benefits
+✅ All slides now accessible from navigation panel
+✅ Easy navigation to title slide for editing song metadata display
+✅ Easy navigation to copyright slide for editing attribution
+✅ Better UX - users can see and access all slides in the presentation
+✅ Visual consistency with existing section navigation
+
+---
+
 ## 2025-10-26 - 🎯 Complete Media System Overhaul & Integration Architecture
 **Time:** Early Morning - Afternoon
 **Description:** Comprehensive multi-phase media system improvements implementing deduplication, reference tracking, media picker components, and laying groundwork for complete media-background integration.
