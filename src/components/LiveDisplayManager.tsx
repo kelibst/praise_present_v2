@@ -32,26 +32,11 @@ export const LiveDisplayManager: React.FC<LiveDisplayManagerProps> = ({
 
     const canvas = canvasRef.current;
 
-    // Ensure canvas has proper dimensions
-    console.log('Canvas dimensions:', {
-      clientWidth: canvas.clientWidth,
-      clientHeight: canvas.clientHeight,
-      width: canvas.width,
-      height: canvas.height,
-      offsetWidth: canvas.offsetWidth,
-      offsetHeight: canvas.offsetHeight
-    });
+  
 
     // Wait for the canvas to be fully mounted and sized
     const initializeEngine = () => {
-      console.log('Canvas dimensions at initialization:', {
-        clientWidth: canvas.clientWidth,
-        clientHeight: canvas.clientHeight,
-        width: canvas.width,
-        height: canvas.height,
-        offsetWidth: canvas.offsetWidth,
-        offsetHeight: canvas.offsetHeight
-      });
+ 
 
       // Check if canvas has reasonable dimensions
       if (canvas.clientWidth === 0 || canvas.clientHeight === 0) {
@@ -77,7 +62,6 @@ export const LiveDisplayManager: React.FC<LiveDisplayManagerProps> = ({
         setIsInitialized(true);
 
         engine.startRenderLoop();
-        console.log('Live Display Manager initialized successfully');
 
       } catch (error) {
         console.error('Failed to initialize live display:', error);

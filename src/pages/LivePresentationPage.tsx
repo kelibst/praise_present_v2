@@ -37,7 +37,7 @@ import {
 } from '../lib/contentBuilders';
 import type { ActiveTab } from '../lib/presentationSlice';
 import { updateSlide } from '../lib/presentationSlice';
-import { removePendingSong } from '../lib/uiSlice';
+import { removePendingSong, setActiveTab } from '../lib/uiSlice';
 
 // Import scripture navigation Redux slice
 import {
@@ -103,6 +103,7 @@ import { useLiveDisplay, LiveDisplayControls } from '../components/live/LiveDisp
 // Import Bible selectors
 import BibleSelector from '../components/bible/BibleSelector';
 import BibleBrowseSelector from '../components/bible/BibleBrowseSelector';
+import { ScripturePreview } from '../components/bible/ScripturePreview';
 import { ScriptureVerse } from '../lib/services/bibleService';
 
 // Import inline media selectors
@@ -257,6 +258,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
   // Plan-related state (simplified)
   const [selectedPlan, setSelectedPlan] = useState<PlanWithItems | null>(null);
+
+  // Preview state - for showing scripture/announcement/sermon preview
+  const [selectedItemForPreview, setSelectedItemForPreview] = useState<ServiceItem | null>(null);
 
   // Panel visibility and layout state
   const [panelVisibility, setPanelVisibility] = useState({
@@ -895,6 +899,13 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
   // Handle service item selection (single click)
   const handleServiceItemSelect = (item: ServiceItem, event: React.MouseEvent) => {
     event.stopPropagation();
+
+    // Route to preview for scripture, announcement, sermon items
+    if (item.type === 'scripture' || item.type === 'announcement' || item.type === 'sermon') {
+      console.log(`📋 Showing ${item.type} preview for:`, item.id);
+      setSelectedItemForPreview(item);
+      return;
+    }
 
     // CRITICAL: Only generate slides if they don't exist
     // This preserves toolbar edits made to existing slides
@@ -2188,7 +2199,17 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
 
                 {/* Preview Window with Typography Toolbar */}
                 <div className="flex-1 min-h-0 flex flex-col">
-                  {currentSlide ? (
+                  {selectedItemForPreview && selectedItemForPreview.type === 'scripture' ? (
+                    <ScripturePreview
+                      item={selectedItemForPreview}
+                      onOpenDetails={() => {
+                        // Switch to scripture tab
+                        ui.setActiveTab('scripture');
+                        setSelectedItemForPreview(null);
+                      }}
+                      className="flex-1"
+                    />
+                  ) : currentSlide ? (
                     <SlideEditorWithToolbar
                       slide={currentSlide}
                       onSlideChange={handleSlideUpdate}
