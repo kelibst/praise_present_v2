@@ -11,6 +11,14 @@ lets improve the app media handling better. I need to update the current feature
 
 Remember to add the size limitations to the readme.
 
+Test scenarios:
+Upload <5min video → Should work smoothly
+Upload 7min video → Should show warning, allow override
+Upload 15min video → Should block with VLC recommendation
+Check MediaGrid → Duration badges should appear on videos
+Large files (>100MB) → Should use media:// protocol
+You now have a polished, user-friendly system that guides users toward the right tools! 
+
 All future slides use video background
 Video persists across page refreshes and verse changes ✓
 📏 File Size Limits:

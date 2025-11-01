@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import {
   Music,
   ArrowLeft,
@@ -29,10 +30,13 @@ import { parseSongLyrics } from '../lib/presentation/songParser';
 import { SlideRenderer } from '../components/slides/SlideRenderer';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useLiveDisplay } from '../components/live/LiveDisplayManager';
+import { addPendingSong, setActiveTab } from '../lib/uiSlice';
+import type { AppDispatch } from '../lib/store';
 
 const SongDetailsPage: React.FC = () => {
   const { songId } = useParams<{ songId: string }>();
   const navigate = useNavigate();
+  const dispatch = useDispatch<AppDispatch>();
 
   // Live display integration
   const {
@@ -221,7 +225,6 @@ const SongDetailsPage: React.FC = () => {
 
     const serviceItem = {
       id: `song-${song.id}-${Date.now()}`,
-      type: 'song' as const,
       title: metadata.title,
       content: {
         ...song,
@@ -233,14 +236,20 @@ const SongDetailsPage: React.FC = () => {
         id: slide.id,
         shapes: slide.shapes,
         background: slide.background
-      }))
+      })),
+      addedAt: Date.now()
     };
 
-    const currentSongs = JSON.parse(localStorage.getItem('pendingSongs') || '[]');
-    currentSongs.push(serviceItem);
-    localStorage.setItem('pendingSongs', JSON.stringify(currentSongs));
+    // Add to Redux pending songs (replaces localStorage)
+    dispatch(addPendingSong(serviceItem));
 
+    // Navigate to live presentation page
     navigate('/live');
+
+    // Auto-switch to songs tab
+    dispatch(setActiveTab('songs'));
+
+    console.log(`✅ "${metadata.title}" added to service and navigating to songs tab`);
   };
 
   const handleSave = () => {

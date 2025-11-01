@@ -37,6 +37,7 @@ import {
 } from '../lib/contentBuilders';
 import type { ActiveTab } from '../lib/presentationSlice';
 import { updateSlide } from '../lib/presentationSlice';
+import { removePendingSong } from '../lib/uiSlice';
 
 // Import scripture navigation Redux slice
 import {
@@ -334,55 +335,9 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
     checkNavigationFields();
   }, []);
 
-  // Initialize and check for pending items from other pages
-  useEffect(() => {
-    // Check for pending service items from other pages (like SongsPage)
-    const checkPendingItems = () => {
-      const pendingItems = localStorage.getItem('pendingServiceItems');
-      if (pendingItems) {
-        try {
-          const items = JSON.parse(pendingItems);
-          if (Array.isArray(items) && items.length > 0) {
-            // Add pending items to Redux store
-            items.forEach((item: ServiceItem) => {
-              dispatch(addServiceItemAction(item));
-            });
-            localStorage.removeItem('pendingServiceItems'); // Clear after loading
-
-            // Auto-select the first added item
-            if (items.length > 0) {
-              generateSlidesForItem(items[0]);
-            }
-          }
-        } catch (error) {
-          console.error('Error loading pending service items:', error);
-          localStorage.removeItem('pendingServiceItems'); // Clear invalid data
-        }
-      }
-    };
-
-    checkPendingItems();
-
-    // Set up listener for storage events (when SongsPage adds items)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'pendingServiceItems' && e.newValue) {
-        checkPendingItems();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
-    // Also check periodically in case storage events don't work (same-window updates)
-    const interval = setInterval(checkPendingItems, 1000);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
-    };
-  }, []);
-
-  // NOTE: Pending songs are now managed through Redux (uiSlice)
-  // Other pages can dispatch ui.addPendingSong(song) and it will appear here instantly
+  // REMOVED: localStorage polling (now using Redux exclusively)
+  // Songs are added via dispatch(addPendingSong()) from SongsPage/SongDetailsPage
+  // They appear in the Songs tab via ui.pendingSongs Redux state
   // No more localStorage polling needed!
 
   // ============================================
@@ -1908,9 +1863,8 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const newSongs = ui.pendingSongs.filter(s => s.id !== song.id);
-                                ui.addPendingSongs(newSongs);
-                                localStorage.setItem('ui.pendingSongs', JSON.stringify(newSongs));
+                                // Remove song from pending songs using Redux
+                                dispatch(removePendingSong(song.id));
                                 // Clear presentation if removing the active song
                                 if (presentation.current.content?.id === song.id) {
                                   presentation.clear();

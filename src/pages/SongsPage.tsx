@@ -1,7 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { Music, Search, Filter, Clock, User, Tag, ChevronDown, ChevronRight, Plus, Edit, Trash2, Save, X, Play, Settings, Download, Upload, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import { sampleSongs } from '../../data/sample-songs';
+import { addPendingSong, setActiveTab } from '../lib/uiSlice';
+import type { AppDispatch } from '../lib/store';
 
 interface Song {
   id: string;
@@ -41,6 +44,7 @@ interface ServiceItem {
 
 const SongsPage: React.FC = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch<AppDispatch>();
   const [songs, setSongs] = useState<Song[]>(sampleSongs);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -88,12 +92,8 @@ const SongsPage: React.FC = () => {
   }, [songs, recentlyUsed]);
 
   const handleSongClick = (song: Song) => {
-    setSelectedSong(song);
-    if (expandedSong === song.id) {
-      setExpandedSong(null);
-    } else {
-      setExpandedSong(song.id);
-    }
+    // Navigate directly to details page (removed redundant expansion)
+    navigate(`/songs/${song.id}`);
   };
 
   const handleAddToService = (song: Song) => {
@@ -103,26 +103,26 @@ const SongsPage: React.FC = () => {
       return updated.slice(0, 10); // Keep only last 10
     });
 
-    // This would integrate with the live presentation service
-    // For now, we'll show a notification
     console.log('Adding song to current service:', song.title);
 
-    // TODO: Integrate with LivePresentationPage service items
-    // This could be done through context, localStorage, or IPC
-    const serviceItem: ServiceItem = {
+    // Add to Redux pending songs (replaces localStorage approach)
+    const pendingSongItem = {
       id: `song-${song.id}-${Date.now()}`,
-      type: 'song',
       title: song.title,
-      content: song
+      content: song,
+      slides: [], // Will be generated in LivePresentationPage
+      addedAt: Date.now()
     };
 
-    // Store in localStorage for LivePresentationPage to pick up
-    const currentItems = JSON.parse(localStorage.getItem('pendingServiceItems') || '[]');
-    currentItems.push(serviceItem);
-    localStorage.setItem('pendingServiceItems', JSON.stringify(currentItems));
+    dispatch(addPendingSong(pendingSongItem));
 
-    // Show feedback to user
-    alert(`"${song.title}" has been added to the current service!`);
+    // Navigate to live presentation page
+    navigate('/live');
+
+    // Auto-switch to songs tab (will happen in LivePresentationPage via useEffect)
+    dispatch(setActiveTab('songs'));
+
+    console.log(`✅ "${song.title}" added to service and navigating to songs tab`);
   };
 
   const handleViewSongDetails = (song: Song) => {
