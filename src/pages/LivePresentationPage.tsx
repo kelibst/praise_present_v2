@@ -104,6 +104,8 @@ import { useLiveDisplay, LiveDisplayControls } from '../components/live/LiveDisp
 import BibleSelector from '../components/bible/BibleSelector';
 import BibleBrowseSelector from '../components/bible/BibleBrowseSelector';
 import { ScripturePreview } from '../components/bible/ScripturePreview';
+import { AnnouncementPreview } from '../components/announcements/AnnouncementPreview';
+import { SermonPreview } from '../components/sermons/SermonPreview';
 import { ScriptureVerse } from '../lib/services/bibleService';
 
 // Import inline media selectors
@@ -2206,6 +2208,24 @@ export const LivePresentationPage: React.FC<LivePresentationPageProps> = () => {
                         // Switch to scripture tab
                         ui.setActiveTab('scripture');
                         setSelectedItemForPreview(null);
+                      }}
+                      className="flex-1"
+                    />
+                  ) : selectedItemForPreview && selectedItemForPreview.type === 'announcement' ? (
+                    <AnnouncementPreview
+                      item={selectedItemForPreview}
+                      onOpenDetails={() => {
+                        // Navigate to announcement details page
+                        navigate(`/announcements/${selectedItemForPreview.id}`);
+                      }}
+                      className="flex-1"
+                    />
+                  ) : selectedItemForPreview && selectedItemForPreview.type === 'sermon' ? (
+                    <SermonPreview
+                      item={selectedItemForPreview}
+                      onOpenDetails={() => {
+                        // Navigate to sermon details page
+                        navigate(`/sermons/${selectedItemForPreview.id}`);
                       }}
                       className="flex-1"
                     />

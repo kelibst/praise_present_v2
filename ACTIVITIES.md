@@ -187,6 +187,324 @@ Added dedicated navigation cards for:
 
 ---
 
+## 2025-11-01 - 📊 Preview-to-Live Workflow for Scripture, Announcements & Sermons
+**Time:** Late Afternoon - Evening
+**Description:** Implemented comprehensive preview system for Scripture, Announcements, and Sermons with dedicated preview components, placeholder pages for future development, and unified "Preview → Live" workflow pattern.
+
+### Overview
+Transformed the slide implementation for three content types to support rich preview experiences before going live. Scripture items now show full verse selection (like Scripture Tab), while Announcements and Sermons provide inline editing in split-view preview panels. Added placeholder pages for future full editors.
+
+### Sprint 1 - Scripture Preview System
+
+#### ScripturePreview Component
+**File:** [src/components/bible/ScripturePreview.tsx](src/components/bible/ScripturePreview.tsx)
+- Reuses BibleSelector for full verse selection capability
+- Shows "whole thing" like Scripture Tab on Live Presentation page
+- Auto-generates slides when verses are selected
+- Split view: left side (verse selector), right side (slide preview)
+- Send to Live button with live display integration
+- Navigate to Scripture Tab for advanced features
+
+**Key Features:**
+- Bible book/chapter/verse selection
+- Browse mode toggle
+- Automatic slide generation using buildScriptureContent
+- Live slide preview with navigation controls
+- Status indicators showing verse count and slide count
+
+**Integration:**
+- LivePresentationPage routes scripture service items to ScripturePreview
+- Opens in center panel when scripture item clicked from plan
+- Clear "Open Scripture Tab" button for advanced editing
+
+### Sprint 2 - Announcement Preview & Placeholder Pages
+
+#### AnnouncementPreview Component
+**File:** [src/components/announcements/AnnouncementPreview.tsx](src/components/announcements/AnnouncementPreview.tsx)
+- Split-view preview with inline editing
+- Left side: Edit form (title, message, date, time, location, contact, urgency, type)
+- Right side: Live slide preview
+- Auto-regenerates slide on content change
+- Send to Live button
+- "Open Details" button routes to full editor (placeholder)
+
+**Features:**
+- Title and message editing
+- Event details (date, time, location, contact)
+- Announcement type selection (event, announcement, reminder, welcome, celebration)
+- Urgency level (low, medium, high)
+- Real-time slide preview using buildAnnouncementContent
+- Slide navigation controls
+
+#### Placeholder Pages
+**Files:**
+- [src/pages/AnnouncementsPage.tsx](src/pages/AnnouncementsPage.tsx) - List page
+- [src/pages/AnnouncementDetailsPage.tsx](src/pages/AnnouncementDetailsPage.tsx) - Full editor
+
+**Purpose:** Mark future development areas with clear TODO notes
+
+**AnnouncementsPage Features (Planned):**
+- Database-backed announcement storage
+- Advanced search and filtering
+- Category and tag management
+- Quick preview functionality
+- Bulk operations (delete, archive)
+- Announcement templates library
+- Import/export functionality
+- Analytics and presentation history
+- Recurring announcements
+- Calendar integration
+
+**AnnouncementDetailsPage Features (Planned):**
+- Rich text editing with formatting
+- Image upload for announcement header
+- Date/time picker for events
+- Multiple slide support
+- Background and typography customization
+- Live preview panel
+- Template selection
+- Series management
+
+**Integration:**
+- Added routes: `/announcements` and `/announcements/:announcementId`
+- LivePresentationPage routes announcement items to AnnouncementPreview
+- "New Announcement" button navigates to details page
+
+### Sprint 3 - Sermon Preview & Template System
+
+#### SermonTemplate
+**File:** [src/rendering/templates/SermonTemplate.ts](src/rendering/templates/SermonTemplate.ts)
+- Four slide types: title, outline, point, notes
+- Title slide: sermon title, speaker, date, scripture reference
+- Outline slide: shows all outline points numbered
+- Point slides: individual slide per point with large emphasized text
+- Notes slide: displays sermon notes (optional)
+
+**Style Configuration:**
+```typescript
+interface SermonStyle {
+  titleFontSize: number;        // 72
+  speakerFontSize: number;      // 48
+  outlineFontSize: number;      // 56
+  pointFontSize: number;        // 80
+  notesFontSize: number;        // 42
+  fontFamily: string;           // 'Arial'
+  textColor: string;            // '#FFFFFF'
+  accentColor: string;          // '#4CAF50'
+}
+```
+
+**Architecture:**
+- Extends SlideTemplate base class
+- Generates shapes using core Shape system
+- Supports customization through style interface
+- Auto-layout with proper spacing and alignment
+
+#### buildSermonContent Function
+**File:** [src/lib/contentBuilders.ts:331-419](src/lib/contentBuilders.ts#L331-L419)
+- Converts ServiceItem to PresentationContent
+- Generates title slide (always)
+- Generates outline slide (if outline points exist)
+- Generates individual point slides (one per point)
+- Generates notes slide (if notes exist)
+- Returns complete PresentationContent object
+
+**Flow:**
+```typescript
+ServiceItem (sermon)
+  → buildSermonContent()
+  → SermonTemplate.generateSlide()
+  → PresentationContent with multiple slides
+```
+
+#### SermonPreview Component
+**File:** [src/components/sermons/SermonPreview.tsx](src/components/sermons/SermonPreview.tsx)
+- Split-view: left (editing), right (preview)
+- Inline outline editor (add/edit/delete points)
+- Auto-generates slides on content change
+- Slide navigation controls
+- Send to Live integration
+- "Open Details" routes to full editor
+
+**Editing Features:**
+- Title input
+- Speaker input
+- Date picker
+- Scripture reference input
+- Outline point management:
+  - Add new points
+  - Edit existing points inline
+  - Delete points
+  - Numbered list display
+
+**Preview Features:**
+- Real-time slide preview
+- Navigation through all generated slides
+- Slide counter (current / total)
+- Previous/Next buttons
+- Status indicators
+
+#### Placeholder Pages
+**Files:**
+- [src/pages/SermonsPage.tsx](src/pages/SermonsPage.tsx) - List page
+- [src/pages/SermonDetailsPage.tsx](src/pages/SermonDetailsPage.tsx) - Full editor
+
+**SermonsPage Features (Planned):**
+- Database-backed sermon storage
+- Advanced search and filtering
+- Series and topic management
+- Quick preview functionality
+- Bulk operations (delete, archive)
+- Sermon templates library
+- Import/export functionality
+- Analytics and presentation history
+- Notes and attachments per sermon
+- Scripture passage integration
+- Speaker and date filtering
+- Sermon series tracking
+
+**SermonDetailsPage Features (Planned):**
+- Rich text editing with formatting
+- Outline point editor with sub-points
+- Scripture passage integration
+- Notes and attachments per point
+- Multiple slide support
+- Background and typography customization
+- Live preview panel
+- Template selection
+- Series management
+- Speaker and date management
+- Timer and duration tracking
+
+**Integration:**
+- Added routes: `/sermons` and `/sermons/:sermonId`
+- LivePresentationPage routes sermon items to SermonPreview
+- "New Sermon" button navigates to details page
+
+### Live Presentation Page Integration
+
+**File:** [src/pages/LivePresentationPage.tsx](src/pages/LivePresentationPage.tsx)
+
+**Changes:**
+1. Added imports for SermonPreview
+2. Updated center panel conditional rendering:
+   ```typescript
+   {selectedItemForPreview && selectedItemForPreview.type === 'scripture' ? (
+     <ScripturePreview ... />
+   ) : selectedItemForPreview && selectedItemForPreview.type === 'announcement' ? (
+     <AnnouncementPreview ... />
+   ) : selectedItemForPreview && selectedItemForPreview.type === 'sermon' ? (
+     <SermonPreview ... />
+   ) : currentSlide ? (
+     <SlideEditorWithToolbar ... />
+   ) : ...}
+   ```
+3. handleServiceItemSelect routes scripture/announcement/sermon to preview
+
+**Workflow:**
+1. User clicks service item from plan
+2. Type check determines routing:
+   - Scripture → ScripturePreview
+   - Announcement → AnnouncementPreview
+   - Sermon → SermonPreview
+   - Song/Other → Direct to presentation
+3. User edits content in preview
+4. Click "Send to Live" to present
+5. Optional: Click "Open Details" for full editor
+
+### Routes Configuration
+
+**File:** [src/routes.tsx](src/routes.tsx)
+
+**Added Routes:**
+```typescript
+<Route path="/announcements" element={<AnnouncementsPage />} />
+<Route path="/announcements/:announcementId" element={<AnnouncementDetailsPage />} />
+<Route path="/sermons" element={<SermonsPage />} />
+<Route path="/sermons/:sermonId" element={<SermonDetailsPage />} />
+```
+
+### Benefits
+
+✅ **Unified Workflow** - Consistent Preview → Live pattern across content types
+✅ **Rich Editing** - Full functionality available before going live
+✅ **Reusable Components** - Scripture Tab components reused in preview
+✅ **Clear TODOs** - Placeholder pages mark future development areas
+✅ **Type Safety** - Proper TypeScript interfaces for all content types
+✅ **Template System** - Extensible sermon template for future customization
+✅ **User-Friendly** - Inline editing with real-time preview
+✅ **Maintainable** - Clear separation of concerns (preview vs. full editor)
+
+### Architecture Patterns
+
+**Component Hierarchy:**
+```
+LivePresentationPage
+  ├─ ScripturePreview (for scripture items)
+  │   └─ BibleSelector (reused from Scripture Tab)
+  ├─ AnnouncementPreview (for announcement items)
+  │   └─ SlideRenderer (live preview)
+  ├─ SermonPreview (for sermon items)
+  │   └─ SlideRenderer (live preview)
+  └─ SlideEditorWithToolbar (for other items)
+```
+
+**Content Builder Flow:**
+```
+Preview Component
+  → Edit State Changes
+  → buildContent() function
+  → Template.generateSlide()
+  → PresentationContent
+  → presentation.switchTo()
+  → Redux presentationSlice
+  → SlideRenderer displays
+```
+
+**Future Full Editor Pages:**
+```
+List Page (e.g., AnnouncementsPage)
+  → Navigate to Details Page
+  → Full Editor (e.g., AnnouncementDetailsPage)
+  → Advanced Features
+  → Save to Database
+  → Add to Service Plan
+```
+
+### Technical Notes
+
+- All preview components follow same split-view pattern
+- Auto-generation on content change using useEffect
+- Send to Live creates live display if not active
+- Navigation buttons (Open Details) route to placeholder pages
+- Placeholder pages include comprehensive TODO lists
+- Coming Soon banners clearly indicate development status
+- Consistent color coding (blue=scripture, yellow=announcements, green=sermons)
+
+### Future Enhancements
+
+**Phase 1: Database Integration**
+- Prisma schema for announcements and sermons
+- CRUD operations in full editor pages
+- Search and filtering
+- List view with real data
+
+**Phase 2: Advanced Editing**
+- Rich text editor for messages/notes
+- Sub-points for sermon outlines
+- Media attachments (images, videos)
+- Scripture passage integration (select verses directly)
+
+**Phase 3: Features**
+- Templates library
+- Series management
+- Recurring items
+- Calendar integration
+- Analytics and history
+- Import/export
+
+---
+
 ## 2025-10-26 - 🎯 Complete Media System Overhaul & Integration Architecture
 **Time:** Early Morning - Afternoon
 **Description:** Comprehensive multi-phase media system improvements implementing deduplication, reference tracking, media picker components, and laying groundwork for complete media-background integration.

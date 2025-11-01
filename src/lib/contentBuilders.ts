@@ -326,6 +326,99 @@ export function buildAnnouncementContent(
 }
 
 /**
+ * Build presentation content from a sermon
+ */
+export function buildSermonContent(
+  sermon: ServiceItem
+): PresentationContent {
+  console.log('📖 Building sermon content:', sermon.title);
+
+  const { SermonTemplate } = require('../rendering/templates/SermonTemplate');
+  const sermonTemplate = new SermonTemplate(DEFAULT_SLIDE_SIZE);
+  const slides: Slide[] = [];
+  const sermonContent = sermon.content;
+
+  // 1. Title Slide
+  const titleSlideContent = {
+    title: sermon.title || 'Sermon',
+    speaker: sermonContent.speaker,
+    date: sermonContent.date,
+    scriptureReference: sermonContent.scriptureReference,
+    slideType: 'title' as const
+  };
+
+  const titleShapes = sermonTemplate.generateSlide(titleSlideContent);
+  slides.push({
+    id: `sermon-title-${sermon.id}`,
+    shapes: titleShapes,
+    background: { type: 'color', value: '#1a1a1a', opacity: 1 }
+  });
+
+  // 2. Outline Slide (if outline points exist)
+  if (sermonContent.outlinePoints && sermonContent.outlinePoints.length > 0) {
+    const outlineSlideContent = {
+      title: sermon.title,
+      outlinePoints: sermonContent.outlinePoints,
+      slideType: 'outline' as const
+    };
+
+    const outlineShapes = sermonTemplate.generateSlide(outlineSlideContent);
+    slides.push({
+      id: `sermon-outline-${sermon.id}`,
+      shapes: outlineShapes,
+      background: { type: 'color', value: '#1a1a1a', opacity: 1 }
+    });
+
+    // 3. Individual Point Slides
+    sermonContent.outlinePoints.forEach((point: string, index: number) => {
+      const pointSlideContent = {
+        title: point,
+        pointIndex: index,
+        scriptureReference: sermonContent.pointReferences?.[index],
+        slideType: 'point' as const
+      };
+
+      const pointShapes = sermonTemplate.generateSlide(pointSlideContent);
+      slides.push({
+        id: `sermon-point-${index}-${sermon.id}`,
+        shapes: pointShapes,
+        background: { type: 'color', value: '#1a1a1a', opacity: 1 }
+      });
+    });
+  }
+
+  // 4. Notes Slide (if notes exist)
+  if (sermonContent.notes) {
+    const notesSlideContent = {
+      title: sermon.title,
+      notes: sermonContent.notes,
+      slideType: 'notes' as const
+    };
+
+    const notesShapes = sermonTemplate.generateSlide(notesSlideContent);
+    slides.push({
+      id: `sermon-notes-${sermon.id}`,
+      shapes: notesShapes,
+      background: { type: 'color', value: '#1a1a1a', opacity: 1 }
+    });
+  }
+
+  return {
+    id: sermon.id,
+    type: 'sermon',
+    title: sermon.title,
+    slides,
+    source: 'sermons',
+    metadata: {
+      speaker: sermonContent.speaker,
+      date: sermonContent.date,
+      scriptureReference: sermonContent.scriptureReference,
+      outlinePoints: sermonContent.outlinePoints
+    }
+  };
+}
+
+/**
  * Convert existing ServiceItem to PresentationContent
  * This is useful for plan items that already have slides
  */
